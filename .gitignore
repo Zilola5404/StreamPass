@@ -1,4 +1,26 @@
+# Пароли и настройки
 .env
-backend/config.yaml
+
+# Python
+.venv/
+venv/
+__pycache__/
+
+# Логи
 *.log
-/tmp/
+
+# Базы данных
+*.db
+
+# Docker данные
+docker-data/
+
+# Компилятор
+*.exe
+
+# IDE
+.vscode/
+.idea/
+
+# Windows
+Thumbs.db
