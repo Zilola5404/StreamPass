@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS telemetry_events;
+DROP TABLE IF EXISTS relay_servers;
+DROP TABLE IF EXISTS app_configs;
+DROP TABLE IF EXISTS rule_sets;
+DROP TABLE IF EXISTS payments;
+DROP TABLE IF EXISTS users;

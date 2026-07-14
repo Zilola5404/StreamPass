@@ -1,0 +1,43 @@
+# StreamPass backend configuration.
+# Copy this file to config.yaml and adjust as needed; ${VAR} placeholders
+# are resolved against the process environment at load time — no secret
+# ever belongs directly in this file (see .env.example for the variables
+# to set).
+
+server:
+  http_port: 8080
+  log_level: info # debug | info | warn | error
+
+database:
+  host: ${DB_HOST}
+  port: 5432
+  name: ${DB_NAME}
+  user: ${DB_USER}
+  password: ${DB_PASSWORD}
+  sslmode: disable
+  max_open_conns: 20
+  max_idle_conns: 5
+  conn_max_lifetime: 30m
+
+redis:
+  addr: ${REDIS_ADDR}
+  password: ${REDIS_PASSWORD}
+
+jwt:
+  secret: ${JWT_SECRET}
+  access_ttl: 15m
+  refresh_ttl: 720h
+
+admin:
+  api_key: ${ADMIN_API_KEY}
+
+rate_limit:
+  public_requests_per_window: 20
+  public_window: 1m
+
+billing:
+  plan_amount_rub: 299
+  plan_period_days: 30
+  yookassa_shop_id: ${YOOKASSA_SHOP_ID}
+  yookassa_secret_key: ${YOOKASSA_SECRET_KEY}
+  yookassa_return_url: ${YOOKASSA_RETURN_URL}
