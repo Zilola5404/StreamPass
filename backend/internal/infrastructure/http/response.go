@@ -53,6 +53,14 @@ func ErrUnauthenticated() error {
 	return apperrors.New(apperrors.CodeUnauthorized, "authentication required")
 }
 
+// ErrMissingPathValue builds the AppError a handler returns when a
+// required URL path parameter (e.g. "{id}") is empty — normally
+// unreachable since the router pattern requires it, but kept as a defensive
+// check rather than trusting the router silently.
+func ErrMissingPathValue(name string) error {
+	return apperrors.New(apperrors.CodeInvalidInput, "missing required path parameter: "+name)
+}
+
 // writeJSON writes v as a JSON body with the given status code.
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")

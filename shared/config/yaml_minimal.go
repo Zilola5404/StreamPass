@@ -12,15 +12,25 @@ import (
 // supported — no config file in this project needs them.
 type yamlNode map[string]any
 
+// yamlEntry is one parsed, non-blank YAML line before tree assembly.
+type yamlEntry struct {
+	indent   int
+	key      string
+	value    string
+	hasValue bool
+}
+
 // parseYAML parses a minimal YAML document into a yamlNode tree.
+//
+// Whether a "key:" line with no trailing value starts a nested map or is
+// simply an empty scalar (e.g. an unresolved ${VAR} placeholder that
+// resolved to "") can't be decided from that line alone — it depends on
+// whether a more-indented line follows. So parsing happens in two passes:
+// first every non-blank line is collected into a flat list, then the tree
+// is built with one line of lookahead to tell the two cases apart.
 func parseYAML(content string) yamlNode {
 	lines := strings.Split(content, "\n")
-	root := yamlNode{}
-	stack := []struct {
-		indent int
-		node   yamlNode
-	}{{indent: -1, node: root}}
-
+	var entries []yamlEntry
 	for _, raw := range lines {
 		line := stripComment(raw)
 		if strings.TrimSpace(line) == "" {
@@ -28,26 +38,43 @@ func parseYAML(content string) yamlNode {
 		}
 		indent := countIndent(line)
 		trimmed := strings.TrimSpace(line)
-
 		key, value, hasValue := splitKeyValue(trimmed)
+		entries = append(entries, yamlEntry{indent: indent, key: key, value: value, hasValue: hasValue})
+	}
 
+	root := yamlNode{}
+	stack := []struct {
+		indent int
+		node   yamlNode
+	}{{indent: -1, node: root}}
+
+	for i, e := range entries {
 		// Pop stack until we find the parent for this indent level.
-		for len(stack) > 1 && indent <= stack[len(stack)-1].indent {
+		for len(stack) > 1 && e.indent <= stack[len(stack)-1].indent {
 			stack = stack[:len(stack)-1]
 		}
 		parent := stack[len(stack)-1].node
 
-		if !hasValue || value == "" {
+		nextIsChild := i+1 < len(entries) && entries[i+1].indent > e.indent
+		if nextIsChild {
 			child := yamlNode{}
-			parent[key] = child
+			parent[e.key] = child
 			stack = append(stack, struct {
 				indent int
 				node   yamlNode
-			}{indent: indent, node: child})
+			}{indent: e.indent, node: child})
 			continue
 		}
 
-		parent[key] = parseScalar(value)
+		if !e.hasValue || e.value == "" {
+			// No children follow and no value was given: a genuinely empty
+			// scalar (e.g. "key:" or a placeholder that resolved to ""),
+			// not a nested map.
+			parent[e.key] = ""
+			continue
+		}
+
+		parent[e.key] = parseScalar(e.value)
 	}
 
 	return root

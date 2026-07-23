@@ -9,26 +9,25 @@ import (
 	httpx "streampass/backend/internal/infrastructure/http"
 )
 
-// RelayHandler exposes GET /servers and POST /servers/health.
 type RelayHandler struct {
 	svc *relaysvc.Service
 }
 
-// NewRelayHandler builds the Relay Manager HTTP handler.
 func NewRelayHandler(svc *relaysvc.Service) *RelayHandler {
 	return &RelayHandler{svc: svc}
 }
 
 type serverDTO struct {
-	ID        string  `json:"id"`
-	Region    string  `json:"region"`
-	Host      string  `json:"host"`
-	Port      int     `json:"port"`
-	LoadRatio float64 `json:"load_ratio"`
-	RTTMillis int     `json:"rtt_ms"`
+	ID               string  `json:"id"`
+	Region           string  `json:"region"`
+	Host             string  `json:"host"`
+	Port             int     `json:"port"`
+	Healthy          bool    `json:"healthy"`
+	LoadRatio        float64 `json:"load_ratio"`
+	RTTMillis        int     `json:"rtt_ms"`
+	ConnectionConfig string  `json:"connection_config"`
 }
 
-// ListAvailable handles "GET /servers".
 func (h *RelayHandler) ListAvailable(w http.ResponseWriter, r *http.Request) {
 	servers, err := h.svc.ListAvailable(r.Context())
 	if err != nil {
@@ -39,15 +38,92 @@ func (h *RelayHandler) ListAvailable(w http.ResponseWriter, r *http.Request) {
 	dtos := make([]serverDTO, len(servers))
 	for i, s := range servers {
 		dtos[i] = serverDTO{
-			ID:        string(s.ID),
-			Region:    string(s.Region),
-			Host:      s.Host,
-			Port:      s.Port,
-			LoadRatio: s.LoadRatio,
-			RTTMillis: s.RTTMillis,
+			ID:               string(s.ID),
+			Region:           string(s.Region),
+			Host:             s.Host,
+			Port:             s.Port,
+			Healthy:          s.Healthy,
+			LoadRatio:        s.LoadRatio,
+			RTTMillis:        s.RTTMillis,
+			ConnectionConfig: s.ConnectionConfig,
 		}
 	}
 	httpx.WriteJSON(w, http.StatusOK, dtos)
+}
+
+// ListAll handles "GET /servers/all" (admin-only, gated by
+// RequireAdminKey in the router): returns every registered relay,
+// healthy or not. Used by the Health Monitor to find servers that need
+// checking, including ones currently marked unhealthy that may have
+// recovered.
+func (h *RelayHandler) ListAll(w http.ResponseWriter, r *http.Request) {
+	servers, err := h.svc.ListAll(r.Context())
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+
+	dtos := make([]serverDTO, len(servers))
+	for i, s := range servers {
+		dtos[i] = serverDTO{
+			ID:               string(s.ID),
+			Region:           string(s.Region),
+			Host:             s.Host,
+			Port:             s.Port,
+			Healthy:          s.Healthy,
+			LoadRatio:        s.LoadRatio,
+			RTTMillis:        s.RTTMillis,
+			ConnectionConfig: s.ConnectionConfig,
+		}
+	}
+	httpx.WriteJSON(w, http.StatusOK, dtos)
+}
+
+type registerServerRequest struct {
+	ID               string `json:"id"`
+	Region           string `json:"region"`
+	Host             string `json:"host"`
+	Port             int    `json:"port"`
+	ConnectionConfig string `json:"connection_config"`
+}
+
+func (h *RelayHandler) Register(w http.ResponseWriter, r *http.Request) {
+	var req registerServerRequest
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+
+	srv, err := h.svc.Register(r.Context(), relaydomain.ID(req.ID), relaydomain.Region(req.Region), req.Host, req.Port, req.ConnectionConfig, time.Now().UTC())
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusCreated, serverDTO{
+		ID:               string(srv.ID),
+		Region:           string(srv.Region),
+		Host:             srv.Host,
+		Port:             srv.Port,
+		Healthy:          srv.Healthy,
+		LoadRatio:        srv.LoadRatio,
+		RTTMillis:        srv.RTTMillis,
+		ConnectionConfig: srv.ConnectionConfig,
+	})
+}
+
+func (h *RelayHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		httpx.WriteError(w, httpx.ErrMissingPathValue("id"))
+		return
+	}
+
+	if err := h.svc.Delete(r.Context(), relaydomain.ID(id)); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusNoContent, nil)
 }
 
 type healthCheckRequest struct {
@@ -57,9 +133,6 @@ type healthCheckRequest struct {
 	RTTMillis int     `json:"rtt_ms"`
 }
 
-// RecordHealthCheck handles "POST /servers/health" — called by the Health
-// Monitor component, gated by RequireAdminKey in the router since it's an
-// internal-only write path, not a client-facing one.
 func (h *RelayHandler) RecordHealthCheck(w http.ResponseWriter, r *http.Request) {
 	var req healthCheckRequest
 	if err := httpx.DecodeJSON(r, &req); err != nil {

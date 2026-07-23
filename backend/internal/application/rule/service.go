@@ -6,6 +6,7 @@ package rule
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"streampass/backend/internal/domain/rule"
@@ -36,10 +37,17 @@ func NewService(repo rule.Repository, clock Clock, log *logger.Logger) *Service 
 	return &Service{repo: repo, clock: clock, log: log.With("rule_service")}
 }
 
-// GetLatest implements "GET /rules": returns the current rule set.
+// GetLatest implements "GET /rules": returns the current rule set. If no
+// rule set has ever been published, this is a legitimate, expected state
+// (not a server failure) — the caller sees a 404 with a clear message
+// rather than an opaque 500.
 func (s *Service) GetLatest(ctx context.Context) (*rule.Set, error) {
 	set, err := s.repo.Latest(ctx)
 	if err != nil {
+		var appErr *apperrors.AppError
+		if errors.As(err, &appErr) && appErr.Code == apperrors.CodeNotFound {
+			return nil, err
+		}
 		s.log.Error(ctx, err)
 		return nil, apperrors.Wrap(apperrors.CodeInternal, "failed to load rule set", err)
 	}

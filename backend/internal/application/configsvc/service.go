@@ -6,6 +6,7 @@ package configsvc
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"streampass/backend/internal/domain/appconfig"
@@ -36,10 +37,16 @@ func NewService(repo appconfig.Repository, clock Clock, log *logger.Logger) *Ser
 	return &Service{repo: repo, clock: clock, log: log.With("config_service")}
 }
 
-// GetLatest implements "GET /config".
+// GetLatest implements "GET /config". If no config has ever been
+// published, this is a legitimate, expected state (not a server failure)
+// — the caller sees a 404 with a clear message rather than an opaque 500.
 func (s *Service) GetLatest(ctx context.Context) (*appconfig.Config, error) {
 	cfg, err := s.repo.Latest(ctx)
 	if err != nil {
+		var appErr *apperrors.AppError
+		if errors.As(err, &appErr) && appErr.Code == apperrors.CodeNotFound {
+			return nil, err
+		}
 		s.log.Error(ctx, err)
 		return nil, apperrors.Wrap(apperrors.CodeInternal, "failed to load config", err)
 	}

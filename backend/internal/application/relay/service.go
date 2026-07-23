@@ -1,6 +1,3 @@
-// Package relay is the Relay Manager application layer: selecting which
-// relay servers to advertise to clients (spec section 9) and recording
-// health-check results.
 package relay
 
 import (
@@ -13,22 +10,15 @@ import (
 	"streampass/shared/logger"
 )
 
-// Service implements the Relay Manager use cases.
 type Service struct {
 	repo relay.Repository
 	log  *logger.Logger
 }
 
-// NewService wires the Relay Manager via constructor injection.
 func NewService(repo relay.Repository, log *logger.Logger) *Service {
 	return &Service{repo: repo, log: log.With("relay_service")}
 }
 
-// ListAvailable implements "GET /servers": returns healthy relay servers,
-// best first (lowest load, then lowest RTT), so a client that just wants
-// the top entry gets a reasonable default without its own scoring logic
-// (spec: "Клиент автоматически выбирает лучший relay" — the client still
-// makes the final call, this only orders the candidates).
 func (s *Service) ListAvailable(ctx context.Context) ([]relay.Server, error) {
 	all, err := s.repo.List(ctx)
 	if err != nil {
@@ -53,7 +43,63 @@ func (s *Service) ListAvailable(ctx context.Context) ([]relay.Server, error) {
 	return available, nil
 }
 
-// RecordHealthCheck implements the Health Monitor's write path.
+// ListAll returns every registered relay server, healthy or not — unlike
+// ListAvailable, nothing is filtered out. Used by admin tooling and by the
+// Health Monitor, which must be able to see currently-unhealthy servers in
+// order to detect when they recover.
+func (s *Service) ListAll(ctx context.Context) ([]relay.Server, error) {
+	all, err := s.repo.List(ctx)
+	if err != nil {
+		s.log.Error(ctx, err)
+		return nil, apperrors.Wrap(apperrors.CodeInternal, "failed to list relay servers", err)
+	}
+	return all, nil
+}
+
+func (s *Service) Register(ctx context.Context, id relay.ID, region relay.Region, host string, port int, connectionConfig string, registeredAt time.Time) (*relay.Server, error) {
+	if err := validateRegistration(id, region, host, port); err != nil {
+		return nil, err
+	}
+
+	srv, err := s.repo.Register(ctx, relay.Server{
+		ID:               id,
+		Region:           region,
+		Host:             host,
+		Port:             port,
+		ConnectionConfig: connectionConfig,
+		UpdatedAt:        registeredAt,
+	})
+	if err != nil {
+		s.log.Error(ctx, err)
+		return nil, apperrors.Wrap(apperrors.CodeInternal, "failed to register relay server", err)
+	}
+	return srv, nil
+}
+
+func validateRegistration(id relay.ID, region relay.Region, host string, port int) error {
+	if id == "" {
+		return apperrors.New(apperrors.CodeInvalidInput, "id must not be empty").WithDetails(map[string]any{"field": "id"})
+	}
+	if region == "" {
+		return apperrors.New(apperrors.CodeInvalidInput, "region must not be empty").WithDetails(map[string]any{"field": "region"})
+	}
+	if host == "" {
+		return apperrors.New(apperrors.CodeInvalidInput, "host must not be empty").WithDetails(map[string]any{"field": "host"})
+	}
+	if port <= 0 || port > 65535 {
+		return apperrors.New(apperrors.CodeInvalidInput, "port must be between 1 and 65535").WithDetails(map[string]any{"field": "port"})
+	}
+	return nil
+}
+
+func (s *Service) Delete(ctx context.Context, id relay.ID) error {
+	if err := s.repo.Delete(ctx, id); err != nil {
+		s.log.Error(ctx, err)
+		return err
+	}
+	return nil
+}
+
 func (s *Service) RecordHealthCheck(ctx context.Context, id relay.ID, healthy bool, loadRatio float64, rttMillis int, checkedAt time.Time) error {
 	if err := s.repo.UpdateHealth(ctx, id, healthy, loadRatio, rttMillis, checkedAt); err != nil {
 		s.log.Error(ctx, err)
