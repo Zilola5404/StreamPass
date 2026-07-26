@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'theme/app_theme.dart';
 import 'services/auth_service.dart';
+import 'services/streampass_api.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/home_screen.dart';
 
@@ -10,12 +11,19 @@ const _apiBaseUrl = String.fromEnvironment(
 );
 
 void main() {
-  runApp(StreamPassApp(authService: AuthService(baseUrl: _apiBaseUrl)));
+  final authService = AuthService(baseUrl: _apiBaseUrl);
+  final api = StreamPassApi(baseUrl: _apiBaseUrl, authService: authService);
+  runApp(StreamPassApp(authService: authService, api: api));
 }
 
 class StreamPassApp extends StatelessWidget {
   final AuthService authService;
-  const StreamPassApp({super.key, required this.authService});
+  final StreamPassApi api;
+  const StreamPassApp({
+    super.key,
+    required this.authService,
+    required this.api,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -32,8 +40,8 @@ class StreamPassApp extends StatelessWidget {
             );
           }
           return snapshot.data!
-              ? const HomeScreen()
-              : OnboardingScreen(authService: authService);
+              ? HomeScreen(api: api)
+              : OnboardingScreen(authService: authService, api: api);
         },
       ),
     );

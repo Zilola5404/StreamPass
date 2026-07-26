@@ -101,3 +101,33 @@ func (r *UserRepository) ExtendSubscription(ctx context.Context, id user.ID, act
 	}
 	return nil
 }
+
+// List returns every registered user, newest first.
+func (r *UserRepository) List(ctx context.Context) ([]*user.User, error) {
+	const q = `
+		SELECT id, email, password_hash, created_at, updated_at, subscription_active_until
+		FROM users ORDER BY created_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, apperrors.Wrap(apperrors.CodeInternal, "failed to list users", err)
+	}
+	defer rows.Close()
+
+	var users []*user.User
+	for rows.Next() {
+		var u user.User
+		var subUntil sql.NullTime
+		if err := rows.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt, &subUntil); err != nil {
+			return nil, apperrors.Wrap(apperrors.CodeInternal, "failed to scan user row", err)
+		}
+		if subUntil.Valid {
+			u.SubscriptionActiveUntil = &subUntil.Time
+		}
+		users = append(users, &u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.Wrap(apperrors.CodeInternal, "failed while iterating users", err)
+	}
+	return users, nil
+}

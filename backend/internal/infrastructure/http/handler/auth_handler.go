@@ -26,11 +26,6 @@ type registerRequest struct {
 	Password string `json:"password"`
 }
 
-type registerResponse struct {
-	UserID string `json:"user_id"`
-	Email  string `json:"email"`
-}
-
 // Register handles "POST /register".
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
@@ -39,13 +34,18 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := h.svc.Register.Execute(r.Context(), req.Email, req.Password)
+	if _, err := h.svc.Register.Execute(r.Context(), req.Email, req.Password); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+
+	pair, err := h.svc.Login.Execute(r.Context(), req.Email, req.Password)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
 	}
 
-	httpx.WriteJSON(w, http.StatusCreated, registerResponse{UserID: string(u.ID), Email: u.Email})
+	writeTokenPair(w, http.StatusCreated, pair)
 }
 
 type loginRequest struct {
@@ -74,7 +74,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpx.WriteJSON(w, http.StatusOK, tokenResponse{
+	writeTokenPair(w, http.StatusOK, pair)
+}
+
+func writeTokenPair(w http.ResponseWriter, status int, pair *auth.TokenPair) {
+	httpx.WriteJSON(w, status, tokenResponse{
 		AccessToken:      pair.AccessToken,
 		AccessExpiresAt:  pair.AccessExpiresAt.Format(httpx.TimeFormat),
 		RefreshToken:     pair.RefreshToken,

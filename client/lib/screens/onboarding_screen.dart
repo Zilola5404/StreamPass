@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
+import '../services/streampass_api.dart';
 import 'home_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final AuthService authService;
-  const OnboardingScreen({super.key, required this.authService});
+  final StreamPassApi api;
+  const OnboardingScreen({
+    super.key,
+    required this.authService,
+    required this.api,
+  });
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -33,7 +39,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     if (result.success) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => HomeScreen(api: widget.api)),
       );
     } else {
       setState(() => _error = result.error);

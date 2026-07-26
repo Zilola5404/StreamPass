@@ -59,6 +59,11 @@ type Repository interface {
 	// single denormalized field on the User row — see
 	// domain/subscription's package doc for the reasoning.
 	ExtendSubscription(ctx context.Context, id ID, activeUntil time.Time) error
+	// List returns every registered user, newest first. Used by the admin
+	// user-listing endpoint — there is no pagination yet (fine at MVP
+	// scale; revisit if the user table grows large enough for this to
+	// matter, per YAGNI).
+	List(ctx context.Context) ([]*User, error)
 }
 
 // ErrNotFound is a sentinel-style helper so infrastructure implementations

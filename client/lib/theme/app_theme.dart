@@ -2,21 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
-  static const bg = Color(0xFF0B0F19);
-  static const surface = Color(0xFF141A2A);
-  static const surfaceAlt = Color(0xFF1B2233);
-  static const cyan = Color(0xFF00D9FF);
-  static const violet = Color(0xFF7C5CFF);
-  static const green = Color(0xFF3DDC97);
+  static const bg = Color(0xFF020612);
+  static const surface = Color(0xFF07111F);
+  static const surfaceAlt = Color(0xFF0D1A2B);
+  static const cyan = Color(0xFF00E5FF);
+  static const blue = Color(0xFF3B82F6);
+  static const violet = Color(0xFF7C3AED);
+  static const magenta = Color(0xFFD946EF);
+  static const green = Color(0xFF00FF9C);
   static const amber = Color(0xFFFFB020);
   static const danger = Color(0xFFFF5A6E);
-  static const textPrimary = Color(0xFFF2F4FA);
-  static const textSecondary = Color(0xFF8A93A6);
+  static const textPrimary = Color(0xFFF8FAFC);
+  static const textSecondary = Color(0xFF94A3B8);
 
   static const orbGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [cyan, violet],
+    colors: [cyan, blue, violet, magenta],
   );
 }
 
@@ -36,11 +38,11 @@ ThemeData buildAppTheme() {
       contentPadding:
           const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         borderSide: BorderSide.none,
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         borderSide: const BorderSide(color: AppColors.cyan, width: 1.4),
       ),
       hintStyle: GoogleFonts.inter(color: AppColors.textSecondary),
@@ -51,7 +53,7 @@ ThemeData buildAppTheme() {
         foregroundColor: AppColors.bg,
         padding: const EdgeInsets.symmetric(vertical: 16),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(18),
         ),
         textStyle: GoogleFonts.spaceGrotesk(
           fontSize: 16,
@@ -62,7 +64,7 @@ ThemeData buildAppTheme() {
     textTheme: GoogleFonts.interTextTheme(base.textTheme).copyWith(
       displayLarge: GoogleFonts.spaceGrotesk(
         fontSize: 40,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w700,
         color: AppColors.textPrimary,
       ),
       headlineSmall: GoogleFonts.spaceGrotesk(
@@ -72,7 +74,7 @@ ThemeData buildAppTheme() {
       ),
       titleMedium: GoogleFonts.spaceGrotesk(
         fontSize: 18,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w700,
         color: AppColors.textPrimary,
       ),
       bodyMedium: GoogleFonts.inter(

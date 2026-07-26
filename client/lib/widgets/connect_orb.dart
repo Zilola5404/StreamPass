@@ -6,9 +6,17 @@ enum ConnState { disconnected, connecting, connected, error }
 
 class ConnectOrb extends StatefulWidget {
   final ConnState state;
+  final String label;
+  final String subtitle;
   final VoidCallback onTap;
 
-  const ConnectOrb({super.key, required this.state, required this.onTap});
+  const ConnectOrb({
+    super.key,
+    required this.state,
+    required this.label,
+    required this.subtitle,
+    required this.onTap,
+  });
 
   @override
   State<ConnectOrb> createState() => _ConnectOrbState();
@@ -42,9 +50,49 @@ class _ConnectOrbState extends State<ConnectOrb>
         child: AnimatedBuilder(
           animation: _controller,
           builder: (context, _) {
-            return CustomPaint(
-              size: const Size(220, 220),
-              painter: _OrbPainter(t: _controller.value, state: widget.state),
+            return SizedBox(
+              width: 260,
+              height: 260,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  CustomPaint(
+                    size: const Size(260, 260),
+                    painter:
+                        _OrbPainter(t: _controller.value, state: widget.state),
+                  ),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        widget.state == ConnState.connected
+                            ? Icons.check_rounded
+                            : widget.state == ConnState.error
+                                ? Icons.priority_high_rounded
+                                : Icons.power_settings_new_rounded,
+                        color: Colors.white.withOpacity(0.9),
+                        size: 44,
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        widget.label,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        widget.subtitle,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: widget.state == ConnState.connected
+                                  ? AppColors.green
+                                  : AppColors.textSecondary,
+                            ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             );
           },
         ),
@@ -102,6 +150,9 @@ class _OrbPainter extends CustomPainter {
       ..color = glowColor.withOpacity(0.5);
     canvas.drawCircle(center, baseRadius * pulse + 6, ringPaint);
 
+    _drawOrbit(canvas, center, baseRadius * 1.08, t, glowColor);
+    _drawOrbit(canvas, center, baseRadius * 1.22, -t * 0.7, AppColors.violet);
+
     final highlight = Paint()
       ..color = Colors.white.withOpacity(0.25)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
@@ -115,4 +166,35 @@ class _OrbPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _OrbPainter old) =>
       old.t != t || old.state != state;
+
+  void _drawOrbit(
+    Canvas canvas,
+    Offset center,
+    double radius,
+    double turn,
+    Color color,
+  ) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6
+      ..shader = SweepGradient(
+        startAngle: 0,
+        endAngle: 2 * pi,
+        colors: [
+          color.withOpacity(0),
+          color.withOpacity(0.78),
+          color.withOpacity(0),
+        ],
+        stops: const [0.05, 0.45, 1],
+        transform: GradientRotation(turn * 2 * pi),
+      ).createShader(Rect.fromCircle(center: center, radius: radius));
+
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    canvas.rotate(-0.34);
+    canvas.scale(1.18, 0.42);
+    canvas.translate(-center.dx, -center.dy);
+    canvas.drawCircle(center, radius, paint);
+    canvas.restore();
+  }
 }

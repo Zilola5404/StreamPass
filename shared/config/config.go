@@ -50,8 +50,7 @@ func resolvePlaceholders(content string) string {
 		if v, ok := os.LookupEnv(name); ok {
 			return v
 		}
-		return "" // absent env var resolves to empty string, never the literal placeholder text —
-		// a literal "${VAR}" being used as real data (e.g. as a password) is worse than empty
+		return match
 	})
 }
 

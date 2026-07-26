@@ -17,6 +17,7 @@ import (
 	"time"
 
 	authsvc "streampass/backend/internal/application/auth"
+	adminsvc "streampass/backend/internal/application/admin"
 	billingsvc "streampass/backend/internal/application/billing"
 	configsvcpkg "streampass/backend/internal/application/configsvc"
 	relaysvc "streampass/backend/internal/application/relay"
@@ -119,6 +120,7 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 	relayService := relaysvc.NewService(relayRepo, log)
 	telemetryService := telemetrysvc.NewService(telemetryRepo, telemetrysvc.SystemClock{}, log)
 	configService := configsvcpkg.NewService(appConfigRepo, configsvcpkg.SystemClock{}, log)
+	adminUserService := adminsvc.NewUserService(userRepo, adminsvc.SystemClock{}, log)
 	billingService := billingsvc.NewService(userRepo, paymentRepo, paymentProvider, billingsvc.Plan{
 		AmountRUB:  int64(cfg.IntOr("billing.plan_amount_rub", 299)),
 		PeriodDays: cfg.IntOr("billing.plan_period_days", 30),
@@ -132,6 +134,7 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 		Config:          handler.NewConfigHandler(configService),
 		Billing:         handler.NewBillingHandler(billingService),
 		Health:          handler.NewHealthHandler(),
+		Admin:           handler.NewAdminHandler(adminUserService),
 		TokenVerifier:   tokens,
 		AdminKey:        cfg.StringOr("admin.api_key", ""),
 		Log:             log,

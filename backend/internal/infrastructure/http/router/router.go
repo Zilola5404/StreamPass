@@ -42,6 +42,7 @@ type Deps struct {
 	Config    *handler.ConfigHandler
 	Billing   *handler.BillingHandler
 	Health    *handler.HealthHandler
+	Admin     *handler.AdminHandler
 
 	TokenVerifier middleware.TokenVerifier
 	AdminKey      string
@@ -95,6 +96,7 @@ func New(d Deps) http.Handler {
 	mux.Handle(v1("POST /servers"), adminMW(http.HandlerFunc(d.Relay.Register)))
 	mux.Handle(v1("DELETE /servers/{id}"), adminMW(http.HandlerFunc(d.Relay.Delete)))
 	mux.Handle(v1("POST /servers/health"), adminMW(http.HandlerFunc(d.Relay.RecordHealthCheck)))
+	mux.Handle(v1("GET /users"), adminMW(http.HandlerFunc(d.Admin.ListUsers)))
 
 	return middleware.Chain(
 		middleware.Recover(d.Log),
