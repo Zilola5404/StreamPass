@@ -7,7 +7,7 @@ import 'screens/home_screen.dart';
 
 const _apiBaseUrl = String.fromEnvironment(
   'STREAMPASS_API_URL',
-  defaultValue: 'https://api.streampass.com/api/v1',
+  defaultValue: 'https://212-43-156-33.nip.io/api/v1',
 );
 
 void main() {

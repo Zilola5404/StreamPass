@@ -24,6 +24,7 @@ class MainActivity : FlutterActivity() {
     // dialog, so we know to actually start the service once permission
     // is granted.
     private var pendingConnect = false
+    private var pendingArgs: Map<*, *>? = null
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,7 +47,7 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "connect" -> {
-                        result.success(requestConnect())
+                        result.success(requestConnect(call.arguments as? Map<*, *>))
                     }
                     "disconnect" -> {
                         StreamPassVpnService.stop(this)
@@ -76,13 +77,14 @@ class MainActivity : FlutterActivity() {
      * shown). The actual "connected" state always arrives later via the
      * event channel — this return value is not a connection guarantee.
      */
-    private fun requestConnect(): Boolean {
+    private fun requestConnect(args: Map<*, *>?): Boolean {
         val consentIntent = VpnService.prepare(this)
         if (consentIntent != null) {
             pendingConnect = true
+            pendingArgs = args
             startActivityForResult(consentIntent, VPN_PERMISSION_REQUEST)
         } else {
-            StreamPassVpnService.start(this)
+            StreamPassVpnService.start(this, args)
         }
         return true
     }
@@ -92,12 +94,13 @@ class MainActivity : FlutterActivity() {
         if (requestCode != VPN_PERMISSION_REQUEST) return
 
         if (resultCode == Activity.RESULT_OK && pendingConnect) {
-            StreamPassVpnService.start(this)
+            StreamPassVpnService.start(this, pendingArgs)
         } else {
             StreamPassVpnService.eventSink?.success(
                 mapOf("event" to "permissionDenied")
             )
         }
         pendingConnect = false
+        pendingArgs = null
     }
 }

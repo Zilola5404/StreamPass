@@ -29,9 +29,14 @@ class StreamPassVpnService : VpnService() {
         private const val NOTIFICATION_CHANNEL_ID = "streampass_vpn_status"
         private const val NOTIFICATION_ID = 1
 
-        fun start(context: Context) {
+        fun start(context: Context, args: Map<*, *>?) {
             context.startService(Intent(context, StreamPassVpnService::class.java).apply {
                 action = ACTION_CONNECT
+                putExtra("id", args?.get("id") as? String ?: "")
+                putExtra("host", args?.get("host") as? String ?: "")
+                putExtra("port", (args?.get("port") as? Int) ?: 443)
+                putExtra("displayName", args?.get("displayName") as? String ?: "")
+                putExtra("connectionConfig", args?.get("connectionConfig") as? String ?: "")
             })
         }
 
@@ -43,6 +48,12 @@ class StreamPassVpnService : VpnService() {
     private var tunInterface: ParcelFileDescriptor? = null
     private val scope = CoroutineScope(Dispatchers.IO + Job())
 
+    private var relayId: String = ""
+    private var relayHost: String = ""
+    private var relayPort: Int = 443
+    private var relayDisplayName: String = ""
+    private var connectionConfig: String = ""
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -50,6 +61,12 @@ class StreamPassVpnService : VpnService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_CONNECT) {
+            relayId = intent.getStringExtra("id") ?: ""
+            relayHost = intent.getStringExtra("host") ?: ""
+            relayPort = intent.getIntExtra("port", 443)
+            relayDisplayName = intent.getStringExtra("displayName") ?: ""
+            connectionConfig = intent.getStringExtra("connectionConfig") ?: ""
+
             startForeground(NOTIFICATION_ID, buildNotification("Подключение…"))
             emit("connecting")
             scope.launch { establishTunnel() }
@@ -84,16 +101,20 @@ class StreamPassVpnService : VpnService() {
 
     private suspend fun establishTunnel() {
         try {
-            // 1. Pull active server + rules from backend (via ApiService equivalent
-            //    on the Dart side, or directly here if the Go core owns networking).
-            //    For MVP: relay endpoint comes from GET /api/v1/servers response.
-            val relayHost = "212.43.159.198"
-            val relayPort = 443
+            // Relay endpoint now comes from GET /servers (via Dart's
+            // StreamPassApi), threaded through start() above — no longer
+            // hardcoded. connectionConfig carries the actual Hiddify
+            // subscription URL for this relay; go_core (not yet
+            // implemented — see go_core/README.md) is what will actually
+            // parse it and speak the wire protocol.
+            if (relayHost.isEmpty()) {
+                throw IllegalStateException("No relay host provided — was GET /servers called first?")
+            }
 
-            // 2. Build the local TUN interface. Actual per-app/per-route rules
-            //    (Domain Rules / CIDR Rules per ТЗ section 6) are NOT applied at
-            //    this layer — the Go core's Decision Engine handles DIRECT vs
-            //    RELAY per-connection once traffic reaches it.
+            // Build the local TUN interface. Actual per-app/per-route rules
+            // (Domain Rules / CIDR Rules per ТЗ section 6) are NOT applied at
+            // this layer — the Go core's Decision Engine handles DIRECT vs
+            // RELAY per-connection once traffic reaches it.
             tunInterface = Builder()
                 .setSession("StreamPass")
                 .addAddress("10.10.0.2", 32)
@@ -106,22 +127,28 @@ class StreamPassVpnService : VpnService() {
             val fd = tunInterface?.fd
                 ?: throw IllegalStateException("VPN interface could not be established")
 
-            // 3. Hand the raw fd to the shared Go core. This is the actual
-            //    Hysteria2 tunnel + Decision Engine entry point:
+            // Hand the raw fd to the shared Go core. This is the actual
+            // Hysteria2 tunnel + Decision Engine entry point:
             //
             //    Streampasscore.startTunnel(
             //        fd.toLong(),
             //        relayHost,
             //        relayPort.toLong(),
-            //        authPassword,
+            //        connectionConfig,
             //    )
             //
             //    startTunnel blocks / runs its own goroutines internally and
             //    calls back into Kotlin (via a gomobile callback interface)
             //    on state changes — that callback should call emit(...) below
             //    instead of this stubbed success path.
-
-            emit("connected", relay = "Germany, Frankfurt", pingMs = 68)
+            //
+            // IMPORTANT: everything below this point is still a stub. The
+            // TUN interface above is real, but no traffic is actually
+            // routed through it — emit("connected") here reports the OS
+            // handed us a TUN fd, not that a working tunnel exists. pingMs
+            // is deliberately omitted (not fabricated) since nothing has
+            // actually measured RTT to the relay yet.
+            emit("connected", relay = relayDisplayName.ifEmpty { relayHost })
         } catch (e: Exception) {
             emit("error", error = e.message ?: "unknown error")
             tearDown()

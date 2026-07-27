@@ -23,4 +23,7 @@ docker-data/
 .idea/
 
 # Windows
-Thumbs.db
+Thumbs.dbclient/android_old/
+client/custom_backup/
+client/android/build/
+client/android/local.properties

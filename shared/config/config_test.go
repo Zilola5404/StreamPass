@@ -83,7 +83,7 @@ func TestFileLoader_DefaultsFallBack(t *testing.T) {
 	}
 }
 
-func TestFileLoader_UnresolvedEnvVarLeftAsPlaceholder(t *testing.T) {
+func TestFileLoader_UnresolvedEnvVarResolvesToEmptyString(t *testing.T) {
 	path := writeTempConfig(t, "secret:\n  value: ${SP_TEST_UNSET_VAR}\n")
 	cfg, err := NewFileLoader(path).Load()
 	if err != nil {
@@ -93,7 +93,7 @@ func TestFileLoader_UnresolvedEnvVarLeftAsPlaceholder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("String() error = %v", err)
 	}
-	if v != "${SP_TEST_UNSET_VAR}" {
-		t.Errorf("unresolved placeholder = %q, want literal placeholder preserved", v)
+	if v != "" {
+		t.Errorf("unresolved placeholder = %q, want empty string (never the literal placeholder text)", v)
 	}
 }

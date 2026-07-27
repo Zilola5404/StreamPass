@@ -103,11 +103,20 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
+    final relay = _selectedRelay;
+    if (relay == null) {
+      setState(() {
+        _state = ConnState.error;
+        _errorMessage = 'Нет доступных серверов. Попробуйте позже';
+      });
+      return;
+    }
+
     setState(() {
       _errorMessage = null;
       _state = ConnState.connecting;
     });
-    final accepted = await VpnChannel.connect();
+    final accepted = await VpnChannel.connect(relay);
     if (!accepted && mounted) {
       setState(() => _state = ConnState.disconnected);
     }

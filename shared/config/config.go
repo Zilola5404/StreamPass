@@ -50,7 +50,7 @@ func resolvePlaceholders(content string) string {
 		if v, ok := os.LookupEnv(name); ok {
 			return v
 		}
-		return match
+		return ""
 	})
 }
 
