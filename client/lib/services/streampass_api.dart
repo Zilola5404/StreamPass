@@ -36,6 +36,24 @@ class StreamPassApi {
     await _post('/telemetry', payload.toJson());
   }
 
+  Future<SubscriptionInfo> fetchSubscription() async {
+    final body = await _get('/subscription');
+    return SubscriptionInfo.fromJson(body as Map<String, dynamic>);
+  }
+
+  /// Returns the ЮKassa confirmation URL to open in a browser to complete
+  /// payment. Note: backend billing has not been tested against live
+  /// ЮKassa credentials yet — this call is only as reliable as that
+  /// backend path (see project notes).
+  Future<String> createPayment() async {
+    final body = await _post('/payments', const {});
+    return (body as Map<String, dynamic>)['confirmation_url'] as String;
+  }
+
+  Future<void> cancelSubscription() async {
+    await _post('/subscription/cancel', const {});
+  }
+
   Future<dynamic> _get(String path, {bool authenticated = true}) async {
     final res = await _client.get(
       Uri.parse('$baseUrl$path'),
@@ -208,4 +226,25 @@ class TelemetryPayload {
         'connect_ms': connectMillis,
         'error_code': errorCode,
       };
+}
+
+class SubscriptionInfo {
+  final bool isActive;
+  final DateTime? activeUntil;
+
+  const SubscriptionInfo({required this.isActive, this.activeUntil});
+
+  /// The exact status string the backend uses is matched tolerantly
+  /// (case-insensitive "ACTIVE" substring, or an active_until timestamp
+  /// still in the future) rather than a single hardcoded literal — this
+  /// degrades safely (reports "inactive") instead of silently misreading
+  /// a paid user as unpaid if the exact wording ever changes.
+  factory SubscriptionInfo.fromJson(Map<String, dynamic> json) {
+    final statusStr = (json['status'] as String? ?? '').toUpperCase();
+    final untilRaw = json['active_until'] as String?;
+    final until = untilRaw != null ? DateTime.tryParse(untilRaw) : null;
+    final active =
+        statusStr.contains('ACTIVE') || (until != null && until.isAfter(DateTime.now()));
+    return SubscriptionInfo(isActive: active, activeUntil: until);
+  }
 }

@@ -8,6 +8,7 @@ import '../services/vpn_channel.dart';
 import '../theme/app_theme.dart';
 import '../widgets/connect_orb.dart';
 import 'settings_screen.dart';
+import 'subscription_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final StreamPassApi api;
@@ -25,13 +26,47 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _errorMessage;
   bool _autoMode = true;
   bool _loadingRelay = true;
+  SubscriptionInfo? _subscription;
+  bool _loadingSubscription = true;
   StreamSubscription<VpnStatusUpdate>? _sub;
 
   @override
   void initState() {
     super.initState();
     _sub = VpnChannel.statusStream.listen(_onStatus);
-    _loadStartupData();
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    await _loadSubscription();
+    await _loadStartupData();
+  }
+
+  Future<void> _loadSubscription() async {
+    try {
+      final info = await widget.api.fetchSubscription();
+      if (!mounted) return;
+      setState(() {
+        _subscription = info;
+        _loadingSubscription = false;
+      });
+    } catch (e) {
+      // Subscription status failing to load must not block the rest of
+      // the UI — default to "not active" (fail closed, not open) and let
+      // the person retry from the subscription screen.
+      if (!mounted) return;
+      setState(() {
+        _subscription = const SubscriptionInfo(isActive: false);
+        _loadingSubscription = false;
+      });
+    }
+  }
+
+  Future<void> _openSubscriptionScreen() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => SubscriptionScreen(api: widget.api)),
+    );
+    _loadSubscription();
   }
 
   Future<void> _loadStartupData() async {
@@ -64,6 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _maybeAutoConnect() async {
+    if (_subscription?.isActive != true) return;
     final settings = await SettingsService().load();
     if (settings.autoConnect && _state == ConnState.disconnected) {
       await _toggleConnection();
@@ -100,6 +136,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _toggleConnection() async {
     if (_state == ConnState.connected) {
       await VpnChannel.disconnect();
+      return;
+    }
+
+    if (_subscription?.isActive != true) {
+      await _openSubscriptionScreen();
       return;
     }
 
@@ -142,6 +183,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   onSettings: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const SettingsScreen()),
                   ),
+                  onSubscription: _openSubscriptionScreen,
+                  subscriptionActive: _subscription?.isActive ?? false,
                 ),
                 Expanded(
                   child: ListView(
@@ -167,6 +210,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
+                      if (!_loadingSubscription && _subscription?.isActive != true) ...[
+                        _SubscriptionBanner(onTap: _openSubscriptionScreen),
+                        const SizedBox(height: 14),
+                      ],
                       _RelayCard(
                         relay: _selectedRelay,
                         pingMs: _pingMs,
@@ -194,8 +241,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class _TopBar extends StatelessWidget {
   final VoidCallback onSettings;
+  final VoidCallback onSubscription;
+  final bool subscriptionActive;
 
-  const _TopBar({required this.onSettings});
+  const _TopBar({
+    required this.onSettings,
+    required this.onSubscription,
+    required this.subscriptionActive,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -204,7 +257,7 @@ class _TopBar extends StatelessWidget {
       child: Row(
         children: [
           IconButton(
-            onPressed: () {},
+            onPressed: onSettings,
             icon: const Icon(Icons.menu_rounded),
           ),
           Expanded(
@@ -215,9 +268,11 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           IconButton(
-            onPressed: onSettings,
-            icon: const Icon(Icons.workspace_premium_rounded,
-                color: AppColors.amber),
+            onPressed: onSubscription,
+            icon: Icon(
+              Icons.workspace_premium_rounded,
+              color: subscriptionActive ? AppColors.amber : AppColors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -261,6 +316,39 @@ class _StatusChip extends StatelessWidget {
             ),
             const SizedBox(width: 9),
             Text(label, style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SubscriptionBanner extends StatelessWidget {
+  final VoidCallback onTap;
+  const _SubscriptionBanner({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: _GlassCard(
+        child: Row(
+          children: [
+            const Icon(Icons.workspace_premium_rounded, color: AppColors.amber),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Подписка не активна',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 4),
+                  Text('Оформите подписку, чтобы подключиться к VPN',
+                      style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
           ],
         ),
       ),

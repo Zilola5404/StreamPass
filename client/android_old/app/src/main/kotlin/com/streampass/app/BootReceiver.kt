@@ -27,19 +27,7 @@ class BootReceiver : BroadcastReceiver() {
         val autoConnectEnabled = prefs.getBoolean(NativeSettingsChannel.KEY_AUTO_CONNECT, false)
 
         if (autostartEnabled && autoConnectEnabled) {
-            // No relay data is available here — BootReceiver runs natively,
-            // independent of the Flutter app, and relay selection only
-            // happens via Dart's GET /servers call inside a running app
-            // session. Passing null preserves the pre-existing behavior
-            // (this limitation existed before the start() signature added
-            // real relay data — auto-connect-on-boot was never able to
-            // supply it): the service will start, find no relay host, and
-            // report an error via the event channel rather than silently
-            // doing nothing. A real fix means either caching the last-used
-            // relay natively, or launching the Flutter engine headlessly
-            // here to fetch a fresh one — both are follow-up work, not
-            // something to paper over with a fake relay.
-            StreamPassVpnService.start(context, null)
+            StreamPassVpnService.start(context)
         }
         // If autostart is on but auto-connect is off, we deliberately do NOT
         // start the tunnel — autostart alone should only mean "have the app
