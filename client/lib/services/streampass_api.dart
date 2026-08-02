@@ -9,6 +9,8 @@ class StreamPassApi {
   final AuthService authService;
   final http.Client _client;
 
+  String get apiBaseUrl => baseUrl.endsWith('/api/v1') ? baseUrl : '$baseUrl/api/v1';
+
   StreamPassApi({
     required this.baseUrl,
     required this.authService,
@@ -56,7 +58,7 @@ class StreamPassApi {
 
   Future<dynamic> _get(String path, {bool authenticated = true}) async {
     final res = await _client.get(
-      Uri.parse('$baseUrl$path'),
+      Uri.parse('$apiBaseUrl$path'),
       headers: await _headers(authenticated: authenticated),
     );
     return _decode(res);
@@ -64,7 +66,7 @@ class StreamPassApi {
 
   Future<dynamic> _post(String path, Map<String, dynamic> body) async {
     final res = await _client.post(
-      Uri.parse('$baseUrl$path'),
+      Uri.parse('$apiBaseUrl$path'),
       headers: await _headers(),
       body: jsonEncode(body),
     );
@@ -86,7 +88,7 @@ class StreamPassApi {
       return jsonDecode(res.body);
     }
 
-    var message = 'Сервер временно недоступен';
+    var message = 'Сервис временно недоступен';
     try {
       final body = jsonDecode(res.body) as Map<String, dynamic>;
       final error = body['error'];

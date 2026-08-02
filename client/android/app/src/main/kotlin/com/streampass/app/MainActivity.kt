@@ -83,10 +83,21 @@ class MainActivity : FlutterActivity() {
             pendingConnect = true
             pendingArgs = args
             startActivityForResult(consentIntent, VPN_PERMISSION_REQUEST)
-        } else {
-            StreamPassVpnService.start(this, args)
+            return true
         }
-        return true
+
+        try {
+            StreamPassVpnService.start(this, args)
+            return true
+        } catch (t: Throwable) {
+            StreamPassVpnService.eventSink?.success(
+                mapOf(
+                    "event" to "error",
+                    "error" to (t.message ?: "Не удалось запустить VPN-сервис"),
+                )
+            )
+            return false
+        }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -94,7 +105,7 @@ class MainActivity : FlutterActivity() {
         if (requestCode != VPN_PERMISSION_REQUEST) return
 
         if (resultCode == Activity.RESULT_OK && pendingConnect) {
-            StreamPassVpnService.start(this, pendingArgs)
+            requestConnect(pendingArgs)
         } else {
             StreamPassVpnService.eventSink?.success(
                 mapOf("event" to "permissionDenied")

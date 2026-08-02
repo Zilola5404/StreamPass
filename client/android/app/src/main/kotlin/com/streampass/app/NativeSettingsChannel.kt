@@ -38,6 +38,6 @@ object NativeSettingsChannel {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(key, value)
-            .apply()
+            .commit()
     }
 }

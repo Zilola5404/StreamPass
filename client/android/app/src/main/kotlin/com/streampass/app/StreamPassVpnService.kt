@@ -127,28 +127,14 @@ class StreamPassVpnService : VpnService() {
             val fd = tunInterface?.fd
                 ?: throw IllegalStateException("VPN interface could not be established")
 
-            // Hand the raw fd to the shared Go core. This is the actual
-            // Hysteria2 tunnel + Decision Engine entry point:
-            //
-            //    Streampasscore.startTunnel(
-            //        fd.toLong(),
-            //        relayHost,
-            //        relayPort.toLong(),
-            //        connectionConfig,
-            //    )
-            //
-            //    startTunnel blocks / runs its own goroutines internally and
-            //    calls back into Kotlin (via a gomobile callback interface)
-            //    on state changes — that callback should call emit(...) below
-            //    instead of this stubbed success path.
-            //
-            // IMPORTANT: everything below this point is still a stub. The
-            // TUN interface above is real, but no traffic is actually
-            // routed through it — emit("connected") here reports the OS
-            // handed us a TUN fd, not that a working tunnel exists. pingMs
-            // is deliberately omitted (not fabricated) since nothing has
-            // actually measured RTT to the relay yet.
-            emit("connected", relay = relayDisplayName.ifEmpty { relayHost })
+            // Prefer the real Go-core tunnel bridge when the gomobile AAR is present.
+            // If the binding is not available yet, the bridge emits a clear error
+            // and the VPN service stays in an explicit failed state instead of
+            // silently reporting success.
+            val bridge = TunnelBridge { event, relay, pingMs, error ->
+                emit(event, relay = relay ?: relayDisplayName.ifEmpty { relayHost }, pingMs = pingMs, error = error)
+            }
+            bridge.startTunnel(fd, relayHost, relayPort, connectionConfig)
         } catch (e: Exception) {
             emit("error", error = e.message ?: "unknown error")
             tearDown()

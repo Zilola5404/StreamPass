@@ -98,8 +98,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
-                Text(_error!,
-                    style: const TextStyle(color: AppColors.danger, fontSize: 13)),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.danger.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.danger.withOpacity(0.35)),
+                  ),
+                  child: Text(
+                    _error!,
+                    style: const TextStyle(color: AppColors.danger, fontSize: 13),
+                  ),
+                ),
               ],
               const SizedBox(height: 20),
               SizedBox(

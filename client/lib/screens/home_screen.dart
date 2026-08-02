@@ -9,6 +9,8 @@ import '../theme/app_theme.dart';
 import '../widgets/connect_orb.dart';
 import 'settings_screen.dart';
 import 'subscription_screen.dart';
+import 'servers_screen.dart';
+import 'statistics_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final StreamPassApi api;
@@ -229,7 +231,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ),
-                const _BottomNav(),
+                _BottomNav(
+                  onTapStatistics: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const StatisticsScreen()),
+                  ),
+                  onTapServers: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => ServersScreen(api: widget.api)),
+                  ),
+                  onTapSettings: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  ),
+                ), 
               ],
             ),
           ),
@@ -472,15 +484,23 @@ class _RouteCard extends StatelessWidget {
 }
 
 class _BottomNav extends StatelessWidget {
-  const _BottomNav();
+  final VoidCallback onTapStatistics;
+  final VoidCallback onTapServers;
+  final VoidCallback onTapSettings;
+
+  const _BottomNav({
+    required this.onTapStatistics,
+    required this.onTapServers,
+    required this.onTapSettings,
+  });
 
   @override
   Widget build(BuildContext context) {
     final items = [
-      (Icons.home_rounded, 'Главная', true),
-      (Icons.bar_chart_rounded, 'Статистика', false),
-      (Icons.public_rounded, 'Серверы', false),
-      (Icons.settings_rounded, 'Настройки', false),
+      (Icons.home_rounded, 'Главная', true, null),
+      (Icons.bar_chart_rounded, 'Статистика', false, onTapStatistics),
+      (Icons.public_rounded, 'Серверы', false, onTapServers),
+      (Icons.settings_rounded, 'Настройки', false, onTapSettings),
     ];
 
     return Container(
@@ -496,26 +516,33 @@ class _BottomNav extends StatelessWidget {
         children: [
           for (final item in items)
             Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    item.$1,
-                    color: item.$3 ? AppColors.cyan : AppColors.textSecondary,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: item.$4,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        item.$1,
+                        color: item.$3 ? AppColors.cyan : AppColors.textSecondary,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.$2,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: item.$3
+                                  ? AppColors.cyan
+                                  : AppColors.textSecondary,
+                              fontSize: 11,
+                            ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    item.$2,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: item.$3
-                              ? AppColors.cyan
-                              : AppColors.textSecondary,
-                          fontSize: 11,
-                        ),
-                  ),
-                ],
+                ),
               ),
             ),
         ],
