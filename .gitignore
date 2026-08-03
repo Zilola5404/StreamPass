@@ -1,13 +1,19 @@
 # Пароли и настройки
 .env
+.env.*
+!.env.example
 
 # Python
 .venv/
 venv/
 __pycache__/
 
+# Node
+node_modules/
+
 # Логи
 *.log
+logs/
 
 # Базы данных
 *.db
@@ -15,15 +21,33 @@ __pycache__/
 # Docker данные
 docker-data/
 
-# Компилятор
+# Компилятор и артефакты сборки
 *.exe
+bin/
+obj/
+build/
+dist/
+
+# Go core build artifacts (AAR хранится в android/app/libs/)
+client/go_core/streampasscore.aar
+client/go_core/streampasscore-sources.jar
+
+# Backups
+backups/
 
 # IDE
 .vscode/
 .idea/
 
 # Windows
-Thumbs.dbclient/android_old/
+Thumbs.db
+~$*
+
+# Legacy / local
+client/android_old/
 client/custom_backup/
 client/android/build/
 client/android/local.properties
+
+# Office temp lock files
+~$*.docx

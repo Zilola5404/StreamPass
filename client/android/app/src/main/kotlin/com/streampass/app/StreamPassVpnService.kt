@@ -46,6 +46,7 @@ class StreamPassVpnService : VpnService() {
     }
 
     private var tunInterface: ParcelFileDescriptor? = null
+    private var tunnelBridge: TunnelBridge? = null
     private val scope = CoroutineScope(Dispatchers.IO + Job())
 
     private var relayId: String = ""
@@ -134,6 +135,7 @@ class StreamPassVpnService : VpnService() {
             val bridge = TunnelBridge { event, relay, pingMs, error ->
                 emit(event, relay = relay ?: relayDisplayName.ifEmpty { relayHost }, pingMs = pingMs, error = error)
             }
+            tunnelBridge = bridge
             bridge.startTunnel(fd, relayHost, relayPort, connectionConfig)
         } catch (e: Exception) {
             emit("error", error = e.message ?: "unknown error")
@@ -142,6 +144,8 @@ class StreamPassVpnService : VpnService() {
     }
 
     private fun tearDown() {
+        tunnelBridge?.stopTunnel()
+        tunnelBridge = null
         tunInterface?.close()
         tunInterface = null
         emit("disconnected")

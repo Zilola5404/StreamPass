@@ -11,7 +11,18 @@ import java.lang.reflect.Proxy
 class TunnelBridge(
     private val onState: (event: String, relay: String?, pingMs: Int?, error: String?) -> Unit,
 ) {
-    fun startTunnel(fd: Int, relayHost: String, relayPort: Int, authPassword: String) {
+    fun stopTunnel() {
+        try {
+            val coreClass = Class.forName("streampasscore.Streampasscore")
+            coreClass.getMethod("stopTunnel").invoke(null)
+        } catch (_: ClassNotFoundException) {
+            // Go core not packaged — nothing to stop.
+        } catch (_: Throwable) {
+            // Best-effort shutdown; VPN service still tears down TUN.
+        }
+    }
+
+    fun startTunnel(fd: Int, relayHost: String, relayPort: Int, connectionConfig: String) {
         try {
             val coreClass = Class.forName("streampasscore.Streampasscore")
             val callbackClass = Class.forName("streampasscore.Streampasscore\$StatusCallback")
@@ -40,7 +51,7 @@ class TunnelBridge(
                 String::class.java,
                 callbackClass,
             )
-            startMethod.invoke(null, fd.toLong(), relayHost, relayPort.toLong(), authPassword, callback)
+            startMethod.invoke(null, fd.toLong(), relayHost, relayPort.toLong(), connectionConfig, callback)
         } catch (_: ClassNotFoundException) {
             onState(
                 "error",

@@ -32,11 +32,9 @@ type StatusCallback interface {
 
 // StartTunnel запускается из StreamPassVpnService.establishTunnel().
 // fd — файловый дескриптор TUN-интерфейса из VpnService.Builder().establish().
-func StartTunnel(fd int, relayHost string, relayPort int, authPassword string, cb StatusCallback) {
+func StartTunnel(fd int, relayHost string, relayPort int, connectionConfig string, cb StatusCallback) {
     cb.OnConnecting()
-    // ... поднять hysteria2 client, привязать к fd через os.NewFile(uintptr(fd), "tun"),
-    // запустить Decision Engine поверх TUN, слушать деградацию по RTT
-    // и дергать cb.OnConnected / cb.OnError по мере изменения состояния.
+    // ... hysteria2 client + sing-tun bridge on fd ...
 }
 
 func StopTunnel() {
@@ -47,10 +45,16 @@ func StopTunnel() {
 ## 2. Сборка AAR
 
 ```bash
+# Требуется JDK (javac) в PATH — например Android Studio JBR:
+# export JAVA_HOME="/path/to/Android Studio/jbr"
+
 go install golang.org/x/mobile/cmd/gomobile@latest
+go install golang.org/x/mobile/cmd/gobind@latest
 gomobile init
-cd go_core
-gomobile bind -target=android -o streampasscore.aar ./mobile
+cd client/go_core
+go get -tool golang.org/x/mobile/cmd/gobind
+gomobile bind -target=android -androidapi=21 -o streampasscore.aar ./mobile
+cp streampasscore.aar ../android/app/libs/
 ```
 
 Полученный `streampasscore.aar` кладётся в
