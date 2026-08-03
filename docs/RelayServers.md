@@ -1,6 +1,6 @@
 # StreamPass Relay Servers
 
-> Обновлено: 2026-08-03
+> Обновлено: 2026-08-04
 
 ## Роли серверов
 
@@ -22,11 +22,14 @@
 
 Установлен скриптом `scripts/setup-relay-hysteria.sh` (UDP 443, TCP 443 занят Caddy).
 
+Формат `connection_config` (пароли **не хранить в Git** — подставлять из env/секрет-хранилища):
+
 ```
-hysteria2://streampass-secure-auth@212.43.156.33:443/?obfs=salamander&obfs-password=streampass-relay-2024&insecure=1
+hysteria2://<AUTH_PASSWORD>@212.43.156.33:443/?obfs=salamander&obfs-password=<OBFS_PASSWORD>
 ```
 
-Проверка (2026-08-03): handshake OK, foreign IP `212.43.156.33`.
+Для test-relay с self-signed TLS добавьте `&insecure=1` **только** в dev/staging.
+В production используйте валидный сертификат или `pinSHA256=...` — без `insecure=1`.
 
 ### nl-amsterdam-1 — Hiddify relay
 
@@ -35,7 +38,7 @@ Hiddify поднимает Hysteria2 на UDP-портах **32527** / **32528**
 Параметры берутся из Hiddify Admin / `singbox/configs/05_inbounds_4100_hysteria.json` на сервере.
 
 ```
-hysteria2://<user-uuid>@212.43.157.167.sslip.io:32528/?obfs=salamander&obfs-password=<obfs-secret>&sni=212.43.157.167.sslip.io&insecure=1
+hysteria2://<user-uuid>@212.43.157.167.sslip.io:32528/?obfs=salamander&obfs-password=<obfs-secret>&sni=212.43.157.167.sslip.io
 ```
 
 **Важно:** в PostgreSQL должна храниться ссылка `hysteria2://…`, а не URL подписки Hiddify (`https://…/uuid/`).
@@ -49,11 +52,11 @@ docker exec -it streampass-postgres-1 psql -U streampass -d streampass
 ```
 
 ```sql
--- Native relay (156.33)
+-- Native relay (156.33) — подставьте реальные пароли из env, не из Git
 INSERT INTO relay_servers (id, region, host, port, healthy, connection_config, updated_at)
 VALUES (
   'nl-native-1', 'NL', '212.43.156.33', 443, true,
-  'hysteria2://streampass-secure-auth@212.43.156.33:443/?obfs=salamander&obfs-password=streampass-relay-2024&insecure=1',
+  'hysteria2://<AUTH_PASSWORD>@212.43.156.33:443/?obfs=salamander&obfs-password=<OBFS_PASSWORD>',
   NOW()
 )
 ON CONFLICT (id) DO UPDATE SET connection_config = EXCLUDED.connection_config, updated_at = NOW();
@@ -76,10 +79,10 @@ WHERE id = 'nl-amsterdam-1';
 
 ```bash
 # На Ubuntu/Debian (root). UDP 443 — Caddy держит только TCP 443.
-LISTEN_PORT=443 bash setup-relay-hysteria.sh
+AUTH_PASSWORD='<secret>' OBFS_PASSWORD='<secret>' LISTEN_PORT=443 bash setup-relay-hysteria.sh
 ```
 
-Переменные окружения: `AUTH_PASSWORD`, `OBFS_PASSWORD`, `LISTEN_PORT`, `HYSTERIA_VERSION`.
+Переменные окружения: `AUTH_PASSWORD` (обязательно), `OBFS_PASSWORD` (обязательно), `LISTEN_PORT`, `HYSTERIA_VERSION`.
 
 При загрузке с Windows используйте LF (не CRLF):
 
@@ -91,7 +94,7 @@ $script | ssh root@212.43.156.33 "cat > /root/setup-relay-hysteria.sh && chmod +
 ## Локальная проверка клиента
 
 ```powershell
-$env:STREAMPASS_RELAY_URI = "hysteria2://streampass-secure-auth@212.43.156.33:443/?obfs=salamander&obfs-password=streampass-relay-2024&insecure=1"
+$env:STREAMPASS_RELAY_URI = "hysteria2://<AUTH_PASSWORD>@212.43.156.33:443/?obfs=salamander&obfs-password=<OBFS_PASSWORD>"
 cd client/go_core
 go test -v -timeout 1m -run TestIntegrationHysteria ./internal/hyconfig/
 ```
@@ -103,4 +106,4 @@ go test -v -timeout 1m -run TestIntegrationHysteria ./internal/hyconfig/
 - Backend + native relay: `ssh root@212.43.156.33`
 - Hiddify relay: `ssh root@212.43.157.167`
 
-**Пароли и секреты не хранить в Git.** Ротация паролей root после передачи в чат.
+**Пароли и секреты не хранить в Git.** После утечки в истории git — ротировать пароли relay на сервере.

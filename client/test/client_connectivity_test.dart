@@ -13,7 +13,7 @@ void main() {
         'load_ratio': 0,
         'rtt_ms': 1,
         'connection_config':
-            'hysteria2://streampass-secure-auth@212.43.156.33:443/?obfs=salamander&obfs-password=streampass-relay-2024&insecure=1',
+            'hysteria2://test-auth@198.51.100.1:443/?obfs=salamander&obfs-password=test-obfs-secret',
       });
 
       expect(relay.id, 'nl-native-1');

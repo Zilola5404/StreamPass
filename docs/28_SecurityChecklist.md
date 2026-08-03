@@ -22,7 +22,7 @@
 
 | Check | Status | Detail |
 |-------|--------|--------|
-| Secrets in env only | ✅ | No hardcoded secrets in code |
+| Secrets in env only | ✅ | No hardcoded secrets in code (ops docs use placeholders) |
 | TLS in transit | ✅ | Caddy HTTPS termination |
 | DB SSL | ⚠️ | sslmode=disable (Docker internal network) |
 | connection_config at rest | ❌ | Plaintext in PostgreSQL |
@@ -66,6 +66,7 @@
 | Certificate pinning | ❌ | Not implemented |
 | Release signing | ❌ | Debug keys (BUG-005) |
 | VPN permission | ✅ | Standard Android VPN permission flow |
+| Connect diagnostics log | ✅ | On-device only; user-initiated copy; no URLs/payloads/secrets (ADR-010) |
 | ProGuard/R8 | TODO | Not verified for release |
 
 ---

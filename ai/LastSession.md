@@ -1,29 +1,14 @@
 # Last Session
 
-## Дата: 2026-08-03
+> Updated: 2026-08-04
 
-### Что сделал AI:
-- **BL-003:** верификация E2E VPN transport
-  - Integration tests: hysteria connect + foreign IP via relay (PASS)
-  - Local test relay: `docker-compose.hysteria-test.yml` + `infrastructure/hysteria-test/`
-  - `scripts/VerifyBL003.ps1` — automated BL-003 checklist
-  - **Bugfix:** TunnelBridge → `mobile.Mobile` (was wrong `streampasscore.Streampasscore`)
-  - APK debug build: PASS
-- Production relay 212.43.159.198:443 — unreachable; documented
-- Android device E2E: skipped (no adb device)
+## Completed
 
-### Файлы:
-- `client/go_core/internal/hyconfig/connect_integration_test.go`
-- `client/android/.../TunnelBridge.kt`
-- `docker-compose.hysteria-test.yml`, `infrastructure/hysteria-test/`
-- `scripts/VerifyBL003.ps1`, `SetupHysteriaTestRelay.ps1`
-- `reports/BL-003-test-report.md`
-- `docs/04_Backlog.md`, `ai/CurrentTask.md`
+- BL-006 Rule Engine (polling + hot-reload) — pushed `bcfb491`
+- Code review / audit fixes: pingMs, secrets redaction, refresh dedup, CI, ADR-010/011
+- Removed docx + `android_old` from Git
 
-### Следующий шаг:
-BL-005 Decision Engine on client
+## Next
 
-### Test status:
-- VerifyBL003.ps1: 5 passed, 0 failed, 1 skipped
-- Integration hysteria: PASS (local relay)
-- flutter build apk --debug: PASS
+- BL-014 Exclusions sync with backend
+- Rotate relay passwords on server (secrets were in git history before redaction)

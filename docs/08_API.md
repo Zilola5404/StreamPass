@@ -101,6 +101,24 @@
 
 ---
 
+### POST /api/v1/refresh
+
+| | |
+|---|---|
+| **Назначение** | Выдать новый access token по действующему refresh token |
+| **Auth** | Public (strict rate limit) |
+| **Request** | `{"refresh_token":"abc..."}` |
+| **Response 200** | |
+```json
+{
+  "access_token": "eyJ...",
+  "access_expires_at": "2026-08-03T16:30:00Z"
+}
+```
+| **Errors** | 400 invalid_input, 401 token_invalid / token_expired, 429 rate_limited |
+
+---
+
 ### GET /api/v1/rules
 
 | | |

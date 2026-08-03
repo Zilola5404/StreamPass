@@ -8,7 +8,12 @@ import '../services/vpn_channel.dart';
 import '../services/connection_log.dart';
 import '../services/native_connect_log.dart';
 
-/// Connection diagnostics: live status + step-by-step connect log.
+/// Connection diagnostics: live VPN status + on-device connect log.
+///
+/// The connect log is stored only on the device and copied to clipboard by
+/// explicit user action. It may include relay id/host, HTTP status codes,
+/// auth error codes, and build metadata — but never browsing URLs, packet
+/// payloads, or `connection_config` secrets. See ADR-010 in `docs/11_Decisions.md`.
 class DiagnosticsScreen extends StatefulWidget {
   const DiagnosticsScreen({super.key});
 

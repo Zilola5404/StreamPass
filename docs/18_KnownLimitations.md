@@ -12,6 +12,7 @@
 | One-button connect | UI exists, but VPN tunnel doesn't work (stub) |
 | No on-device routing | Decision Engine + rule hot-reload done; DIRECT on Android still needs `VpnService.protect()` |
 | Exclusions local-only | `exclusions_screen.dart` — not synced with backend |
+| Boot auto-connect | «Автоподключение» при boot не поднимает VPN до открытия приложения (см. `BootReceiver.kt`) |
 | No auto-update | Client, rules, certs — manual update only |
 | Subscription cancel | Immediate revocation, not "stop auto-renewal" |
 

@@ -4,23 +4,23 @@ import "testing"
 
 func TestParseHysteria2URI(t *testing.T) {
 	parsed, err := Parse(
-		"hysteria2://streampass-secure-auth@212.43.159.198:443/?obfs=salamander&obfs-password=streampass-relay-2024#StreamPass",
+		"hysteria2://test-auth@198.51.100.1:443/?obfs=salamander&obfs-password=test-obfs-secret&insecure=1#StreamPass",
 		"",
 		0,
 	)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if parsed.ServerHost != "212.43.159.198:443" {
+	if parsed.ServerHost != "198.51.100.1:443" {
 		t.Fatalf("server host = %q", parsed.ServerHost)
 	}
-	if parsed.Auth != "streampass-secure-auth" {
+	if parsed.Auth != "test-auth" {
 		t.Fatalf("auth = %q", parsed.Auth)
 	}
 	if parsed.ObfsType != "salamander" {
 		t.Fatalf("obfs = %q", parsed.ObfsType)
 	}
-	if parsed.ObfsPass != "streampass-relay-2024" {
+	if parsed.ObfsPass != "test-obfs-secret" {
 		t.Fatalf("obfs pass = %q", parsed.ObfsPass)
 	}
 	if !parsed.Insecure {

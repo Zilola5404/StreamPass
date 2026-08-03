@@ -70,6 +70,36 @@ void main() {
     expect(await service.storedToken, 'new-access');
   });
 
+  test('concurrent refresh calls share one POST /refresh', () async {
+    SharedPreferences.setMockInitialValues({
+      'sp_refresh_token': 'refresh-abc',
+      'sp_access_token': 'expired-access',
+    });
+
+    var refreshCalls = 0;
+    final client = _MockClient((request) async {
+      refreshCalls++;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      return http.Response(
+        jsonEncode({
+          'access_token': 'new-access-$refreshCalls',
+          'access_expires_at': '2099-01-01T00:00:00Z',
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    final service = AuthService(baseUrl: 'https://example.com/api/v1', client: client);
+    final results = await Future.wait([
+      service.refreshSession(),
+      service.refreshSession(),
+    ]);
+
+    expect(results, everyElement(isTrue));
+    expect(refreshCalls, 1);
+  });
+
   test('ensureValidSession refreshes when access token expiry passed', () async {
     SharedPreferences.setMockInitialValues({
       'sp_refresh_token': 'refresh-abc',

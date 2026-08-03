@@ -13,14 +13,20 @@ $Passed = 0
 $Failed = 0
 $Skipped = 0
 
-if (-not $RelayURI) {
-    $RelayURI = "hysteria2://streampass-secure-auth@127.0.0.1:8443/?obfs=salamander&obfs-password=streampass-relay-2024#StreamPass"
-}
-$env:STREAMPASS_RELAY_URI = $RelayURI
-
 function Step-Pass($Name) { Write-Host "[PASS] $Name" -ForegroundColor Green; $script:Passed++ }
 function Step-Fail($Name, $Detail) { Write-Host "[FAIL] $Name - $Detail" -ForegroundColor Red; $script:Failed++ }
 function Step-Skip($Name, $Detail) { Write-Host "[SKIP] $Name - $Detail" -ForegroundColor Yellow; $script:Skipped++ }
+
+if (-not $RelayURI) {
+    if (-not $env:STREAMPASS_RELAY_URI) {
+        Step-Skip "Go integration" "Set -RelayURI or `$env:STREAMPASS_RELAY_URI"
+        $SkipGoIntegration = $true
+    } else {
+        $RelayURI = $env:STREAMPASS_RELAY_URI
+    }
+} else {
+    $env:STREAMPASS_RELAY_URI = $RelayURI
+}
 
 Write-Host "=== BL-003 Verification ===" -ForegroundColor Cyan
 

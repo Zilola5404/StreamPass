@@ -8,6 +8,30 @@
 ## [Unreleased]
 
 ### Added
+- Decision Engine + Rule Engine hot-reload on client (BL-005/BL-006, v0.1.1+6)
+- `POST /api/v1/refresh` — access token renewal
+- Connect diagnostics: `ConnectionLog`, `ConnectLogger`, Diagnostics screen export
+- GitHub Actions CI: `go test`, `flutter test`
+
+### Changed
+- VPN connect flow: `PrepareRelay` before TUN (ADR-011)
+- Relay ops docs: secrets replaced with placeholders in `docs/RelayServers.md`
+
+### Fixed
+- Startup crash: `StreamPassVpnService.onDestroy` no longer calls `stopSelf()`
+- `pingMs` preserved on prepare-first connect path
+- Concurrent `POST /refresh` deduplicated in `AuthService`
+
+### Known Issues
+- DIRECT routing on Android may need `VpnService.protect()`
+- ЮKassa — not live-tested
+- `connection_config` plaintext in PostgreSQL (BL/security backlog)
+
+---
+
+## [0.1.1] — 2026-08-04
+
+### Added
 - AI-friendly documentation structure (`docs/`, `ai/`, `reports/`, `prompts/`)
 - Health Monitor worker (`backend/cmd/healthmonitor/`)
 - Migration 0002: `connection_config` column on `relay_servers`

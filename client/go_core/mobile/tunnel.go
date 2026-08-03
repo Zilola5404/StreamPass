@@ -33,6 +33,7 @@ type tunnelRuntime struct {
 	hy         client.Client
 	mtu        uint32
 	relayLabel string
+	pingMs     int
 }
 
 // PrepareRelay dials the Hysteria relay before Android brings up the TUN
@@ -53,7 +54,7 @@ func PrepareRelay(relayHost string, relayPort int, connectionConfig string) stri
 	if err != nil {
 		return fmt.Errorf("hysteria connect: %w", err).Error()
 	}
-	_ = time.Since(start)
+	pingMs := int(time.Since(start).Milliseconds())
 
 	relayLabel := relayHost
 	if relayLabel == "" {
@@ -65,9 +66,18 @@ func PrepareRelay(relayHost string, relayPort int, connectionConfig string) stri
 		hy:         hyClient,
 		mtu:        parsed.MTU,
 		relayLabel: relayLabel,
+		pingMs:     pingMs,
 	}
 	tunnelMu.Unlock()
 	return ""
+}
+
+func takePreparedSession() *tunnelRuntime {
+	tunnelMu.Lock()
+	defer tunnelMu.Unlock()
+	s := prepared
+	prepared = nil
+	return s
 }
 
 // StartTunnel attaches the Android TUN fd to an active session. Call
@@ -142,10 +152,7 @@ func runTunnel(fd int, relayHost string, relayPort int, connectionConfig string,
 		cb.OnConnecting()
 	}
 
-	tunnelMu.Lock()
-	relaySession := prepared
-	prepared = nil
-	tunnelMu.Unlock()
+	relaySession := takePreparedSession()
 
 	var hyClient client.Client
 	var mtu uint32 = hyconfig.DefaultMTU()
@@ -158,6 +165,7 @@ func runTunnel(fd int, relayHost string, relayPort int, connectionConfig string,
 			mtu = relaySession.mtu
 		}
 		relayLabel = relaySession.relayLabel
+		pingMs = relaySession.pingMs
 	} else {
 		StopTunnel()
 

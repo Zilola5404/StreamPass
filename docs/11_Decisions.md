@@ -136,6 +136,30 @@
 
 ---
 
+## ADR-010: On-device connect diagnostics log
+
+| | |
+|---|---|
+| **Дата** | 2026-08-04 |
+| **Проблема** | Экран Diagnostics расширен step-by-step connect log с копированием в clipboard; прежний комментарий в коде ограничивал scope полями ТЗ §14 |
+| **Решение** | Лог хранится только на устройстве; экспорт — по явному действию пользователя. Разрешены: relay id/host/port, HTTP status, auth error codes, build label, native/Dart event names. Запрещены: URL сайтов, payload трафика, содержимое `connection_config` |
+| **Причина** | Connect log нужен для отладки VPN-flow на устройстве без отправки данных на сервер; это не server telemetry |
+| **Последствия** | Обновлён `docs/28_SecurityChecklist.md`; комментарий в `diagnostics_screen.dart` |
+
+---
+
+## ADR-011: Prepare relay before TUN on Android
+
+| | |
+|---|---|
+| **Дата** | 2026-08-04 |
+| **Проблема** | QUIC handshake к relay таймаутил, если default route через TUN уже активен — пакеты зацикливались в пустой туннель |
+| **Решение** | Разделить `PrepareRelay()` (Hysteria connect до TUN) и `StartTunnel()` (attach fd к готовой сессии) |
+| **Причина** | Android VpnService поднимает full tunnel до старта Go core; без pre-connect relay недостижим |
+| **Последствия** | Состояние `prepared`/`active` в `mobile/tunnel.go`; RTT handshake сохраняется в `pingMs` |
+
+---
+
 ## Шаблон для новых ADR
 
 ```

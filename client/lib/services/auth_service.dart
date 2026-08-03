@@ -47,6 +47,8 @@ class AuthService {
     return storedToken;
   }
 
+  Future<bool>? _refreshInFlight;
+
   /// Ensures the access token is valid; refreshes using the refresh token when needed.
   Future<bool> ensureValidSession() async {
     final refresh = await storedRefreshToken;
@@ -60,10 +62,25 @@ class AuthService {
 
     if (stillValid) return true;
     _log.info('auth', 'access token stale, calling POST /refresh');
-    return refreshSession();
+    return _refreshSessionDeduped();
   }
 
-  Future<bool> refreshSession() async {
+  Future<bool> _refreshSessionDeduped() {
+    final inFlight = _refreshInFlight;
+    if (inFlight != null) return inFlight;
+
+    final future = _refreshSessionImpl();
+    _refreshInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_refreshInFlight, future)) {
+        _refreshInFlight = null;
+      }
+    });
+  }
+
+  Future<bool> refreshSession() => _refreshSessionDeduped();
+
+  Future<bool> _refreshSessionImpl() async {
     final refresh = await storedRefreshToken;
     if (refresh == null) {
       _log.warn('auth', 'refresh skipped: no refresh token');

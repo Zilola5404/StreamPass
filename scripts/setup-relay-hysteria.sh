@@ -5,8 +5,8 @@
 set -euo pipefail
 
 HYSTERIA_VERSION="${HYSTERIA_VERSION:-v2.6.1}"
-AUTH_PASSWORD="${AUTH_PASSWORD:-streampass-secure-auth}"
-OBFS_PASSWORD="${OBFS_PASSWORD:-streampass-relay-2024}"
+AUTH_PASSWORD="${AUTH_PASSWORD:?Set AUTH_PASSWORD (do not commit secrets to Git)}"
+OBFS_PASSWORD="${OBFS_PASSWORD:?Set OBFS_PASSWORD (do not commit secrets to Git)}"
 LISTEN_PORT="${LISTEN_PORT:-443}"
 
 echo "=== StreamPass Hysteria2 relay setup ==="

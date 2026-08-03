@@ -6,6 +6,9 @@
 
 | Дата | Что сделано | Файлы | Результат |
 |------|-------------|-------|-----------|
+| 2026-08-04 | BL-005/BL-006: Decision Engine + rule hot-reload | `go_core/internal/decision/`, `RuleEngineService`, AAR | Per-flow DIRECT/RELAY; polling + UpdateRules |
+| 2026-08-04 | Code review fixes (2c56972) | `tunnel.go`, `auth_service.dart`, docs | pingMs fix, refresh dedup, secrets redacted |
+| 2026-08-04 | VPN connect + startup hardening | `tunnel.go`, `StreamPassVpnService.kt`, `auth/refresh` | PrepareRelay-first; POST /refresh; diagnostics log |
 | 2026-08-03 | BL-003: VPN transport verification | integration tests, VerifyBL003.ps1, TunnelBridge fix | Hysteria connect + foreign IP PASS; APK OK |
 | 2026-08-03 | BL-001/BL-002: Hysteria2 tunnel + AAR | `client/go_core/`, `streampasscore.aar` | go_core transport, Gradle AAR dep |
 | 2026-08-03 | Инициализация AI-friendly документации | `docs/*`, `ai/*`, `reports/*`, `prompts/*` | Полная база знаний для AI-агентов |

@@ -13,12 +13,13 @@ import (
 	"github.com/apernet/hysteria/core/v2/client"
 )
 
-const defaultTestConnectionConfig = "hysteria2://streampass-secure-auth@212.43.159.198:443/?obfs=salamander&obfs-password=streampass-relay-2024#StreamPass"
+const defaultTestConnectionConfig = ""
 
-func integrationConnectionConfig() string {
+func integrationConnectionConfig(t *testing.T) string {
 	if v := os.Getenv("STREAMPASS_RELAY_URI"); v != "" {
 		return v
 	}
+	t.Skip("STREAMPASS_RELAY_URI not set")
 	return defaultTestConnectionConfig
 }
 
@@ -32,7 +33,7 @@ func TestIntegrationHysteriaConnect(t *testing.T) {
 		t.Skip("STREAMPASS_RELAY_TEST=0")
 	}
 
-	cfg, _, err := BuildClientConfig(integrationConnectionConfig(), "", 0)
+	cfg, _, err := BuildClientConfig(integrationConnectionConfig(t), "", 0)
 	if err != nil {
 		t.Fatalf("build config: %v", err)
 	}
@@ -74,7 +75,7 @@ func TestIntegrationHysteriaForeignIP(t *testing.T) {
 		t.Skip("STREAMPASS_RELAY_TEST=0")
 	}
 
-	cfg, _, err := BuildClientConfig(integrationConnectionConfig(), "", 0)
+	cfg, _, err := BuildClientConfig(integrationConnectionConfig(t), "", 0)
 	if err != nil {
 		t.Fatalf("build config: %v", err)
 	}
@@ -139,7 +140,7 @@ func TestIntegrationHysteriaHTTPHead(t *testing.T) {
 		t.Skip("STREAMPASS_RELAY_TEST=0")
 	}
 
-	cfg, _, err := BuildClientConfig(integrationConnectionConfig(), "", 0)
+	cfg, _, err := BuildClientConfig(integrationConnectionConfig(t), "", 0)
 	if err != nil {
 		t.Fatalf("build config: %v", err)
 	}

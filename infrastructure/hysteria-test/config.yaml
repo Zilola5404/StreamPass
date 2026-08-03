@@ -6,12 +6,12 @@ tls:
 
 auth:
   type: password
-  password: streampass-secure-auth
+  password: change-me-auth-local-test
 
 obfs:
   type: salamander
   salamander:
-    password: streampass-relay-2024
+    password: change-me-obfs-local-test
 
 bandwidth:
   up: 100 mbps
