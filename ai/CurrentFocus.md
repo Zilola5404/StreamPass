@@ -4,7 +4,7 @@
 
 ## Главный фокус проекта сейчас
 
-**E2E VPN test на Android (BL-003) — подтверждение MVP tunnel.**
+**BL-005: Decision Engine (клиент) — per-connection DIRECT/RELAY routing.**
 
 Hysteria2 transport в go_core реализован, AAR подключён. Следующий критический шаг — проверка на устройстве с live relay.
 

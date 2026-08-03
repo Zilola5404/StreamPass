@@ -1,0 +1,14 @@
+# Local Hysteria2 relay for BL-003 integration tests (dev only).
+# Usage: docker compose -f docker-compose.hysteria-test.yml up -d
+
+services:
+  hysteria-test:
+    image: tobyxdd/hysteria:latest
+    container_name: streampass-hysteria-test
+    restart: unless-stopped
+    ports:
+      - "8443:8443/udp"
+    volumes:
+      - ./infrastructure/hysteria-test/config.yaml:/etc/hysteria.yaml:ro
+      - ./infrastructure/hysteria-test/certs:/etc/hysteria:ro
+    command: ["server", "-c", "/etc/hysteria.yaml"]

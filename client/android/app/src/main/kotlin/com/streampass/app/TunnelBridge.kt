@@ -3,20 +3,42 @@ package com.streampass.app
 import java.lang.reflect.Proxy
 
 /**
- * Bridge between the Android VPN service and a future gomobile-generated
- * Go-core binding. This keeps the service code clean and lets the app
- * use a real tunnel implementation once streampasscore.aar is built and
- * placed in android/app/libs/.
+ * Bridge between the Android VPN service and the gomobile-generated Go core.
+ * gomobile bind ./mobile produces Java package `mobile` with class `Mobile`.
  */
 class TunnelBridge(
     private val onState: (event: String, relay: String?, pingMs: Int?, error: String?) -> Unit,
 ) {
+    private fun coreClass(): Class<*>? = listOf(
+        "mobile.Mobile",
+        "streampasscore.Streampasscore",
+    ).firstNotNullOfOrNull { name ->
+        try {
+            Class.forName(name)
+        } catch (_: ClassNotFoundException) {
+            null
+        }
+    }
+
+    private fun callbackClass(core: Class<*>): Class<*>? {
+        val pkg = core.`package`?.name ?: return null
+        val simple = core.simpleName
+        return listOf(
+            "$pkg.$simple\$StatusCallback",
+            "$pkg.StatusCallback",
+        ).firstNotNullOfOrNull { name ->
+            try {
+                Class.forName(name)
+            } catch (_: ClassNotFoundException) {
+                null
+            }
+        }
+    }
+
     fun stopTunnel() {
         try {
-            val coreClass = Class.forName("streampasscore.Streampasscore")
-            coreClass.getMethod("stopTunnel").invoke(null)
-        } catch (_: ClassNotFoundException) {
-            // Go core not packaged — nothing to stop.
+            val core = coreClass() ?: return
+            core.getMethod("stopTunnel").invoke(null)
         } catch (_: Throwable) {
             // Best-effort shutdown; VPN service still tears down TUN.
         }
@@ -24,8 +46,11 @@ class TunnelBridge(
 
     fun startTunnel(fd: Int, relayHost: String, relayPort: Int, connectionConfig: String) {
         try {
-            val coreClass = Class.forName("streampasscore.Streampasscore")
-            val callbackClass = Class.forName("streampasscore.Streampasscore\$StatusCallback")
+            val coreClass = coreClass()
+                ?: throw ClassNotFoundException("mobile.Mobile")
+            val callbackClass = callbackClass(coreClass)
+                ?: throw ClassNotFoundException("StatusCallback")
+
             val callback = Proxy.newProxyInstance(
                 callbackClass.classLoader,
                 arrayOf(callbackClass),

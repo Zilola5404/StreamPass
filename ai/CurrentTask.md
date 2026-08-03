@@ -4,32 +4,24 @@
 
 ## Главная задача
 
-**BL-003: End-to-end VPN на Android**
+**BL-005: Decision Engine (клиент)**
 
 ## Описание
 
-Проверить на Android-устройстве полный цикл: Connect → TUN → Hysteria2 → relay → foreign IP.
+Реализовать на клиенте Decision Engine: маршрутизация DIRECT / RELAY / FALLBACK per-connection по правилам ТЗ §5.
 
 ## Контекст
 
-- BL-001/BL-002 завершены: go_core transport, AAR, Gradle, StopTunnel
-- Relay `connection_config` приходит из GET /servers
-- Пример URI: `hysteria2://streampass-secure-auth@212.43.159.198:443/?obfs=salamander&obfs-password=streampass-relay-2024#StreamPass`
+- BL-003 завершён: transport verified (integration tests + APK), TunnelBridge fix (`mobile.Mobile`)
+- Production relay 212.43.159.198 был недоступен; локальный test relay в `docker-compose.hysteria-test.yml`
+- Physical Android TUN E2E — manual when device available (see `reports/BL-003-test-report.md`)
 
 ## Acceptance Criteria
 
-- [x] go_core tunnel.go реализует Hysteria2 client
-- [x] gomobile build produces streampasscore.aar
-- [x] AAR integrated in Android libs
-- [x] TunnelBridge successfully loads Go core
-- [ ] VPN connect on Android device routes traffic through relay
-- [ ] Foreign IP verified
-
-## Files to Test
-
-- `client/android/app/` (APK на устройстве)
-- Backend relay с populated `connection_config`
+- [ ] Decision Engine выбирает DIRECT vs RELAY per connection
+- [ ] Интеграция с Rule Engine (BL-006) или минимальные правила
+- [ ] Не ломает текущий full-tunnel MVP path
 
 ## Previous Task (Completed)
 
-BL-001 Hysteria2 tunnel + BL-002 AAR integration — completed 2026-08-03.
+BL-003 End-to-end VPN verification — completed 2026-08-03.

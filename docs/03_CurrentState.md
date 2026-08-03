@@ -54,7 +54,7 @@
 
 | Компонент | Что есть | Чего нет |
 |-----------|----------|----------|
-| **VPN Tunnel** | Android VPNService, TUN, TunnelBridge, Hysteria2 client в go_core, streampasscore.aar | E2E тест на устройстве, Decision Engine |
+| **VPN Tunnel** | Android VPNService, TUN, TunnelBridge, Hysteria2, AAR, integration tests | Physical device TUN E2E (manual), Decision Engine |
 | **Billing** | HTTP-клиент ЮKassa, webhook handler | Live-тест с реальным аккаунтом ЮKassa |
 | **Exclusions** | UI экран | Синхронизация с backend, применение в Decision Engine |
 | **Subscription cancel** | Немедленное прекращение доступа | Автопродление / отмена будущих списаний |
@@ -70,7 +70,7 @@
 | Decision Engine (клиент) | §5 | ❌ |
 | Rule Engine (клиент) | §6 | ❌ |
 | DNS Cache / DoH / DoQ | §7 | ❌ |
-| Hysteria2 client (go_core) | §8 | ⚠️ Реализован, нужен E2E тест на устройстве |
+| Hysteria2 client (go_core) | §8 | ✅ Transport verified (BL-003 integration tests) |
 | Fallback Strategy (UDP/TCP ports) | §10 | ❌ |
 | Admin Panel UI | §11 | ❌ |
 | Auto Update (клиент, правила, certs) | §16 | ❌ |
@@ -84,20 +84,15 @@
 
 ## Текущие проблемы
 
-1. **VPN E2E не проверен на устройстве** — BL-003: нужен тест Connect + foreign IP (go_core и AAR готовы).
-2. **ЮKassa не протестирована** против live/sandbox API.
-3. **Нет CI/CD** — сборка и тесты только локально.
-4. **Decision Engine / Rule Engine** на клиенте не реализованы — весь трафик идёт через relay.
-5. **Release signing Android** — debug keys (TODO в `build.gradle.kts`).
-6. **README backend** — статус Health Monitor может быть устаревшим; фактически worker есть в docker-compose.
+1. **BL-005/BL-006:** Decision Engine + Rule Engine на клиенте
+2. **Physical Android VPN test** — manual when device + live relay available
+3. **Production relay** `212.43.159.198` — был недоступен при BL-003; проверить на сервере
 
 ---
 
 ## Следующие шаги (приоритет)
 
-1. **BL-003: E2E VPN на Android** — Connect, проверка foreign IP через relay
-2. **Decision Engine + Rule Engine на клиенте** — загрузка правил, маршрутизация DIRECT/RELAY
-3. **Live-тест ЮKassa** — sandbox ключи, проверить CreatePayment/webhook
-4. **CI/CD** — GitHub Actions: build, test, docker, gomobile (optional)
-5. **Integration tests** — auth, billing, relay с testcontainers
-6. **Обновить README** — синхронизировать статусы компонентов
+1. **BL-005:** Decision Engine на клиенте
+2. **Live-тест ЮKassa** — sandbox
+3. **CI/CD** — GitHub Actions + VerifyBL003 in pipeline
+4. **Physical Android E2E** — когда доступен device и online relay

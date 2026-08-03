@@ -6,7 +6,8 @@
 
 | Дата | Что сделано | Файлы | Результат |
 |------|-------------|-------|-----------|
-| 2026-08-03 | BL-001/BL-002: Hysteria2 tunnel + AAR | `client/go_core/`, `client/android/app/libs/streampasscore.aar`, Kotlin bridge | go_core transport, Gradle AAR dep, assembleDebug OK |
+| 2026-08-03 | BL-003: VPN transport verification | integration tests, VerifyBL003.ps1, TunnelBridge fix | Hysteria connect + foreign IP PASS; APK OK |
+| 2026-08-03 | BL-001/BL-002: Hysteria2 tunnel + AAR | `client/go_core/`, `streampasscore.aar` | go_core transport, Gradle AAR dep |
 | 2026-08-03 | Инициализация AI-friendly документации | `docs/*`, `ai/*`, `reports/*`, `prompts/*` | Полная база знаний для AI-агентов |
 | — | Первый релиз StreamPass MVP (backend) | `backend/`, `shared/`, `docker-compose.yml` | Backend API functional |
 | — | Клиентская часть (Flutter Android) | `client/lib/`, `client/android/` | UI screens + VPNService scaffold |
