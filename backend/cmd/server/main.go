@@ -114,7 +114,8 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 	registerUC := authsvc.NewRegisterUseCase(userRepo, hasher, idGeneratorAdapter{}, authsvc.SystemClock{}, log)
 	loginUC := authsvc.NewLoginUseCase(userRepo, hasher, tokens, sessions, authsvc.SystemClock{}, log)
 	logoutUC := authsvc.NewLogoutUseCase(tokens, sessions, log)
-	authService := authsvc.NewService(registerUC, loginUC, logoutUC)
+	refreshUC := authsvc.NewRefreshUseCase(tokens, sessions, log)
+	authService := authsvc.NewService(registerUC, loginUC, logoutUC, refreshUC)
 
 	ruleService := rulesvc.NewService(ruleRepo, rulesvc.SystemClock{}, log)
 	relayService := relaysvc.NewService(relayRepo, log)

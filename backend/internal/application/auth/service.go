@@ -9,9 +9,10 @@ type Service struct {
 	Register *RegisterUseCase
 	Login    *LoginUseCase
 	Logout   *LogoutUseCase
+	Refresh  *RefreshUseCase
 }
 
 // NewService constructs the Auth service facade.
-func NewService(register *RegisterUseCase, login *LoginUseCase, logout *LogoutUseCase) *Service {
-	return &Service{Register: register, Login: login, Logout: logout}
+func NewService(register *RegisterUseCase, login *LoginUseCase, logout *LogoutUseCase, refresh *RefreshUseCase) *Service {
+	return &Service{Register: register, Login: login, Logout: logout, Refresh: refresh}
 }

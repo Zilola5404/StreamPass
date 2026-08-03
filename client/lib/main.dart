@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'theme/app_theme.dart';
 import 'services/auth_service.dart';
 import 'services/streampass_api.dart';
@@ -11,6 +12,10 @@ const _apiBaseUrl = String.fromEnvironment(
 );
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Avoid blocking/crashing on first frame when fonts cannot be downloaded.
+  GoogleFonts.config.allowRuntimeFetching = false;
+
   final authService = AuthService(baseUrl: _apiBaseUrl);
   final api = StreamPassApi(baseUrl: _apiBaseUrl, authService: authService);
   runApp(StreamPassApp(authService: authService, api: api));
@@ -32,18 +37,29 @@ class StreamPassApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
       home: FutureBuilder<bool>(
-        future: authService.isLoggedIn,
+        future: authService.isLoggedIn.catchError((_) => false),
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return OnboardingScreen(authService: authService, api: api);
+          }
           if (!snapshot.hasData) {
             return const Scaffold(
               body: Center(child: CircularProgressIndicator()),
             );
           }
           return snapshot.data!
-              ? HomeScreen(api: api)
+              ? HomeScreen(api: api, authService: authService)
               : OnboardingScreen(authService: authService, api: api);
         },
       ),
     );
   }
+}
+
+/// Sends the user back to login when refresh fails.
+void navigateToLogin(BuildContext context, AuthService authService, StreamPassApi api) {
+  Navigator.of(context).pushAndRemoveUntil(
+    MaterialPageRoute(builder: (_) => OnboardingScreen(authService: authService, api: api)),
+    (_) => false,
+  );
 }

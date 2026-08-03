@@ -78,6 +78,7 @@ func New(d Deps) http.Handler {
 	mux.Handle(v1("POST /register"), strictLimiter.Middleware()(http.HandlerFunc(d.Auth.Register)))
 	mux.Handle(v1("POST /login"), strictLimiter.Middleware()(http.HandlerFunc(d.Auth.Login)))
 	mux.Handle(v1("POST /logout"), strictLimiter.Middleware()(http.HandlerFunc(d.Auth.Logout)))
+	mux.Handle(v1("POST /refresh"), strictLimiter.Middleware()(http.HandlerFunc(d.Auth.Refresh)))
 
 	// --- Authenticated client endpoints ---
 	// GET /servers now returns each relay's ConnectionConfig (a real VPN

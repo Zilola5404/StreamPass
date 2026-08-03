@@ -1,7 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../main.dart' show navigateToLogin;
+import '../build_info.dart';
+import '../services/connection_log.dart';
+import '../services/auth_service.dart';
 import '../services/settings_service.dart';
 import '../services/streampass_api.dart';
 import '../services/vpn_channel.dart';
@@ -14,8 +19,9 @@ import 'statistics_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final StreamPassApi api;
+  final AuthService authService;
 
-  const HomeScreen({super.key, required this.api});
+  const HomeScreen({super.key, required this.api, required this.authService});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -31,6 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
   SubscriptionInfo? _subscription;
   bool _loadingSubscription = true;
   StreamSubscription<VpnStatusUpdate>? _sub;
+  final _connectLog = ConnectionLog.instance;
 
   @override
   void initState() {
@@ -52,6 +59,11 @@ class _HomeScreenState extends State<HomeScreen> {
         _subscription = info;
         _loadingSubscription = false;
       });
+      _connectLog.info('api', 'subscription loaded', {'active': '${info.isActive}'});
+    } on SessionExpiredException {
+      _connectLog.error('auth', 'subscription fetch: session expired');
+      if (!mounted) return;
+      navigateToLogin(context, widget.authService, widget.api);
     } catch (e) {
       // Subscription status failing to load must not block the rest of
       // the UI — default to "not active" (fail closed, not open) and let
@@ -90,12 +102,22 @@ class _HomeScreenState extends State<HomeScreen> {
         _pingMs = _selectedRelay?.rttMs;
         _loadingRelay = false;
       });
+      _connectLog.info('api', 'servers loaded', {
+        'count': '${servers.length}',
+        'selected': _selectedRelay?.id ?? 'none',
+      });
       await _maybeAutoConnect();
+    } on SessionExpiredException {
+      _connectLog.error('auth', 'fetchServers: session expired');
+      if (!mounted) return;
+      navigateToLogin(context, widget.authService, widget.api);
     } catch (e) {
       if (!mounted) return;
+      _connectLog.error('api', 'fetchServers failed', {'error': '$e'});
       setState(() {
         _loadingRelay = false;
-        _errorMessage = e.toString();
+        _errorMessage = e is ApiException ? e.message : 'Не удалось загрузить список серверов';
+        _state = ConnState.error;
       });
     }
   }
@@ -130,7 +152,14 @@ class _HomeScreenState extends State<HomeScreen> {
           _errorMessage = 'Нужно разрешение на VPN-соединение';
         case VpnEvent.error:
           _state = ConnState.error;
-          _errorMessage = update.errorMessage ?? 'Ошибка подключения';
+          final msg = update.errorMessage ?? 'Ошибка подключения';
+          if (msg.toLowerCase().contains('token expired') ||
+              msg.contains('AUTH_TOKEN_EXPIRED')) {
+            _errorMessage = 'Сессия истекла. Войдите снова';
+            navigateToLogin(context, widget.authService, widget.api);
+          } else {
+            _errorMessage = msg;
+          }
       }
     });
   }
@@ -142,12 +171,22 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (_subscription?.isActive != true) {
+      _connectLog.warn('connect', 'blocked: subscription inactive');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Для подключения нужна активная подписка'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
       await _openSubscriptionScreen();
       return;
     }
 
     final relay = _selectedRelay;
     if (relay == null) {
+      _connectLog.error('connect', 'blocked: no relay selected');
       setState(() {
         _state = ConnState.error;
         _errorMessage = 'Нет доступных серверов. Попробуйте позже';
@@ -155,13 +194,24 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
+    _connectLog.beginConnectSession(relayId: relay.id, host: relay.host);
+    _connectLog.info('app', 'build ${BuildInfo.label}');
     setState(() {
       _errorMessage = null;
       _state = ConnState.connecting;
     });
-    final accepted = await VpnChannel.connect(relay);
-    if (!accepted && mounted) {
-      setState(() => _state = ConnState.disconnected);
+    try {
+      final accepted = await VpnChannel.connect(relay);
+      if (!accepted && mounted) {
+        setState(() => _state = ConnState.disconnected);
+      }
+    } on VpnConnectException catch (e) {
+      _connectLog.error('connect', 'VpnConnectException', {'message': e.message});
+      if (!mounted) return;
+      setState(() {
+        _state = ConnState.error;
+        _errorMessage = e.message;
+      });
     }
   }
 
@@ -236,7 +286,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     MaterialPageRoute(builder: (_) => const StatisticsScreen()),
                   ),
                   onTapServers: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => ServersScreen(api: widget.api)),
+                    MaterialPageRoute(
+                      builder: (_) => ServersScreen(api: widget.api, authService: widget.authService),
+                    ),
                   ),
                   onTapSettings: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const SettingsScreen()),

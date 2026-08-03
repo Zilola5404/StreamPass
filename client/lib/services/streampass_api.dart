@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'connection_log.dart';
 import 'auth_service.dart';
 
 class StreamPassApi {
@@ -16,6 +17,8 @@ class StreamPassApi {
     required this.authService,
     http.Client? client,
   }) : _client = client ?? http.Client();
+
+  static final _log = ConnectionLog.instance;
 
   Future<ClientConfig> fetchConfig() async {
     final body = await _get('/config', authenticated: false);
@@ -56,38 +59,78 @@ class StreamPassApi {
     await _post('/subscription/cancel', const {});
   }
 
-  Future<dynamic> _get(String path, {bool authenticated = true}) async {
+  Future<dynamic> _get(String path, {bool authenticated = true, bool retried = false}) async {
     final res = await _client.get(
       Uri.parse('$apiBaseUrl$path'),
       headers: await _headers(authenticated: authenticated),
     );
-    return _decode(res);
+    return _decode(res, () => _get(path, authenticated: authenticated, retried: true), retried: retried);
   }
 
-  Future<dynamic> _post(String path, Map<String, dynamic> body) async {
+  Future<dynamic> _post(String path, Map<String, dynamic> body, {bool retried = false}) async {
     final res = await _client.post(
       Uri.parse('$apiBaseUrl$path'),
       headers: await _headers(),
       body: jsonEncode(body),
     );
-    return _decode(res);
+    return _decode(res, () => _post(path, body, retried: true), retried: retried);
   }
 
   Future<Map<String, String>> _headers({bool authenticated = true}) async {
     final headers = <String, String>{'Content-Type': 'application/json'};
     if (authenticated) {
-      final token = await authService.storedToken;
-      if (token != null) headers['Authorization'] = 'Bearer $token';
+      final token = await authService.getValidAccessToken();
+      if (token == null) {
+        throw SessionExpiredException();
+      }
+      headers['Authorization'] = 'Bearer $token';
     }
     return headers;
   }
 
-  dynamic _decode(http.Response res) {
+  Future<dynamic> _decode(
+    http.Response res,
+    Future<dynamic> Function() retry, {
+    required bool retried,
+  }) async {
+    if (res.statusCode == 401 && !retried && _isAuthExpired(res)) {
+      _log.warn('auth', 'access token expired, refreshing');
+      final refreshed = await authService.refreshSession();
+      if (refreshed) {
+        _log.info('auth', 'token refreshed, retrying request');
+        return retry();
+      }
+      _log.error('auth', 'refresh failed, session expired');
+      throw SessionExpiredException(_errorMessage(res));
+    }
+
     if (res.statusCode >= 200 && res.statusCode < 300) {
       if (res.body.isEmpty) return null;
       return jsonDecode(res.body);
     }
 
+    throw ApiException(res.statusCode, _errorMessage(res));
+  }
+
+  bool _isAuthExpired(http.Response res) {
+    try {
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      final error = body['error'];
+      if (error is Map<String, dynamic>) {
+        final code = (error['code'] as String? ?? '').toUpperCase();
+        if (code.contains('TOKEN_EXPIRED') || code.contains('UNAUTHORIZED')) {
+          return true;
+        }
+        final message = (error['message'] as String? ?? '').toLowerCase();
+        if (message.contains('token expired') || message.contains('missing bearer')) {
+          return true;
+        }
+      }
+    } catch (_) {}
+    return res.statusCode == 401;
+  }
+
+  String _errorMessage(http.Response res) {
     var message = 'Сервис временно недоступен';
     try {
       final body = jsonDecode(res.body) as Map<String, dynamic>;
@@ -96,7 +139,7 @@ class StreamPassApi {
         message = error['message'] as String? ?? message;
       }
     } catch (_) {}
-    throw ApiException(res.statusCode, message);
+    return message;
   }
 }
 
@@ -245,8 +288,8 @@ class SubscriptionInfo {
     final statusStr = (json['status'] as String? ?? '').toUpperCase();
     final untilRaw = json['active_until'] as String?;
     final until = untilRaw != null ? DateTime.tryParse(untilRaw) : null;
-    final active =
-        statusStr.contains('ACTIVE') || (until != null && until.isAfter(DateTime.now()));
+    final active = statusStr == 'ACTIVE' ||
+        (until != null && until.isAfter(DateTime.now()));
     return SubscriptionInfo(isActive: active, activeUntil: until);
   }
 }

@@ -8,6 +8,7 @@ import android.net.VpnService
 import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -69,6 +70,7 @@ class MainActivity : FlutterActivity() {
             })
 
         NativeSettingsChannel.register(this, flutterEngine.dartExecutor.binaryMessenger)
+        DiagnosticsChannel.register(this, flutterEngine.dartExecutor.binaryMessenger)
     }
 
     /**
@@ -78,8 +80,12 @@ class MainActivity : FlutterActivity() {
      * event channel — this return value is not a connection guarantee.
      */
     private fun requestConnect(args: Map<*, *>?): Boolean {
+        val relayId = args?.get("id") as? String ?: ""
+        val host = args?.get("host") as? String ?: ""
+        ConnectLogger.log(this, "MainActivity.requestConnect relay=$relayId host=$host")
         val consentIntent = VpnService.prepare(this)
         if (consentIntent != null) {
+            ConnectLogger.log(this, "VPN permission dialog shown")
             pendingConnect = true
             pendingArgs = args
             startActivityForResult(consentIntent, VPN_PERMISSION_REQUEST)
@@ -87,9 +93,12 @@ class MainActivity : FlutterActivity() {
         }
 
         try {
+            ConnectLogger.log(this, "VPN permission already granted, starting service")
             StreamPassVpnService.start(this, args)
             return true
         } catch (t: Throwable) {
+            ConnectLogger.log(this, "start service failed: ${t.message}")
+            Log.e("StreamPassVpn", "start failed", t)
             StreamPassVpnService.eventSink?.success(
                 mapOf(
                     "event" to "error",
@@ -105,8 +114,10 @@ class MainActivity : FlutterActivity() {
         if (requestCode != VPN_PERMISSION_REQUEST) return
 
         if (resultCode == Activity.RESULT_OK && pendingConnect) {
+            ConnectLogger.log(this, "VPN permission granted")
             requestConnect(pendingArgs)
         } else {
+            ConnectLogger.log(this, "VPN permission denied result=$resultCode")
             StreamPassVpnService.eventSink?.success(
                 mapOf("event" to "permissionDenied")
             )

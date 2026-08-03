@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../services/auth_service.dart';
 import '../services/streampass_api.dart';
+import '../main.dart' show navigateToLogin;
 import '../theme/app_theme.dart';
 
 /// Read-only list of relay servers. Reuses the same GET /servers call
@@ -10,7 +12,8 @@ import '../theme/app_theme.dart';
 /// picker has no real functionality to test.
 class ServersScreen extends StatefulWidget {
   final StreamPassApi api;
-  const ServersScreen({super.key, required this.api});
+  final AuthService? authService;
+  const ServersScreen({super.key, required this.api, this.authService});
 
   @override
   State<ServersScreen> createState() => _ServersScreenState();
@@ -32,9 +35,16 @@ class _ServersScreenState extends State<ServersScreen> {
       final servers = await widget.api.fetchServers();
       if (!mounted) return;
       setState(() => _servers = servers);
+    } on SessionExpiredException catch (e) {
+      if (!mounted) return;
+      if (widget.authService != null) {
+        navigateToLogin(context, widget.authService!, widget.api);
+      } else {
+        setState(() => _error = e.message);
+      }
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = 'Не удалось загрузить список серверов');
+      setState(() => _error = e is ApiException ? e.message : 'Не удалось загрузить список серверов');
     }
   }
 

@@ -26,13 +26,11 @@ class BootReceiver : BroadcastReceiver() {
         val autostartEnabled = prefs.getBoolean(NativeSettingsChannel.KEY_AUTOSTART, false)
         val autoConnectEnabled = prefs.getBoolean(NativeSettingsChannel.KEY_AUTO_CONNECT, false)
 
+        // BootReceiver cannot connect without relay data from Flutter/API.
+        // Starting the VPN service with null args used to crash or loop errors.
+        // The Flutter app performs auto-connect on launch when settings allow.
         if (autostartEnabled && autoConnectEnabled) {
-            // Boot-time auto-connect is still best-effort: without a cached
-            // relay selection or a running Flutter engine, the service can only
-            // attempt a start with whatever data it has. We prefer a graceful
-            // no-op over a silent failure and let the service emit an explicit
-            // error if relay data is missing.
-            StreamPassVpnService.start(context, null)
+            ConnectLogger.log(context, "boot: autostart+autoConnect — waiting for app launch")
         }
         // If autostart is on but auto-connect is off, we deliberately do NOT
         // start the tunnel — autostart alone should only mean "have the app

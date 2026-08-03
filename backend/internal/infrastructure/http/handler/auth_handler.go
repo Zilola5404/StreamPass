@@ -11,7 +11,7 @@ import (
 	httpx "streampass/backend/internal/infrastructure/http"
 )
 
-// AuthHandler exposes /register, /login, /logout.
+// AuthHandler exposes /register, /login, /logout, /refresh.
 type AuthHandler struct {
 	svc *auth.Service
 }
@@ -104,4 +104,33 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+type refreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+type refreshResponse struct {
+	AccessToken     string `json:"access_token"`
+	AccessExpiresAt string `json:"access_expires_at"`
+}
+
+// Refresh handles "POST /refresh".
+func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+	var req refreshRequest
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+
+	access, err := h.svc.Refresh.Execute(r.Context(), req.RefreshToken)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, refreshResponse{
+		AccessToken:     access.AccessToken,
+		AccessExpiresAt: access.AccessExpiresAt.Format(httpx.TimeFormat),
+	})
 }

@@ -1,12 +1,14 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../build_info.dart';
 import '../theme/app_theme.dart';
 import '../services/vpn_channel.dart';
+import '../services/connection_log.dart';
+import '../services/native_connect_log.dart';
 
-/// Shows exactly the telemetry categories allowed by ТЗ §14:
-/// RTT, Packet Loss, Relay, client version, OS, connection time, error code.
-/// Deliberately does NOT show and never will show: site history,
-/// traffic content, URLs, or personal data — matching the "Не собирать" list.
+/// Connection diagnostics: live status + step-by-step connect log.
 class DiagnosticsScreen extends StatefulWidget {
   const DiagnosticsScreen({super.key});
 
@@ -17,10 +19,16 @@ class DiagnosticsScreen extends StatefulWidget {
 class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   VpnStatusUpdate? _last;
   DateTime? _connectedSince;
+  final _log = ConnectionLog.instance;
+  StreamSubscription<ConnectionLogEntry>? _logSub;
 
   @override
   void initState() {
     super.initState();
+    _refreshLogs();
+    _logSub = _log.stream.listen((_) {
+      if (mounted) setState(() {});
+    });
     VpnChannel.statusStream.listen((update) {
       if (!mounted) return;
       setState(() {
@@ -33,6 +41,32 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
         }
       });
     });
+  }
+
+  Future<void> _refreshLogs() async {
+    await NativeConnectLog.pullFromNative();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _copyLogs() async {
+    await _refreshLogs();
+    await Clipboard.setData(ClipboardData(text: _log.exportText()));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Лог скопирован в буфер обмена')),
+    );
+  }
+
+  Future<void> _clearLogs() async {
+    _log.clear();
+    await NativeConnectLog.clearNative();
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _logSub?.cancel();
+    super.dispose();
   }
 
   String get _uptime {
@@ -51,18 +85,37 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       _DiagRow('RTT', _last?.pingMs != null ? '${_last!.pingMs} ms' : '—'),
       _DiagRow('Время соединения', _uptime),
       _DiagRow('Код ошибки', _last?.errorMessage ?? '—'),
-      _DiagRow('Версия клиента', '0.1.0'),
+      _DiagRow('Версия клиента', BuildInfo.label),
       _DiagRow('ОС', Platform.operatingSystem),
     ];
+
+    final entries = _log.entries.reversed.toList();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Диагностика'),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        actions: [
+          IconButton(
+            tooltip: 'Обновить',
+            onPressed: _refreshLogs,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+          IconButton(
+            tooltip: 'Копировать лог',
+            onPressed: _copyLogs,
+            icon: const Icon(Icons.copy_rounded),
+          ),
+          IconButton(
+            tooltip: 'Очистить',
+            onPressed: _clearLogs,
+            icon: const Icon(Icons.delete_outline_rounded),
+          ),
+        ],
       ),
       body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.only(bottom: 24),
         children: [
           for (final row in rows)
             ListTile(
@@ -76,9 +129,27 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              'StreamPass передаёт только эти технические параметры. '
-              'История сайтов, содержимое трафика и персональные данные '
-              'не собираются и не отправляются.',
+              'Лог подключения (${entries.length})',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (entries.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Лог пуст. Нажмите Connect на главном экране — шаги подключения появятся здесь.',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+            )
+          else
+            ...entries.map((e) => _LogTile(entry: e)),
+          const Divider(height: 32),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'StreamPass передаёт только технические параметры. '
+              'Пароли и содержимое connection_config в лог не пишутся.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
@@ -94,6 +165,28 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
         VpnEvent.permissionDenied => 'Permission denied',
         VpnEvent.error => 'Error',
       };
+}
+
+class _LogTile extends StatelessWidget {
+  final ConnectionLogEntry entry;
+  const _LogTile({required this.entry});
+
+  Color get _color => switch (entry.level) {
+        ConnectionLogLevel.error => AppColors.danger,
+        ConnectionLogLevel.warn => AppColors.amber,
+        ConnectionLogLevel.info => AppColors.textSecondary,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: SelectableText(
+        entry.formatLine(),
+        style: TextStyle(fontSize: 11, color: _color, fontFamily: 'monospace'),
+      ),
+    );
+  }
 }
 
 class _DiagRow {

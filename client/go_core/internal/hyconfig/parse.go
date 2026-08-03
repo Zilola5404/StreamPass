@@ -17,6 +17,9 @@ import (
 
 const defaultMTU = 1400
 
+// DefaultMTU is the fallback TUN MTU for mobile tunnels.
+func DefaultMTU() uint32 { return defaultMTU }
+
 // Parsed holds hysteria client settings derived from a relay connection string.
 type Parsed struct {
 	ServerHost string

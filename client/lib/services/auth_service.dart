@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Wraps POST /register, POST /login, POST /logout and local token storage.
+import 'connection_log.dart';
+
+/// Wraps POST /register, POST /login, POST /logout, POST /refresh and local token storage.
 /// Endpoints per StreamPass API spec section 13.
 class AuthService {
   final String baseUrl; // e.g. https://api.streampass.com/api/v1
@@ -11,11 +14,14 @@ class AuthService {
 
   AuthService({required this.baseUrl, http.Client? client}) : _client = client ?? http.Client();
 
+  static final _log = ConnectionLog.instance;
+
   String get apiBaseUrl => baseUrl.endsWith('/api/v1') ? baseUrl : '$baseUrl/api/v1';
 
   static const _tokenKey = 'sp_access_token';
   static const _legacyTokenKey = 'sp_jwt_token';
   static const _refreshKey = 'sp_refresh_token';
+  static const _accessExpiresKey = 'sp_access_expires_at';
 
   Future<String?> get storedToken async {
     final prefs = await SharedPreferences.getInstance();
@@ -25,7 +31,89 @@ class AuthService {
   Future<String?> get storedRefreshToken async =>
       (await SharedPreferences.getInstance()).getString(_refreshKey);
 
-  Future<bool> get isLoggedIn async => (await storedToken) != null;
+  Future<DateTime?> get storedAccessExpiresAt async {
+    final raw = (await SharedPreferences.getInstance()).getString(_accessExpiresKey);
+    return raw != null ? DateTime.tryParse(raw) : null;
+  }
+
+  /// True when a refresh token exists locally (access token may still be expired).
+  Future<bool> get hasSession async => (await storedRefreshToken) != null;
+
+  Future<bool> get isLoggedIn async => await ensureValidSession();
+
+  /// Returns a usable access token, refreshing proactively when near expiry.
+  Future<String?> getValidAccessToken() async {
+    if (!await ensureValidSession()) return null;
+    return storedToken;
+  }
+
+  /// Ensures the access token is valid; refreshes using the refresh token when needed.
+  Future<bool> ensureValidSession() async {
+    final refresh = await storedRefreshToken;
+    if (refresh == null) return false;
+
+    final access = await storedToken;
+    final expiresAt = await storedAccessExpiresAt;
+    final stillValid = access != null &&
+        expiresAt != null &&
+        expiresAt.isAfter(DateTime.now().toUtc().add(const Duration(minutes: 1)));
+
+    if (stillValid) return true;
+    _log.info('auth', 'access token stale, calling POST /refresh');
+    return refreshSession();
+  }
+
+  Future<bool> refreshSession() async {
+    final refresh = await storedRefreshToken;
+    if (refresh == null) {
+      _log.warn('auth', 'refresh skipped: no refresh token');
+      await clearSession();
+      return false;
+    }
+
+    try {
+      final res = await _client.post(
+        Uri.parse('${apiBaseUrl}/refresh'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'refresh_token': refresh}),
+      );
+
+      if (res.statusCode != 200) {
+        _log.error('auth', 'POST /refresh failed', {'status': '${res.statusCode}'});
+        await clearSession();
+        return false;
+      }
+
+      final body = _decodeBody(res.body) as Map<String, dynamic>?;
+      final token = body?['access_token'] as String?;
+      if (token == null) {
+        await clearSession();
+        return false;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_tokenKey, token);
+      await prefs.remove(_legacyTokenKey);
+      final expiresRaw = body?['access_expires_at'] as String?;
+      if (expiresRaw != null) {
+        await prefs.setString(_accessExpiresKey, expiresRaw);
+      }
+      _log.info('auth', 'access token refreshed');
+      return true;
+    } catch (e) {
+      _log.warn('auth', 'refresh network error', {'error': '$e'});
+      // Network failure — keep session so a retry can succeed later.
+      return (await storedToken) != null;
+    }
+  }
+
+  Future<void> clearSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tokenKey);
+    await prefs.remove(_legacyTokenKey);
+    await prefs.remove(_refreshKey);
+    await prefs.remove(_accessExpiresKey);
+  }
 
   Future<AuthResult> login(String email, String password) async {
     try {
@@ -67,9 +155,7 @@ class AuthService {
         // ignore logout errors and clear local state anyway
       }
     }
-    await prefs.remove(_tokenKey);
-    await prefs.remove(_legacyTokenKey);
-    await prefs.remove(_refreshKey);
+    await clearSession();
   }
 
   Future<AuthResult> _handleAuthResponse(http.Response res) async {
@@ -93,6 +179,10 @@ class AuthService {
     await prefs.setString(_tokenKey, token);
     await prefs.remove(_legacyTokenKey);
     if (refresh != null) await prefs.setString(_refreshKey, refresh);
+    final expiresRaw = body['access_expires_at'] as String?;
+    if (expiresRaw != null) {
+      await prefs.setString(_accessExpiresKey, expiresRaw);
+    }
 
     return AuthResult(success: true, token: token, refreshToken: refresh);
   }
@@ -130,4 +220,12 @@ class AuthResult {
     this.refreshToken,
     this.error,
   });
+}
+
+class SessionExpiredException implements Exception {
+  final String message;
+  SessionExpiredException([this.message = 'Сессия истекла. Войдите снова.']);
+
+  @override
+  String toString() => message;
 }

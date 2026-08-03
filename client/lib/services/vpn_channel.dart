@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'connection_log.dart';
 import 'streampass_api.dart';
 
 enum VpnEvent { connecting, connected, disconnected, permissionDenied, error }
@@ -9,6 +10,15 @@ class VpnStatusUpdate {
   final int? pingMs;
   final String? errorMessage;
   VpnStatusUpdate(this.event, {this.relayName, this.pingMs, this.errorMessage});
+}
+
+/// Thrown when the native VPN layer rejects the connect request.
+class VpnConnectException implements Exception {
+  final String message;
+  VpnConnectException(this.message);
+
+  @override
+  String toString() => message;
 }
 
 /// Bridges Dart <-> native VpnService.
@@ -24,14 +34,10 @@ class VpnStatusUpdate {
 /// 3. Native service pushes state changes through an EventChannel so the UI
 ///    reacts to state changes that happen outside of a direct user tap
 ///    (e.g. relay switch on degradation, per ТЗ section 5).
-///
-/// IMPORTANT: the native side still stubs the actual tunnel establishment
-/// (see StreamPassVpnService.kt) — passing real relay data through here
-/// is a real fix, but no traffic is actually routed until go_core's
-/// Hysteria2 client is implemented and wired in.
 class VpnChannel {
   static const _method = MethodChannel('streampass/vpn');
   static const _events = EventChannel('streampass/vpn/events');
+  static final _log = ConnectionLog.instance;
 
   static Stream<VpnStatusUpdate>? _statusStream;
 
@@ -48,13 +54,43 @@ class VpnChannel {
         pingMs: map['pingMs'] as int?,
         errorMessage: map['error'] as String?,
       );
+    }).map((update) {
+      _logVpnEvent(update);
+      return update;
     });
     return _statusStream!;
+  }
+
+  static void _logVpnEvent(VpnStatusUpdate update) {
+    final details = <String, String>{
+      'event': update.event.name,
+      if (update.relayName != null) 'relay': update.relayName!,
+      if (update.pingMs != null) 'pingMs': '${update.pingMs}',
+      if (update.errorMessage != null) 'error': update.errorMessage!,
+    };
+    if (update.event == VpnEvent.error) {
+      _log.error('vpn', 'native VPN event', details);
+    } else {
+      _log.info('vpn', 'native VPN event', details);
+    }
   }
 
   /// Returns true if the connect request was accepted (does not guarantee
   /// tunnel is up yet — listen to [statusStream] for the actual state).
   static Future<bool> connect(RelayServer server) async {
+    if (server.connectionConfig.isEmpty) {
+      _log.error('vpn', 'connect blocked: empty connection_config', {'relayId': server.id});
+      throw VpnConnectException(
+        'У relay нет connection_config. Проверьте настройки сервера в backend.',
+      );
+    }
+    _log.beginConnectSession(relayId: server.id, host: server.host);
+    _log.info('vpn', 'MethodChannel connect', {
+      'relayId': server.id,
+      'host': server.host,
+      'port': '${server.port}',
+      'configScheme': server.connectionConfig.split(':').first,
+    });
     try {
       final ok = await _method.invokeMethod<bool>('connect', {
         'id': server.id,
@@ -63,13 +99,16 @@ class VpnChannel {
         'displayName': server.region,
         'connectionConfig': server.connectionConfig,
       });
+      _log.info('vpn', 'MethodChannel connect accepted', {'ok': '${ok ?? false}'});
       return ok ?? false;
-    } on PlatformException {
-      return false;
+    } on PlatformException catch (e) {
+      _log.error('vpn', 'MethodChannel PlatformException', {'message': e.message ?? 'unknown'});
+      throw VpnConnectException(e.message ?? 'Не удалось запустить VPN');
     }
   }
 
   static Future<void> disconnect() async {
+    _log.info('vpn', 'disconnect requested');
     try {
       await _method.invokeMethod('disconnect');
     } on PlatformException {

@@ -60,12 +60,24 @@ class SettingsService {
 
   Future<void> setAutostart(bool value) async {
     (await SharedPreferences.getInstance()).setBool(_kAutostart, value);
-    await _nativeChannel.invokeMethod('setAutostart', value);
+    try {
+      await _nativeChannel.invokeMethod('setAutostart', value);
+    } on PlatformException {
+      // Native channel unavailable in tests / non-Android.
+    } on MissingPluginException {
+      // ignore
+    }
   }
 
   Future<void> setAutoConnect(bool value) async {
     (await SharedPreferences.getInstance()).setBool(_kAutoConnect, value);
-    await _nativeChannel.invokeMethod('setAutoConnect', value);
+    try {
+      await _nativeChannel.invokeMethod('setAutoConnect', value);
+    } on PlatformException {
+      // ignore
+    } on MissingPluginException {
+      // ignore
+    }
   }
 
   Future<void> setAutoSelectRelay(bool value) async =>

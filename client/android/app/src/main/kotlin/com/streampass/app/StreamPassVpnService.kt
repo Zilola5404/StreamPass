@@ -7,7 +7,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import io.flutter.plugin.common.EventChannel
 import kotlinx.coroutines.CoroutineScope
@@ -22,6 +25,7 @@ import kotlinx.coroutines.launch
 class StreamPassVpnService : VpnService() {
 
     companion object {
+        private const val TAG = "StreamPassVpn"
         var eventSink: EventChannel.EventSink? = null
         private var instance: StreamPassVpnService? = null
 
@@ -30,6 +34,8 @@ class StreamPassVpnService : VpnService() {
         private const val NOTIFICATION_ID = 1
 
         fun start(context: Context, args: Map<*, *>?) {
+            ConnectLogger.clear(context)
+            ConnectLogger.log(context, "VpnService.start id=${args?.get("id")} host=${args?.get("host")}")
             context.startService(Intent(context, StreamPassVpnService::class.java).apply {
                 action = ACTION_CONNECT
                 putExtra("id", args?.get("id") as? String ?: "")
@@ -68,6 +74,8 @@ class StreamPassVpnService : VpnService() {
             relayDisplayName = intent.getStringExtra("displayName") ?: ""
             connectionConfig = intent.getStringExtra("connectionConfig") ?: ""
 
+            Log.i(TAG, "connect relayId=$relayId host=$relayHost port=$relayPort configLen=${connectionConfig.length}")
+            ConnectLogger.log(this, "onStartCommand relayId=$relayId host=$relayHost port=$relayPort configLen=${connectionConfig.length}")
             startForeground(NOTIFICATION_ID, buildNotification("Подключение…"))
             emit("connecting")
             scope.launch { establishTunnel() }
@@ -102,20 +110,37 @@ class StreamPassVpnService : VpnService() {
 
     private suspend fun establishTunnel() {
         try {
-            // Relay endpoint now comes from GET /servers (via Dart's
-            // StreamPassApi), threaded through start() above — no longer
-            // hardcoded. connectionConfig carries the actual Hiddify
-            // subscription URL for this relay; go_core (not yet
-            // implemented — see go_core/README.md) is what will actually
-            // parse it and speak the wire protocol.
             if (relayHost.isEmpty()) {
                 throw IllegalStateException("No relay host provided — was GET /servers called first?")
             }
+            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+3")
+            ConnectLogger.log(this, "establishTunnel: validating connection_config")
+            if (connectionConfig.isBlank()) {
+                throw IllegalStateException("connection_config is empty — relay misconfigured in backend")
+            }
+            if (!connectionConfig.startsWith("hysteria2://") && !connectionConfig.startsWith("hy2://")) {
+                throw IllegalStateException("connection_config must be hysteria2:// URI, got: ${connectionConfig.take(32)}…")
+            }
 
-            // Build the local TUN interface. Actual per-app/per-route rules
-            // (Domain Rules / CIDR Rules per ТЗ section 6) are NOT applied at
-            // this layer — the Go core's Decision Engine handles DIRECT vs
-            // RELAY per-connection once traffic reaches it.
+            val bridge = TunnelBridge(this) { event, relay, pingMs, error ->
+                ConnectLogger.log(this@StreamPassVpnService, "tunnel event=$event relay=$relay error=$error pingMs=$pingMs")
+                Log.i(TAG, "tunnel event=$event relay=$relay error=$error")
+                emit(event, relay = relay ?: relayDisplayName.ifEmpty { relayHost }, pingMs = pingMs, error = error)
+                if (event == "error") {
+                    Handler(Looper.getMainLooper()).post { tearDown() }
+                }
+            }
+            tunnelBridge = bridge
+
+            // Hysteria handshake MUST complete before TUN default route is added,
+            // otherwise QUIC packets to the relay loop into the empty interface.
+            ConnectLogger.log(this, "PrepareRelay before TUN (relay=$relayHost:$relayPort)")
+            val prepareErr = bridge.prepareRelay(relayHost, relayPort, connectionConfig)
+            if (prepareErr != null) {
+                throw IllegalStateException(prepareErr)
+            }
+            ConnectLogger.log(this, "PrepareRelay OK, establishing TUN")
+
             tunInterface = Builder()
                 .setSession("StreamPass")
                 .addAddress("10.10.0.2", 32)
@@ -127,34 +152,37 @@ class StreamPassVpnService : VpnService() {
 
             val fd = tunInterface?.fd
                 ?: throw IllegalStateException("VPN interface could not be established")
+            ConnectLogger.log(this, "TUN established fd=$fd mtu=1400")
 
-            // Prefer the real Go-core tunnel bridge when the gomobile AAR is present.
-            // If the binding is not available yet, the bridge emits a clear error
-            // and the VPN service stays in an explicit failed state instead of
-            // silently reporting success.
-            val bridge = TunnelBridge { event, relay, pingMs, error ->
-                emit(event, relay = relay ?: relayDisplayName.ifEmpty { relayHost }, pingMs = pingMs, error = error)
-            }
-            tunnelBridge = bridge
             bridge.startTunnel(fd, relayHost, relayPort, connectionConfig)
         } catch (e: Exception) {
+            Log.e(TAG, "establishTunnel failed", e)
+            ConnectLogger.log(this, "establishTunnel failed: ${e.message}")
             emit("error", error = e.message ?: "unknown error")
             tearDown()
         }
     }
 
-    private fun tearDown() {
+    private fun releaseResources() {
         tunnelBridge?.stopTunnel()
         tunnelBridge = null
         tunInterface?.close()
         tunInterface = null
+    }
+
+    private fun tearDown() {
+        ConnectLogger.log(this, "tearDown")
+        releaseResources()
         emit("disconnected")
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
     override fun onDestroy() {
-        tearDown()
+        // Never call stopSelf() from onDestroy — that crashes the process
+        // when Android tears down the service (e.g. after APK update).
+        ConnectLogger.log(this, "onDestroy")
+        releaseResources()
         instance = null
         super.onDestroy()
     }

@@ -39,7 +39,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     if (result.success) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => HomeScreen(api: widget.api)),
+        MaterialPageRoute(
+          builder: (_) => HomeScreen(api: widget.api, authService: widget.authService),
+        ),
       );
     } else {
       setState(() => _error = result.error);
