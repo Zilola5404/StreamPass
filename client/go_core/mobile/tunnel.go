@@ -148,9 +148,11 @@ func StopTunnel() {
 }
 
 func runTunnel(fd int, relayHost string, relayPort int, connectionConfig string, rulesJSON, exclusionsJSON string, cb StatusCallback) {
-	if cb != nil {
-		cb.OnConnecting()
-	}
+	defer func() {
+		if r := recover(); r != nil {
+			emitError(cb, fmt.Errorf("tunnel panic: %v", r))
+		}
+	}()
 
 	relaySession := takePreparedSession()
 

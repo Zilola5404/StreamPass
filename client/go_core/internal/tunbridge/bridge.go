@@ -66,7 +66,7 @@ func Start(ctx context.Context, fd int, hyClient client.Client, mtu uint32, engi
 		MTU:            mtu,
 		AutoRoute:      false,
 		Inet4Address: []netip.Prefix{
-			netip.PrefixFrom(netip.MustParseAddr("10.10.0.2"), 32),
+			netip.PrefixFrom(netip.MustParseAddr("10.10.0.2"), 30),
 		},
 	}
 

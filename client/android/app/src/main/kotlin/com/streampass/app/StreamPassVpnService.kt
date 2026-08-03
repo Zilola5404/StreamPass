@@ -62,6 +62,7 @@ class StreamPassVpnService : VpnService() {
     private var tunInterface: ParcelFileDescriptor? = null
     private var tunnelBridge: TunnelBridge? = null
     private val scope = CoroutineScope(Dispatchers.IO + Job())
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private var relayId: String = ""
     private var relayHost: String = ""
@@ -125,7 +126,7 @@ class StreamPassVpnService : VpnService() {
             if (relayHost.isEmpty()) {
                 throw IllegalStateException("No relay host provided — was GET /servers called first?")
             }
-            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+7 pingfix")
+            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+8 crashfix")
             ConnectLogger.log(this, "establishTunnel: validating connection_config")
             if (connectionConfig.isBlank()) {
                 throw IllegalStateException("connection_config is empty — relay misconfigured in backend")
@@ -155,7 +156,8 @@ class StreamPassVpnService : VpnService() {
 
             tunInterface = Builder()
                 .setSession("StreamPass")
-                .addAddress("10.10.0.2", 32)
+                // /30 gives sing-tun system stack a second address in-prefix (required).
+                .addAddress("10.10.0.2", 30)
                 .addDnsServer("1.1.1.1")
                 .addDnsServer("1.0.0.1")
                 .addRoute("0.0.0.0", 0)
@@ -206,18 +208,24 @@ class StreamPassVpnService : VpnService() {
     }
 
     private fun emit(event: String, relay: String? = null, pingMs: Int? = null, error: String? = null) {
-        val payload = mutableMapOf<String, Any?>("event" to event)
-        relay?.let { payload["relay"] = it }
-        pingMs?.let { payload["pingMs"] = it }
-        error?.let { payload["error"] = it }
-        eventSink?.success(payload)
+        mainHandler.post {
+            val payload = mutableMapOf<String, Any?>("event" to event)
+            relay?.let { payload["relay"] = it }
+            pingMs?.let { payload["pingMs"] = it }
+            error?.let { payload["error"] = it }
+            try {
+                eventSink?.success(payload)
+            } catch (t: Throwable) {
+                Log.e(TAG, "eventSink failed for event=$event", t)
+            }
 
-        val statusText = when (event) {
-            "connecting" -> "Подключение…"
-            "connected" -> "Подключено${relay?.let { " · $it" } ?: ""}"
-            "error" -> "Ошибка соединения"
-            else -> "Отключено"
+            val statusText = when (event) {
+                "connecting" -> "Подключение…"
+                "connected" -> "Подключено${relay?.let { " · $it" } ?: ""}"
+                "error" -> "Ошибка соединения"
+                else -> "Отключено"
+            }
+            if (event != "disconnected") updateNotification(statusText)
         }
-        if (event != "disconnected") updateNotification(statusText)
     }
 }
