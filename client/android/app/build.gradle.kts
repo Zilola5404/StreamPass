@@ -32,6 +32,14 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    packaging {
+        jniLibs {
+            // Extract .so at install time — avoids INSTALL_FAILED_INVALID_APK on some
+            // Android 15+ / OEM devices when bundled native libs (gojni) are involved.
+            useLegacyPackaging = true
+        }
+    }
 }
 
 kotlin {
