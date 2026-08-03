@@ -86,7 +86,7 @@
 
 1. **BL-005/BL-006:** Decision Engine + Rule Engine на клиенте
 2. **Physical Android VPN test** — manual when device + live relay available
-3. **Production relay** `212.43.159.198` — был недоступен при BL-003; проверить на сервере
+3. **Production relay** — `212.43.157.167` (Hiddify Hysteria2 :32528); backend на `212.43.156.33`. См. `docs/RelayServers.md`
 
 ---
 
