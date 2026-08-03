@@ -77,7 +77,11 @@ class VpnChannel {
 
   /// Returns true if the connect request was accepted (does not guarantee
   /// tunnel is up yet — listen to [statusStream] for the actual state).
-  static Future<bool> connect(RelayServer server) async {
+  static Future<bool> connect(
+    RelayServer server, {
+    String rulesJson = '',
+    String exclusionsJson = '',
+  }) async {
     if (server.connectionConfig.isEmpty) {
       _log.error('vpn', 'connect blocked: empty connection_config', {'relayId': server.id});
       throw VpnConnectException(
@@ -98,6 +102,8 @@ class VpnChannel {
         'port': server.port,
         'displayName': server.region,
         'connectionConfig': server.connectionConfig,
+        'rulesJson': rulesJson,
+        'exclusionsJson': exclusionsJson,
       });
       _log.info('vpn', 'MethodChannel connect accepted', {'ok': '${ok ?? false}'});
       return ok ?? false;
@@ -113,6 +119,29 @@ class VpnChannel {
       await _method.invokeMethod('disconnect');
     } on PlatformException {
       // no-op — UI treats absence of further events as disconnected
+    }
+  }
+
+  /// Hot-reload routing rules on the active tunnel (BL-006).
+  static Future<String?> updateRules({
+    required String rulesJson,
+    required String exclusionsJson,
+  }) async {
+    try {
+      final err = await _method.invokeMethod<String>('updateRules', {
+        'rulesJson': rulesJson,
+        'exclusionsJson': exclusionsJson,
+      });
+      if (err == null || err.isEmpty) {
+        _log.info('rules', 'native updateRules OK');
+        return null;
+      }
+      return err;
+    } on PlatformException catch (e) {
+      _log.warn('rules', 'updateRules PlatformException', {'message': e.message ?? 'unknown'});
+      return e.message;
+    } on MissingPluginException {
+      return 'native updateRules unavailable';
     }
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import '../main.dart' show navigateToLogin;
 import '../build_info.dart';
 import '../services/connection_log.dart';
 import '../services/auth_service.dart';
+import '../services/rule_engine_service.dart';
 import '../services/settings_service.dart';
 import '../services/streampass_api.dart';
 import '../services/vpn_channel.dart';
@@ -38,6 +40,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loadingSubscription = true;
   StreamSubscription<VpnStatusUpdate>? _sub;
   final _connectLog = ConnectionLog.instance;
+  late final RuleEngineService _ruleEngine = RuleEngineService(api: widget.api);
+  int _pendingRulesVersion = 0;
 
   @override
   void initState() {
@@ -132,6 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _ruleEngine.stop();
     _sub?.cancel();
     super.dispose();
   }
@@ -144,7 +149,9 @@ class _HomeScreenState extends State<HomeScreen> {
         case VpnEvent.connected:
           _state = ConnState.connected;
           _pingMs = update.pingMs ?? _selectedRelay?.rttMs;
+          _ruleEngine.start(initialVersion: _pendingRulesVersion);
         case VpnEvent.disconnected:
+          _ruleEngine.stop();
           _state = ConnState.disconnected;
           _pingMs = _selectedRelay?.rttMs;
         case VpnEvent.permissionDenied:
@@ -201,7 +208,27 @@ class _HomeScreenState extends State<HomeScreen> {
       _state = ConnState.connecting;
     });
     try {
-      final accepted = await VpnChannel.connect(relay);
+      var rulesJson = '';
+      var exclusionsJson = '[]';
+      try {
+        final ruleSet = await widget.api.fetchRules();
+        rulesJson = jsonEncode(ruleSet.toJson());
+        final settings = await SettingsService().load();
+        exclusionsJson = jsonEncode(settings.exclusions);
+        _pendingRulesVersion = ruleSet.version;
+        _connectLog.info('decision', 'rules loaded', {
+          'version': '${ruleSet.version}',
+          'count': '${ruleSet.rules.length}',
+          'exclusions': '${settings.exclusions.length}',
+        });
+      } catch (e) {
+        _connectLog.warn('decision', 'rules load failed, using default RELAY', {'error': '$e'});
+      }
+      final accepted = await VpnChannel.connect(
+        relay,
+        rulesJson: rulesJson,
+        exclusionsJson: exclusionsJson,
+      );
       if (!accepted && mounted) {
         setState(() => _state = ConnState.disconnected);
       }

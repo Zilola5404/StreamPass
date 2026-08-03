@@ -10,7 +10,7 @@
 |------------|--------|
 | Single platform | Android only; no iOS, Windows, macOS |
 | One-button connect | UI exists, but VPN tunnel doesn't work (stub) |
-| No on-device routing | Decision Engine / Rule Engine not implemented on client |
+| No on-device routing | Decision Engine + rule hot-reload done; DIRECT on Android still needs `VpnService.protect()` |
 | Exclusions local-only | `exclusions_screen.dart` — not synced with backend |
 | No auto-update | Client, rules, certs — manual update only |
 | Subscription cancel | Immediate revocation, not "stop auto-renewal" |

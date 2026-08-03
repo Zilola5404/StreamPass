@@ -3,10 +3,12 @@ package mobile
 import (
 	"context"
 	"fmt"
+	"net/netip"
 	"sync"
 	"time"
 
 	"github.com/apernet/hysteria/core/v2/client"
+	"streampass/go_core/internal/decision"
 	"streampass/go_core/internal/hyconfig"
 	"streampass/go_core/internal/tunbridge"
 )
@@ -71,8 +73,53 @@ func PrepareRelay(relayHost string, relayPort int, connectionConfig string) stri
 // StartTunnel attaches the Android TUN fd to an active session. Call
 // PrepareRelay first on Android so the relay handshake completes before
 // VpnService routes all traffic into TUN.
-func StartTunnel(fd int, relayHost string, relayPort int, connectionConfig string, cb StatusCallback) {
-	go runTunnel(fd, relayHost, relayPort, connectionConfig, cb)
+// rulesJSON / exclusionsJSON are optional payloads from GET /api/v1/rules
+// and local user exclusions (BL-005 Decision Engine).
+func StartTunnel(fd int, relayHost string, relayPort int, connectionConfig string, rulesJSON string, exclusionsJSON string, cb StatusCallback) {
+	go runTunnel(fd, relayHost, relayPort, connectionConfig, rulesJSON, exclusionsJSON, cb)
+}
+
+// DecideRoute evaluates routing for diagnostics (host may be empty when only IP known).
+func DecideRoute(rulesJSON, exclusionsJSON, host, ip string) string {
+	engine, err := decision.NewEngineFromJSON(rulesJSON, exclusionsJSON)
+	if err != nil {
+		return string(decision.DefaultMode)
+	}
+	target := decision.Target{Host: host}
+	if addr, parseErr := parseIP(ip); parseErr == nil {
+		target.IP = addr
+	}
+	return string(engine.Decide(target))
+}
+
+func parseIP(raw string) (netip.Addr, error) {
+	return netip.ParseAddr(raw)
+}
+
+// UpdateRules hot-reloads the rule set on the active tunnel (BL-006).
+// Returns empty string on success, or an error message.
+func UpdateRules(rulesJSON, exclusionsJSON string) string {
+	tunnelMu.Lock()
+	rt := active
+	tunnelMu.Unlock()
+	if rt == nil || rt.bridge == nil {
+		return "no active tunnel"
+	}
+	if err := rt.bridge.UpdateEngine(rulesJSON, exclusionsJSON); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// ActiveRulesVersion returns the rule set version applied to the active tunnel.
+func ActiveRulesVersion() int {
+	tunnelMu.Lock()
+	rt := active
+	tunnelMu.Unlock()
+	if rt == nil || rt.bridge == nil {
+		return 0
+	}
+	return rt.bridge.RulesVersion()
 }
 
 // StopTunnel stops the active tunnel session, if any.
@@ -90,7 +137,7 @@ func StopTunnel() {
 	}
 }
 
-func runTunnel(fd int, relayHost string, relayPort int, connectionConfig string, cb StatusCallback) {
+func runTunnel(fd int, relayHost string, relayPort int, connectionConfig string, rulesJSON, exclusionsJSON string, cb StatusCallback) {
 	if cb != nil {
 		cb.OnConnecting()
 	}
@@ -138,7 +185,14 @@ func runTunnel(fd int, relayHost string, relayPort int, connectionConfig string,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	bridge, err := tunbridge.Start(ctx, fd, hyClient, mtu)
+	engine, err := decision.NewAtomicEngineFromJSON(rulesJSON, exclusionsJSON)
+	if err != nil {
+		cancel()
+		_ = hyClient.Close()
+		emitError(cb, fmt.Errorf("decision engine: %w", err))
+		return
+	}
+	bridge, err := tunbridge.Start(ctx, fd, hyClient, mtu, engine)
 	if err != nil {
 		cancel()
 		_ = hyClient.Close()

@@ -2,6 +2,7 @@ package tunbridge
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/netip"
 	"sync"
@@ -13,11 +14,30 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	tun "github.com/sagernet/sing-tun"
+
+	"streampass/go_core/internal/decision"
 )
 
 type Session struct {
 	cancel context.CancelFunc
 	stop   func()
+	engine *decision.AtomicEngine
+}
+
+// UpdateEngine hot-reloads routing rules on an active tunnel (BL-006).
+func (s *Session) UpdateEngine(rulesJSON, exclusionsJSON string) error {
+	if s == nil || s.engine == nil {
+		return fmt.Errorf("no active tunnel session")
+	}
+	return s.engine.Update(rulesJSON, exclusionsJSON)
+}
+
+// RulesVersion returns the currently loaded rule set version.
+func (s *Session) RulesVersion() int {
+	if s == nil || s.engine == nil {
+		return 0
+	}
+	return s.engine.Version()
 }
 
 func (s *Session) Close() {
@@ -32,9 +52,13 @@ func (s *Session) Close() {
 	}
 }
 
-func Start(ctx context.Context, fd int, hyClient client.Client, mtu uint32) (*Session, error) {
+// Start brings up the TUN stack and routes each flow via the Decision Engine.
+func Start(ctx context.Context, fd int, hyClient client.Client, mtu uint32, engine *decision.AtomicEngine) (*Session, error) {
 	if mtu == 0 {
 		mtu = 1400
+	}
+	if engine == nil {
+		engine = decision.NewAtomicEngine(decision.NewEngine(nil, nil, decision.DefaultMode), 0)
 	}
 
 	tunOptions := tun.Options{
@@ -52,11 +76,12 @@ func Start(ctx context.Context, fd int, hyClient client.Client, mtu uint32) (*Se
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)
+	handler := &routingHandler{client: hyClient, engine: engine}
 	stack, err := tun.NewStack("system", tun.StackOptions{
 		Context:    runCtx,
 		Tun:        tunDev,
 		TunOptions: tunOptions,
-		Handler:    &hyHandler{client: hyClient},
+		Handler:    handler,
 		UDPTimeout: 5 * time.Minute,
 	})
 	if err != nil {
@@ -82,14 +107,15 @@ func Start(ctx context.Context, fd int, hyClient client.Client, mtu uint32) (*Se
 		_ = stack.Close()
 		_ = tunDev.Close()
 	}
-	return &Session{cancel: cancel, stop: stop}, nil
+	return &Session{cancel: cancel, stop: stop, engine: engine}, nil
 }
 
-type hyHandler struct {
+type routingHandler struct {
 	client client.Client
+	engine *decision.AtomicEngine
 }
 
-func (h *hyHandler) PrepareConnection(
+func (h *routingHandler) PrepareConnection(
 	network string,
 	source M.Socksaddr,
 	destination M.Socksaddr,
@@ -99,7 +125,18 @@ func (h *hyHandler) PrepareConnection(
 	return nil, nil
 }
 
-func (h *hyHandler) NewConnectionEx(
+func (h *routingHandler) targetFrom(destination M.Socksaddr) decision.Target {
+	t := decision.Target{}
+	if destination.IsFqdn() {
+		t.Host = destination.Fqdn
+	}
+	if destination.Addr.IsValid() {
+		t.IP = destination.Addr
+	}
+	return t
+}
+
+func (h *routingHandler) NewConnectionEx(
 	ctx context.Context,
 	conn net.Conn,
 	source M.Socksaddr,
@@ -111,7 +148,32 @@ func (h *hyHandler) NewConnectionEx(
 		defer onClose(nil)
 	}
 
+	mode := h.engine.Decide(h.targetFrom(destination))
+	switch mode {
+	case decision.ModeDirect:
+		h.dialDirectTCP(ctx, conn, destination)
+	case decision.ModeFallback:
+		if !h.dialRelayTCP(ctx, conn, destination) {
+			h.dialDirectTCP(ctx, conn, destination)
+		}
+	default:
+		h.dialRelayTCP(ctx, conn, destination)
+	}
+}
+
+func (h *routingHandler) dialRelayTCP(ctx context.Context, conn net.Conn, destination M.Socksaddr) bool {
 	remote, err := h.client.TCP(destination.String())
+	if err != nil {
+		return false
+	}
+	defer remote.Close()
+	_ = bufio.CopyConn(ctx, conn, remote)
+	return true
+}
+
+func (h *routingHandler) dialDirectTCP(ctx context.Context, conn net.Conn, destination M.Socksaddr) {
+	dialer := net.Dialer{Timeout: 15 * time.Second}
+	remote, err := dialer.DialContext(ctx, "tcp", destination.String())
 	if err != nil {
 		return
 	}
@@ -119,7 +181,7 @@ func (h *hyHandler) NewConnectionEx(
 	_ = bufio.CopyConn(ctx, conn, remote)
 }
 
-func (h *hyHandler) NewPacketConnectionEx(
+func (h *routingHandler) NewPacketConnectionEx(
 	ctx context.Context,
 	conn N.PacketConn,
 	source M.Socksaddr,
@@ -131,12 +193,38 @@ func (h *hyHandler) NewPacketConnectionEx(
 		defer onClose(nil)
 	}
 
-	hyUDP, err := h.client.UDP()
-	if err != nil {
-		return
+	mode := h.engine.Decide(h.targetFrom(destination))
+	switch mode {
+	case decision.ModeDirect:
+		h.relayUDP(ctx, conn, destination, true)
+	case decision.ModeFallback:
+		if !h.relayUDP(ctx, conn, destination, false) {
+			h.relayUDP(ctx, conn, destination, true)
+		}
+	default:
+		h.relayUDP(ctx, conn, destination, false)
+	}
+}
+
+func (h *routingHandler) relayUDP(ctx context.Context, conn N.PacketConn, destination M.Socksaddr, direct bool) bool {
+	destAddr := destination.String()
+
+	if direct {
+		remote, err := net.Dial("udp", destAddr)
+		if err != nil {
+			return false
+		}
+		defer remote.Close()
+		h.copyUDP(ctx, conn, remote, destination, destAddr)
+		return true
 	}
 
-	destAddr := destination.String()
+	hyUDP, err := h.client.UDP()
+	if err != nil {
+		return false
+	}
+	defer hyUDP.Close()
+
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -187,5 +275,60 @@ func (h *hyHandler) NewPacketConnectionEx(
 	}()
 
 	wg.Wait()
-	_ = hyUDP.Close()
+	return true
+}
+
+func (h *routingHandler) copyUDP(ctx context.Context, conn N.PacketConn, remote net.Conn, destination M.Socksaddr, destAddr string) {
+	udpRemote, ok := remote.(*net.UDPConn)
+	if !ok {
+		return
+	}
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		readBuffer := buf.NewPacket()
+		defer readBuffer.Release()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			_, err := conn.ReadPacket(readBuffer)
+			if err != nil {
+				return
+			}
+			payload := append([]byte(nil), readBuffer.Bytes()...)
+			readBuffer.Reset()
+			if _, err := udpRemote.Write(payload); err != nil {
+				return
+			}
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		bufData := make([]byte, 2048)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			n, err := udpRemote.Read(bufData)
+			if err != nil {
+				return
+			}
+			writeBuffer := buf.As(append([]byte(nil), bufData[:n]...))
+			if err := conn.WritePacket(writeBuffer, destination); err != nil {
+				writeBuffer.Release()
+				return
+			}
+			writeBuffer.Release()
+		}
+	}()
+
+	wg.Wait()
 }

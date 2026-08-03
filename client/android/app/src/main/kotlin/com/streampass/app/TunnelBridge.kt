@@ -71,7 +71,14 @@ class TunnelBridge(
         }
     }
 
-    fun startTunnel(fd: Int, relayHost: String, relayPort: Int, connectionConfig: String) {
+    fun startTunnel(
+        fd: Int,
+        relayHost: String,
+        relayPort: Int,
+        connectionConfig: String,
+        rulesJson: String,
+        exclusionsJson: String,
+    ) {
         try {
             val coreClass = coreClass()
                 ?: throw ClassNotFoundException("mobile.Mobile")
@@ -95,17 +102,29 @@ class TunnelBridge(
                 null
             }
 
-            val startMethod = coreClass.getMethod(
-                "startTunnel",
-                Long::class.javaPrimitiveType,
-                String::class.java,
-                Long::class.javaPrimitiveType,
-                String::class.java,
-                callbackClass,
-            )
-            Log.i(TAG, "StartTunnel fd=$fd host=$relayHost port=$relayPort configLen=${connectionConfig.length}")
-            ConnectLogger.log(context, "StartTunnel fd=$fd host=$relayHost port=$relayPort")
-            startMethod.invoke(null, fd.toLong(), relayHost, relayPort.toLong(), connectionConfig, callback)
+            val startMethod = findStartTunnelMethod(coreClass, callbackClass)
+            Log.i(TAG, "StartTunnel fd=$fd host=$relayHost port=$relayPort configLen=${connectionConfig.length} rulesLen=${rulesJson.length}")
+            ConnectLogger.log(context, "StartTunnel fd=$fd host=$relayHost port=$relayPort rulesLen=${rulesJson.length}")
+            when (startMethod.parameterCount) {
+                7 -> startMethod.invoke(
+                    null,
+                    fd.toLong(),
+                    relayHost,
+                    relayPort.toLong(),
+                    connectionConfig,
+                    rulesJson,
+                    exclusionsJson,
+                    callback,
+                )
+                else -> startMethod.invoke(
+                    null,
+                    fd.toLong(),
+                    relayHost,
+                    relayPort.toLong(),
+                    connectionConfig,
+                    callback,
+                )
+            }
         } catch (_: ClassNotFoundException) {
             Log.e(TAG, "gomobile AAR missing (mobile.Mobile)")
             ConnectLogger.log(context, "ERROR: gomobile AAR missing (mobile.Mobile)")
@@ -119,6 +138,48 @@ class TunnelBridge(
             Log.e(TAG, "StartTunnel failed", t)
             ConnectLogger.log(context, "StartTunnel failed: ${t.message}")
             onState("error", null, null, t.message ?: "Не удалось запустить туннель")
+        }
+    }
+
+    private fun findStartTunnelMethod(coreClass: Class<*>, callbackClass: Class<*>): java.lang.reflect.Method {
+        return try {
+            coreClass.getMethod(
+                "startTunnel",
+                Long::class.javaPrimitiveType,
+                String::class.java,
+                Long::class.javaPrimitiveType,
+                String::class.java,
+                String::class.java,
+                String::class.java,
+                callbackClass,
+            )
+        } catch (_: NoSuchMethodException) {
+            coreClass.getMethod(
+                "startTunnel",
+                Long::class.javaPrimitiveType,
+                String::class.java,
+                Long::class.javaPrimitiveType,
+                String::class.java,
+                callbackClass,
+            )
+        }
+    }
+
+    fun updateRules(rulesJson: String, exclusionsJson: String): String {
+        return try {
+            val coreClass = coreClass() ?: return "gomobile AAR missing"
+            val method = coreClass.getMethod(
+                "updateRules",
+                String::class.java,
+                String::class.java,
+            )
+            val err = method.invoke(null, rulesJson, exclusionsJson) as String
+            ConnectLogger.log(context, "UpdateRules result=${if (err.isEmpty()) "OK" else err}")
+            err
+        } catch (t: Throwable) {
+            Log.e(TAG, "UpdateRules failed", t)
+            ConnectLogger.log(context, "UpdateRules failed: ${t.message}")
+            t.message ?: "UpdateRules failed"
         }
     }
 }

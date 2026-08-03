@@ -54,6 +54,9 @@ class MainActivity : FlutterActivity() {
                         StreamPassVpnService.stop(this)
                         result.success(null)
                     }
+                    "updateRules" -> {
+                        result.success(updateRoutingRules(call.arguments as? Map<*, *>))
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -124,5 +127,12 @@ class MainActivity : FlutterActivity() {
         }
         pendingConnect = false
         pendingArgs = null
+    }
+
+    private fun updateRoutingRules(args: Map<*, *>?): String {
+        val rulesJson = args?.get("rulesJson") as? String ?: ""
+        val exclusionsJson = args?.get("exclusionsJson") as? String ?: "[]"
+        ConnectLogger.log(this, "MainActivity.updateRules rulesLen=${rulesJson.length}")
+        return StreamPassVpnService.updateRules(rulesJson, exclusionsJson)
     }
 }

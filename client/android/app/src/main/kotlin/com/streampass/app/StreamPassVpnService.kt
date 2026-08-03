@@ -43,11 +43,19 @@ class StreamPassVpnService : VpnService() {
                 putExtra("port", (args?.get("port") as? Int) ?: 443)
                 putExtra("displayName", args?.get("displayName") as? String ?: "")
                 putExtra("connectionConfig", args?.get("connectionConfig") as? String ?: "")
+                putExtra("rulesJson", args?.get("rulesJson") as? String ?: "")
+                putExtra("exclusionsJson", args?.get("exclusionsJson") as? String ?: "[]")
             })
         }
 
         fun stop(context: Context) {
             instance?.tearDown()
+        }
+
+        fun updateRules(rulesJson: String, exclusionsJson: String): String {
+            val bridge = instance?.tunnelBridge
+            return bridge?.updateRules(rulesJson, exclusionsJson)
+                ?: "no active tunnel"
         }
     }
 
@@ -60,6 +68,8 @@ class StreamPassVpnService : VpnService() {
     private var relayPort: Int = 443
     private var relayDisplayName: String = ""
     private var connectionConfig: String = ""
+    private var rulesJson: String = ""
+    private var exclusionsJson: String = "[]"
 
     override fun onCreate() {
         super.onCreate()
@@ -73,9 +83,11 @@ class StreamPassVpnService : VpnService() {
             relayPort = intent.getIntExtra("port", 443)
             relayDisplayName = intent.getStringExtra("displayName") ?: ""
             connectionConfig = intent.getStringExtra("connectionConfig") ?: ""
+            rulesJson = intent.getStringExtra("rulesJson") ?: ""
+            exclusionsJson = intent.getStringExtra("exclusionsJson") ?: "[]"
 
             Log.i(TAG, "connect relayId=$relayId host=$relayHost port=$relayPort configLen=${connectionConfig.length}")
-            ConnectLogger.log(this, "onStartCommand relayId=$relayId host=$relayHost port=$relayPort configLen=${connectionConfig.length}")
+            ConnectLogger.log(this, "onStartCommand relayId=$relayId host=$relayHost port=$relayPort configLen=${connectionConfig.length} rulesLen=${rulesJson.length}")
             startForeground(NOTIFICATION_ID, buildNotification("Подключение…"))
             emit("connecting")
             scope.launch { establishTunnel() }
@@ -113,7 +125,7 @@ class StreamPassVpnService : VpnService() {
             if (relayHost.isEmpty()) {
                 throw IllegalStateException("No relay host provided — was GET /servers called first?")
             }
-            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+3")
+            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+6 rule-engine")
             ConnectLogger.log(this, "establishTunnel: validating connection_config")
             if (connectionConfig.isBlank()) {
                 throw IllegalStateException("connection_config is empty — relay misconfigured in backend")
@@ -154,7 +166,7 @@ class StreamPassVpnService : VpnService() {
                 ?: throw IllegalStateException("VPN interface could not be established")
             ConnectLogger.log(this, "TUN established fd=$fd mtu=1400")
 
-            bridge.startTunnel(fd, relayHost, relayPort, connectionConfig)
+            bridge.startTunnel(fd, relayHost, relayPort, connectionConfig, rulesJson, exclusionsJson)
         } catch (e: Exception) {
             Log.e(TAG, "establishTunnel failed", e)
             ConnectLogger.log(this, "establishTunnel failed: ${e.message}")

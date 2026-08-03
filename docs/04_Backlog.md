@@ -12,8 +12,8 @@
 | BL-002 | Подключить streampasscore.aar | Собрать и положить в Android libs, проверить TunnelBridge | P0 | Done | BL-001 | 2026-08-03 |
 | BL-003 | End-to-end VPN на Android | Connect → TUN → Hysteria2 → relay, проверка IP | P0 | Done | BL-001, BL-002 | 2026-08-03 |
 | BL-004 | Live-тест ЮKassa | Sandbox ключи, CreatePayment + webhook flow | P0 | Open | — | TODO |
-| BL-005 | Decision Engine (клиент) | DIRECT/RELAY/FALLBACK по правилам | P0 | Open | BL-003 | TODO |
-| BL-006 | Rule Engine (клиент) | Загрузка правил с GET /api/v1/rules, применение | P0 | Open | BL-005 | TODO |
+| BL-005 | Decision Engine (клиент) | DIRECT/RELAY/FALLBACK по правилам | P0 | Done | BL-003 | 2026-08-04 |
+| BL-006 | Rule Engine (клиент) | Загрузка правил с GET /api/v1/rules, polling, hot-reload | P0 | Done | BL-005 | 2026-08-04 |
 
 ## P1 — Важно
 

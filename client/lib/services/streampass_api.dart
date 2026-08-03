@@ -190,6 +190,11 @@ class RuleSet {
             .map((item) => RouteRule.fromJson(item as Map<String, dynamic>))
             .toList(),
       );
+
+  Map<String, dynamic> toJson() => {
+        'version': version,
+        'rules': rules.map((r) => r.toJson()).toList(),
+      };
 }
 
 class RouteRule {
@@ -208,6 +213,12 @@ class RouteRule {
         pattern: json['pattern'] as String,
         mode: json['mode'] as String,
       );
+
+  Map<String, dynamic> toJson() => {
+        'kind': kind,
+        'pattern': pattern,
+        'mode': mode,
+      };
 }
 
 class RelayServer {
