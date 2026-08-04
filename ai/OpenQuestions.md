@@ -13,7 +13,7 @@
 | Q-005 | Нужен ли refresh token auto-rotation на клиенте? | P2 | Feature | Open |
 | Q-006 | Exclusions: синхронизировать с backend или оставить local-only? | P2 | Feature | Resolved — sync (BL-014) |
 | Q-007 | Prometheus/Grafana: self-hosted или managed (Grafana Cloud)? | P2 | Infrastructure | Open |
-| Q-008 | Android release keystore: где хранить, кто управляет? | P1 | Security | Open |
+| Q-008 | Android release keystore: где хранить, кто управляет? | P1 | Security | Partial — Gradle+key.properties ready; store JKS offline |
 | Q-009 | Telemetry retention period: сколько дней хранить events? | P3 | Privacy | Open |
 | Q-010 | Beta testing: сколько пользователей, как recruit? | P2 | Product | Open |
 | Q-011 | iOS priority: когда начинать после Android MVP? | P2 | Roadmap | Open |

@@ -22,6 +22,16 @@ cp streampasscore.aar ../android/app/libs/
 
 См. также `go_core/README.md`.
 
+## Release signing (BL-013)
+
+1. Скопируйте `android/key.properties.example` → `android/key.properties`
+2. Создайте keystore:
+   ```bash
+   keytool -genkey -v -keystore android/upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias streampass
+   ```
+3. Заполните пароли в `key.properties` (файл в `.gitignore`)
+4. `flutter build apk --release` подпишет production-ключом; без `key.properties` — debug (с предупреждением в логе Gradle).
+
 ## Основные экраны
 
 Home (connect), servers, subscription, settings / exclusions, diagnostics, statistics.

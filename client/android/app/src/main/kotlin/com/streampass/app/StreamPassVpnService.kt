@@ -129,7 +129,7 @@ class StreamPassVpnService : VpnService() {
             if (relayHost.isEmpty()) {
                 throw IllegalStateException("No relay host provided — was GET /servers called first?")
             }
-            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+11 fallback")
+            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+12 dns-doh")
             ConnectLogger.log(this, "establishTunnel: validating connection_config")
             if (connectionConfig.isBlank()) {
                 throw IllegalStateException("connection_config is empty — relay misconfigured in backend")

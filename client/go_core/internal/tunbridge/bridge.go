@@ -16,6 +16,7 @@ import (
 	tun "github.com/sagernet/sing-tun"
 
 	"streampass/go_core/internal/decision"
+	"streampass/go_core/internal/dnscache"
 	"streampass/go_core/internal/protect"
 )
 
@@ -197,6 +198,12 @@ func (h *routingHandler) NewPacketConnectionEx(
 		defer onClose(nil)
 	}
 
+	// Local DNS Cache + DoH (ТЗ §7 / BL-016): answer UDP/53 without hairpinning.
+	if destination.Port == 53 {
+		h.handleDNS(ctx, conn, destination)
+		return
+	}
+
 	mode := h.engine.Decide(h.targetFrom(destination))
 	switch mode {
 	case decision.ModeDirect:
@@ -207,6 +214,32 @@ func (h *routingHandler) NewPacketConnectionEx(
 		}
 	default:
 		h.relayUDP(ctx, conn, destination, false)
+	}
+}
+
+func (h *routingHandler) handleDNS(ctx context.Context, conn N.PacketConn, destination M.Socksaddr) {
+	readBuffer := buf.NewPacket()
+	defer readBuffer.Release()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		_, err := conn.ReadPacket(readBuffer)
+		if err != nil {
+			return
+		}
+		query := append([]byte(nil), readBuffer.Bytes()...)
+		readBuffer.Reset()
+
+		resp, err := dnscache.Default().HandleQuery(ctx, query)
+		if err != nil || len(resp) == 0 {
+			continue
+		}
+		writeBuffer := buf.As(resp)
+		_ = conn.WritePacket(writeBuffer, destination)
+		writeBuffer.Release()
 	}
 }
 

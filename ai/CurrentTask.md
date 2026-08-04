@@ -4,15 +4,18 @@
 
 ## Главная задача
 
-**BL-013: Release signing Android** (следующий Open P1)  
-или **BL-016: DNS Cache + DoH** — по приоритету продукта.
+**BL-011: Integration tests backend** (следующий Open P1)
+
+## Описание
+
+Integration tests: auth, billing, relay с Postgres testcontainers.
 
 ## Skipped
 
 **BL-004: Live-тест ЮKassa** — пропущена 2026-08-04
 
-## Completed this session
+## Completed
 
-- Protect + BL-014 (v0.1.1+10)
-- BL-010 CI/CD, BL-012 README, BL-015 refresh (клиент), BL-017 UDP fallback
-- Build: **v0.1.1+11 (fallback-udp-v1)**
+- BL-013 Release signing (`key.properties` + Gradle)
+- BL-016 DNS Cache + DoH (UDP/53 → Cloudflare DoH + TTL cache)
+- Build: **v0.1.1+12 (dns-doh-v1)**

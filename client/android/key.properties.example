@@ -1,0 +1,12 @@
+# Android release signing (BL-013). Copy to key.properties and fill in.
+# key.properties is gitignored — never commit secrets or the keystore file.
+#
+# Generate a keystore (once):
+#   keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias streampass
+#
+# Place upload-keystore.jks under client/android/ (also gitignored via *.jks).
+
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=streampass
+storeFile=upload-keystore.jks

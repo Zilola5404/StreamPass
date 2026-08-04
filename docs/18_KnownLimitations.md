@@ -50,7 +50,7 @@
 
 | Limitation | Detail |
 |------------|--------|
-| Debug signing (Android) | Release APK uses debug keys |
+| Debug signing (Android) | Release uses `key.properties` + JKS when present; otherwise debug fallback (BL-013) |
 | connection_config plaintext | Relay secrets in DB without encryption |
 | No refresh token rotation | Client stores refresh, no auto-refresh flow |
 | Webhook no signature verify | Relies on re-fetch from provider |

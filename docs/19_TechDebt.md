@@ -25,7 +25,7 @@
 | TD-013 | Auth service untested | `backend/.../auth/` | Medium |
 | TD-014 | Billing service untested | `backend/.../billing/` | Medium |
 | TD-015 | Postgres repos untested | `backend/.../postgres/` | Large |
-| TD-016 | Android debug signing | `client/android/app/build.gradle.kts` | Small |
+| TD-016 | Android debug signing | `client/android/app/build.gradle.kts` | Done (BL-013) |
 | TD-017 | Empty PowerShell scripts | `scripts/*.ps1` | Small |
 
 ---
