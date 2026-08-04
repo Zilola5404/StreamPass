@@ -129,7 +129,7 @@ class StreamPassVpnService : VpnService() {
             if (relayHost.isEmpty()) {
                 throw IllegalStateException("No relay host provided — was GET /servers called first?")
             }
-            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+9 disconnectfix")
+            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+10 protectfix")
             ConnectLogger.log(this, "establishTunnel: validating connection_config")
             if (connectionConfig.isBlank()) {
                 throw IllegalStateException("connection_config is empty — relay misconfigured in backend")
@@ -147,6 +147,13 @@ class StreamPassVpnService : VpnService() {
                 }
             }
             tunnelBridge = bridge
+
+            // Protect underlay sockets BEFORE PrepareRelay so QUIC survives TUN default route.
+            bridge.setSocketProtector { fd ->
+                val ok = protect(fd)
+                ConnectLogger.log(this@StreamPassVpnService, "protect(fd=$fd)=$ok")
+                ok
+            }
 
             // Hysteria handshake MUST complete before TUN default route is added,
             // otherwise QUIC packets to the relay loop into the empty interface.
@@ -196,6 +203,7 @@ class StreamPassVpnService : VpnService() {
 
     private fun releaseResources() {
         tunnelBridge?.stopTunnel()
+        tunnelBridge?.clearSocketProtector()
         tunnelBridge = null
         tunInterface?.close()
         tunInterface = null

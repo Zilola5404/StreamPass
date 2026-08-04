@@ -41,6 +41,7 @@ type Deps struct {
 	Telemetry *handler.TelemetryHandler
 	Config    *handler.ConfigHandler
 	Billing   *handler.BillingHandler
+	Exclusion *handler.ExclusionHandler
 	Health    *handler.HealthHandler
 	Admin     *handler.AdminHandler
 
@@ -89,6 +90,8 @@ func New(d Deps) http.Handler {
 	mux.Handle(v1("POST /payments"), authMW(http.HandlerFunc(d.Billing.CreatePayment)))
 	mux.Handle(v1("GET /subscription"), authMW(http.HandlerFunc(d.Billing.GetSubscription)))
 	mux.Handle(v1("POST /subscription/cancel"), authMW(http.HandlerFunc(d.Billing.CancelSubscription)))
+	mux.Handle(v1("GET /exclusions"), authMW(http.HandlerFunc(d.Exclusion.List)))
+	mux.Handle(v1("PUT /exclusions"), authMW(http.HandlerFunc(d.Exclusion.Replace)))
 
 	// --- Admin / operator-only endpoints ---
 	mux.Handle(v1("POST /rules"), adminMW(http.HandlerFunc(d.Rule.Publish)))

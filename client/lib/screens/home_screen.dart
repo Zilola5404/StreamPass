@@ -266,7 +266,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _TopBar(
                   onSettings: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                    MaterialPageRoute(builder: (_) => SettingsScreen(api: widget.api)),
                   ),
                   onSubscription: _openSubscriptionScreen,
                   subscriptionActive: _subscription?.isActive ?? false,
@@ -324,7 +324,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   onTapSettings: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                    MaterialPageRoute(builder: (_) => SettingsScreen(api: widget.api)),
                   ),
                 ), 
               ],

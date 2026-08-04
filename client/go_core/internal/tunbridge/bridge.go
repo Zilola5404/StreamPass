@@ -16,6 +16,7 @@ import (
 	tun "github.com/sagernet/sing-tun"
 
 	"streampass/go_core/internal/decision"
+	"streampass/go_core/internal/protect"
 )
 
 type Session struct {
@@ -172,7 +173,10 @@ func (h *routingHandler) dialRelayTCP(ctx context.Context, conn net.Conn, destin
 }
 
 func (h *routingHandler) dialDirectTCP(ctx context.Context, conn net.Conn, destination M.Socksaddr) {
-	dialer := net.Dialer{Timeout: 15 * time.Second}
+	dialer := net.Dialer{
+		Timeout: 15 * time.Second,
+		Control: protect.Control,
+	}
 	remote, err := dialer.DialContext(ctx, "tcp", destination.String())
 	if err != nil {
 		return
@@ -210,12 +214,22 @@ func (h *routingHandler) relayUDP(ctx context.Context, conn N.PacketConn, destin
 	destAddr := destination.String()
 
 	if direct {
-		remote, err := net.Dial("udp", destAddr)
+		var lc net.ListenConfig
+		lc.Control = protect.Control
+		packetConn, err := lc.ListenPacket(ctx, "udp", "")
 		if err != nil {
 			return false
 		}
-		defer remote.Close()
-		h.copyUDP(ctx, conn, remote, destination, destAddr)
+		defer packetConn.Close()
+		udpRemote, ok := packetConn.(*net.UDPConn)
+		if !ok {
+			return false
+		}
+		raddr, err := net.ResolveUDPAddr("udp", destAddr)
+		if err != nil {
+			return false
+		}
+		h.copyUDPToAddr(ctx, conn, udpRemote, destination, raddr)
 		return true
 	}
 
@@ -276,6 +290,57 @@ func (h *routingHandler) relayUDP(ctx context.Context, conn N.PacketConn, destin
 
 	wg.Wait()
 	return true
+}
+
+func (h *routingHandler) copyUDPToAddr(ctx context.Context, conn N.PacketConn, udpRemote *net.UDPConn, destination M.Socksaddr, raddr *net.UDPAddr) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		readBuffer := buf.NewPacket()
+		defer readBuffer.Release()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			_, err := conn.ReadPacket(readBuffer)
+			if err != nil {
+				return
+			}
+			payload := append([]byte(nil), readBuffer.Bytes()...)
+			readBuffer.Reset()
+			if _, err := udpRemote.WriteToUDP(payload, raddr); err != nil {
+				return
+			}
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		bufData := make([]byte, 2048)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			n, _, err := udpRemote.ReadFromUDP(bufData)
+			if err != nil {
+				return
+			}
+			writeBuffer := buf.As(append([]byte(nil), bufData[:n]...))
+			if err := conn.WritePacket(writeBuffer, destination); err != nil {
+				writeBuffer.Release()
+				return
+			}
+			writeBuffer.Release()
+		}
+	}()
+
+	wg.Wait()
 }
 
 func (h *routingHandler) copyUDP(ctx context.Context, conn N.PacketConn, remote net.Conn, destination M.Socksaddr, destAddr string) {

@@ -9,9 +9,9 @@
 | Limitation | Detail |
 |------------|--------|
 | Single platform | Android only; no iOS, Windows, macOS |
-| One-button connect | UI exists, but VPN tunnel doesn't work (stub) |
-| No on-device routing | Decision Engine + rule hot-reload done; DIRECT on Android still needs `VpnService.protect()` |
-| Exclusions local-only | `exclusions_screen.dart` — not synced with backend |
+| One-button connect | Android VPN: connect works; data-plane uses `VpnService.protect()` (v0.1.1+10) |
+| No on-device routing | Decision Engine + rule hot-reload done; DIRECT/RELAY underlay sockets use `VpnService.protect()` (+10) |
+| Exclusions local-only | Synced via GET/PUT `/api/v1/exclusions` (BL-014); local SharedPreferences cache remains |
 | Boot auto-connect | «Автоподключение» при boot не поднимает VPN до открытия приложения (см. `BootReceiver.kt`) |
 | No auto-update | Client, rules, certs — manual update only |
 | Subscription cancel | Immediate revocation, not "stop auto-renewal" |

@@ -20,6 +20,7 @@ import (
 	adminsvc "streampass/backend/internal/application/admin"
 	billingsvc "streampass/backend/internal/application/billing"
 	configsvcpkg "streampass/backend/internal/application/configsvc"
+	exclusionsvc "streampass/backend/internal/application/exclusion"
 	relaysvc "streampass/backend/internal/application/relay"
 	rulesvc "streampass/backend/internal/application/rule"
 	telemetrysvc "streampass/backend/internal/application/telemetry"
@@ -95,6 +96,7 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 	telemetryRepo := postgres.NewTelemetryRepository(db)
 	appConfigRepo := postgres.NewAppConfigRepository(db)
 	paymentRepo := postgres.NewPaymentRepository(db)
+	exclusionRepo := postgres.NewExclusionRepository(db)
 
 	hasher := security.NewArgon2Hasher()
 	tokens := security.NewJWTTokenIssuer(
@@ -126,6 +128,7 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 		AmountRUB:  int64(cfg.IntOr("billing.plan_amount_rub", 299)),
 		PeriodDays: cfg.IntOr("billing.plan_period_days", 30),
 	}, billingsvc.SystemClock{}, log)
+	exclusionService := exclusionsvc.NewService(exclusionRepo, log)
 
 	return router.Deps{
 		Auth:            handler.NewAuthHandler(authService),
@@ -134,6 +137,7 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 		Telemetry:       handler.NewTelemetryHandler(telemetryService),
 		Config:          handler.NewConfigHandler(configService),
 		Billing:         handler.NewBillingHandler(billingService),
+		Exclusion:       handler.NewExclusionHandler(exclusionService),
 		Health:          handler.NewHealthHandler(),
 		Admin:           handler.NewAdminHandler(adminUserService),
 		TokenVerifier:   tokens,

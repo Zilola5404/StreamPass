@@ -27,12 +27,48 @@ class TunnelBridge(
         }
     }
 
-    private fun callbackClass(core: Class<*>): Class<*>? {
+    fun setSocketProtector(protectFn: (Int) -> Boolean) {
+        ConnectLogger.log(context, "TunnelBridge.setSocketProtector")
+        try {
+            val core = coreClass() ?: return
+            val protectorClass = callbackClassNamed(core, "SocketProtector")
+                ?: throw ClassNotFoundException("SocketProtector")
+            val proxy = Proxy.newProxyInstance(
+                protectorClass.classLoader,
+                arrayOf(protectorClass),
+            ) { _, method, args ->
+                when (method.name) {
+                    "protect" -> {
+                        val fd = (args?.getOrNull(0) as? Number)?.toInt() ?: -1
+                        protectFn(fd)
+                    }
+                    else -> null
+                }
+            }
+            core.getMethod("setSocketProtector", protectorClass).invoke(null, proxy)
+        } catch (t: Throwable) {
+            Log.e(TAG, "setSocketProtector failed", t)
+            ConnectLogger.log(context, "setSocketProtector failed: ${t.message}")
+        }
+    }
+
+    fun clearSocketProtector() {
+        try {
+            val core = coreClass() ?: return
+            val protectorClass = callbackClassNamed(core, "SocketProtector") ?: return
+            core.getMethod("setSocketProtector", protectorClass).invoke(null, null as Any?)
+            ConnectLogger.log(context, "TunnelBridge.clearSocketProtector")
+        } catch (t: Throwable) {
+            Log.e(TAG, "clearSocketProtector failed", t)
+        }
+    }
+
+    private fun callbackClassNamed(core: Class<*>, simpleName: String): Class<*>? {
         val pkg = core.`package`?.name ?: return null
-        val simple = core.simpleName
+        val coreSimple = core.simpleName
         return listOf(
-            "$pkg.$simple\$StatusCallback",
-            "$pkg.StatusCallback",
+            "$pkg.$coreSimple\$$simpleName",
+            "$pkg.$simpleName",
         ).firstNotNullOfOrNull { name ->
             try {
                 Class.forName(name)
@@ -41,6 +77,8 @@ class TunnelBridge(
             }
         }
     }
+
+    private fun callbackClass(core: Class<*>): Class<*>? = callbackClassNamed(core, "StatusCallback")
 
     fun stopTunnel() {
         ConnectLogger.log(context, "TunnelBridge.stopTunnel")

@@ -1,11 +1,17 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/settings_service.dart';
+import '../services/streampass_api.dart';
+import '../services/vpn_channel.dart';
 import 'exclusions_screen.dart';
 import 'diagnostics_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final StreamPassApi? api;
+
+  const SettingsScreen({super.key, this.api});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -15,39 +21,91 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _service = SettingsService();
   AppSettings _settings = const AppSettings();
   bool _loading = true;
+  String? _syncHint;
 
   @override
   void initState() {
     super.initState();
-    _service.load().then((s) {
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    final local = await _service.load();
+    if (!mounted) return;
+    setState(() {
+      _settings = local;
+      _loading = false;
+    });
+    await _pullExclusions();
+  }
+
+  Future<void> _pullExclusions() async {
+    final api = widget.api;
+    if (api == null) return;
+    try {
+      final remote = await api.fetchExclusions();
+      await _service.setExclusions(remote);
       if (!mounted) return;
       setState(() {
-        _settings = s;
-        _loading = false;
+        _settings = _settings.copyWith(exclusions: remote);
+        _syncHint = null;
       });
-    });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _syncHint = 'Локальный список (синхронизация недоступна)');
+    }
+  }
+
+  Future<void> _saveExclusions(List<String> updated) async {
+    setState(() => _settings = _settings.copyWith(exclusions: updated));
+    await _service.setExclusions(updated);
+
+    final api = widget.api;
+    if (api != null) {
+      try {
+        final saved = await api.putExclusions(updated);
+        await _service.setExclusions(saved);
+        if (mounted) {
+          setState(() {
+            _settings = _settings.copyWith(exclusions: saved);
+            _syncHint = null;
+          });
+        }
+      } catch (_) {
+        if (mounted) {
+          setState(() => _syncHint = 'Сохранено локально, сервер недоступен');
+        }
+      }
+    }
+
+    // Hot-reload Decision Engine if VPN is up.
+    try {
+      final api = widget.api;
+      if (api != null) {
+        final ruleSet = await api.fetchRules();
+        await VpnChannel.updateRules(
+          rulesJson: jsonEncode(ruleSet.toJson()),
+          exclusionsJson: jsonEncode(updated),
+        );
+      }
+    } catch (_) {
+      // Best-effort; connect will reload exclusions next time.
+    }
   }
 
   Future<void> _updateAutostart(bool value) async {
     setState(() => _settings = _settings.copyWith(autostart: value));
     await _service.setAutostart(value);
-    // Native side: a BOOT_COMPLETED BroadcastReceiver reads this flag
-    // (shared via SharedPreferences / DataStore) to decide whether to
-    // start StreamPassVpnService on device boot. See android README note.
   }
 
   Future<void> _updateAutoConnect(bool value) async {
     setState(() => _settings = _settings.copyWith(autoConnect: value));
     await _service.setAutoConnect(value);
-    // "Автоподключение" = connect automatically whenever the app is opened
-    // or the network becomes available, without a manual tap on the orb.
   }
 
   Future<void> _updateAutoRelay(bool value) async {
     setState(() => _settings = _settings.copyWith(autoSelectRelay: value));
     await _service.setAutoSelectRelay(value);
-    // When off, the user is expected to be able to pick a relay manually
-    // from GET /api/v1/servers — that picker screen isn't built yet.
   }
 
   @override
@@ -93,9 +151,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListTile(
             title: const Text('Исключения'),
             subtitle: Text(
-              _settings.exclusions.isEmpty
-                  ? 'Нет исключений'
-                  : '${_settings.exclusions.length} домен(ов) всегда напрямую',
+              _syncHint ??
+                  (_settings.exclusions.isEmpty
+                      ? 'Нет исключений'
+                      : '${_settings.exclusions.length} домен(ов) всегда напрямую'),
             ),
             trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
             onTap: () async {
@@ -105,8 +164,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               );
               if (updated != null) {
-                setState(() => _settings = _settings.copyWith(exclusions: updated));
-                await _service.setExclusions(updated);
+                await _saveExclusions(updated);
               }
             },
           ),
@@ -133,11 +191,10 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Text(
-        text.toUpperCase(),
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              letterSpacing: 1.1,
+        text,
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
               color: AppColors.textSecondary,
             ),
       ),

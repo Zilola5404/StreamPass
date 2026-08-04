@@ -40,7 +40,7 @@
 | Тип | Header | Endpoints |
 |-----|--------|-----------|
 | Public | — | /health, /rules, /config, /register, /login, /logout, /payments/webhook |
-| Bearer JWT | `Authorization: Bearer <access_token>` | /servers, /telemetry, /payments, /subscription/* |
+| Bearer JWT | `Authorization: Bearer <access_token>` | /servers, /telemetry, /payments, /subscription/*, /exclusions |
 | Admin Key | `X-Admin-Key: <ADMIN_API_KEY>` | /rules POST, /config POST, /servers/*, /users |
 
 ---
@@ -313,6 +313,28 @@
 | **Назначение** | Отмена подписки (немедленное прекращение) |
 | **Auth** | Bearer JWT |
 | **Response 204** | No content |
+
+---
+
+### GET /api/v1/exclusions
+
+| | |
+|---|---|
+| **Назначение** | Пользовательские DIRECT-исключения (домены) |
+| **Auth** | Bearer JWT |
+| **Response 200** | `{"domains":["*.bank.ru","mail.ru"]}` |
+
+---
+
+### PUT /api/v1/exclusions
+
+| | |
+|---|---|
+| **Назначение** | Полная замена списка исключений (BL-014) |
+| **Auth** | Bearer JWT |
+| **Request** | `{"domains":["*.bank.ru"]}` |
+| **Response 200** | `{"domains":["*.bank.ru"]}` (нормализованный список) |
+| **Errors** | 400 invalid_input (плохой домен / >100), 401 unauthorized |
 
 ---
 

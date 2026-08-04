@@ -4,21 +4,20 @@
 
 ## Главная задача
 
-**BL-014: Exclusions sync** (следующий после BL-006)
+**BL-010: CI/CD GitHub Actions** (ЮKassa BL-004 пропущена)
 
 ## Описание
 
-Синхронизация пользовательских исключений с backend при изменении в настройках.
+GitHub Actions: build, test, (опционально docker push).
+
+## Skipped
+
+**BL-004: Live-тест ЮKassa** — пропущена по решению 2026-08-04
 
 ## Previous Task (Completed)
 
-**BL-006: Rule Engine (клиент)** — 2026-08-04
+**Protect + BL-014** — 2026-08-04
 
-- `RuleEngineService` — polling по `rule_poll_interval_sec`, hot-reload через `VpnChannel.updateRules`
-- Go: `UpdateRules`, `ActiveRulesVersion`, `AtomicEngine`
-- Android: MainActivity → StreamPassVpnService → TunnelBridge → mobile.UpdateRules
-- Build: **v0.1.1+6 (rule-engine-bl006-v1)**
-
-## Deferred from BL-006
-
-- Backend sync для user exclusions → **BL-014**
+- `VpnService.protect(fd)` / SocketProtector — интернет при connected
+- Exclusions sync: GET/PUT `/api/v1/exclusions`
+- Build: **v0.1.1+10 (protect-fix-v1)**

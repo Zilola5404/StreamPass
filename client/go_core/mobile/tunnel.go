@@ -10,6 +10,7 @@ import (
 	"github.com/apernet/hysteria/core/v2/client"
 	"streampass/go_core/internal/decision"
 	"streampass/go_core/internal/hyconfig"
+	"streampass/go_core/internal/protect"
 	"streampass/go_core/internal/tunbridge"
 )
 
@@ -19,6 +20,32 @@ type StatusCallback interface {
 	OnConnected(relay string, pingMs int)
 	OnDisconnected()
 	OnError(message string)
+}
+
+// SocketProtector is implemented by Android VpnService.protect(fd).
+// Must be set before PrepareRelay so the Hysteria QUIC underlay bypasses TUN.
+type SocketProtector interface {
+	Protect(fd int) bool
+}
+
+type socketProtectorAdapter struct {
+	p SocketProtector
+}
+
+func (a socketProtectorAdapter) Protect(fd int) bool {
+	if a.p == nil {
+		return false
+	}
+	return a.p.Protect(fd)
+}
+
+// SetSocketProtector installs or clears the platform socket protector.
+func SetSocketProtector(p SocketProtector) {
+	if p == nil {
+		protect.Clear()
+		return
+	}
+	protect.Set(socketProtectorAdapter{p: p})
 }
 
 var (

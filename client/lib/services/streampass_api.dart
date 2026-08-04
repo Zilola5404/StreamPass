@@ -59,6 +59,20 @@ class StreamPassApi {
     await _post('/subscription/cancel', const {});
   }
 
+  Future<List<String>> fetchExclusions() async {
+    final body = await _get('/exclusions');
+    final map = body as Map<String, dynamic>;
+    final list = map['domains'] as List<dynamic>? ?? const [];
+    return list.map((e) => e.toString()).toList();
+  }
+
+  Future<List<String>> putExclusions(List<String> domains) async {
+    final body = await _put('/exclusions', {'domains': domains});
+    final map = body as Map<String, dynamic>;
+    final list = map['domains'] as List<dynamic>? ?? const [];
+    return list.map((e) => e.toString()).toList();
+  }
+
   Future<dynamic> _get(String path, {bool authenticated = true, bool retried = false}) async {
     final res = await _client.get(
       Uri.parse('$apiBaseUrl$path'),
@@ -74,6 +88,15 @@ class StreamPassApi {
       body: jsonEncode(body),
     );
     return _decode(res, () => _post(path, body, retried: true), retried: retried);
+  }
+
+  Future<dynamic> _put(String path, Map<String, dynamic> body, {bool retried = false}) async {
+    final res = await _client.put(
+      Uri.parse('$apiBaseUrl$path'),
+      headers: await _headers(),
+      body: jsonEncode(body),
+    );
+    return _decode(res, () => _put(path, body, retried: true), retried: retried);
   }
 
   Future<Map<String, String>> _headers({bool authenticated = true}) async {

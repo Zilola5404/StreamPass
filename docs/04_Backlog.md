@@ -11,7 +11,7 @@
 | BL-001 | Hysteria2 tunnel в go_core | Реализовать transport в `client/go_core/mobile/tunnel.go`, собрать AAR через gomobile | P0 | Done | — | 2026-08-03 |
 | BL-002 | Подключить streampasscore.aar | Собрать и положить в Android libs, проверить TunnelBridge | P0 | Done | BL-001 | 2026-08-03 |
 | BL-003 | End-to-end VPN на Android | Connect → TUN → Hysteria2 → relay, проверка IP | P0 | Done | BL-001, BL-002 | 2026-08-03 |
-| BL-004 | Live-тест ЮKassa | Sandbox ключи, CreatePayment + webhook flow | P0 | Open | — | TODO |
+| BL-004 | Live-тест ЮKassa | Sandbox ключи, CreatePayment + webhook flow | P0 | Skipped | — | 2026-08-04 |
 | BL-005 | Decision Engine (клиент) | DIRECT/RELAY/FALLBACK по правилам | P0 | Done | BL-003 | 2026-08-04 |
 | BL-006 | Rule Engine (клиент) | Загрузка правил с GET /api/v1/rules, polling, hot-reload | P0 | Done | BL-005 | 2026-08-04 |
 
@@ -23,7 +23,7 @@
 | BL-011 | Integration tests backend | auth, billing, relay с Postgres testcontainers | P1 | Open | BL-010 | TODO |
 | BL-012 | Обновить README | Исправить статус Health Monitor, добавить client docs | P1 | Open | — | TODO |
 | BL-013 | Release signing Android | Production keystore вместо debug | P1 | Open | BL-003 | TODO |
-| BL-014 | Exclusions sync | Синхронизация пользовательских исключений с backend | P1 | Open | BL-006 | TODO |
+| BL-014 | Exclusions sync | Синхронизация пользовательских исключений с backend | P1 | Done | BL-006 | 2026-08-04 |
 | BL-015 | Refresh token rotation | Клиент: авто-обновление access token | P1 | Open | — | TODO |
 | BL-016 | DNS Cache + DoH | Локальный DNS на клиенте (ТЗ §7) | P1 | Open | BL-005 | TODO |
 | BL-017 | Fallback Strategy | UDP 443 → 8443 → 24443 → TCP (ТЗ §10) | P1 | Open | BL-001 | TODO |

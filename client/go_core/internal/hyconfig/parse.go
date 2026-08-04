@@ -13,6 +13,8 @@ import (
 
 	"github.com/apernet/hysteria/core/v2/client"
 	"github.com/apernet/hysteria/extras/v2/obfs"
+
+	"streampass/go_core/internal/protect"
 )
 
 const defaultMTU = 1400
@@ -71,12 +73,12 @@ func BuildClientConfig(connectionConfig, relayHost string, relayPort int) (*clie
 		ServerAddr: serverAddr,
 		Auth:       parsed.Auth,
 		TLSConfig:  tlsConfig,
-	}
-	if parsed.ObfsType != "" {
-		cfg.ConnFactory = &obfsConnFactory{
+		// Always use a ConnFactory so the QUIC UDP underlay can be protected
+		// via VpnService.protect after TUN default route is installed.
+		ConnFactory: &protectedConnFactory{
 			obfsType: parsed.ObfsType,
 			obfsPass: parsed.ObfsPass,
-		}
+		},
 	}
 	return cfg, parsed, nil
 }
@@ -145,15 +147,22 @@ func Parse(connectionConfig, relayHost string, relayPort int) (*Parsed, error) {
 	return parsed, nil
 }
 
-type obfsConnFactory struct {
+type protectedConnFactory struct {
 	obfsType string
 	obfsPass string
 }
 
-func (f *obfsConnFactory) New(addr net.Addr) (net.PacketConn, error) {
+func (f *protectedConnFactory) New(addr net.Addr) (net.PacketConn, error) {
 	conn, err := net.ListenUDP("udp", nil)
 	if err != nil {
 		return nil, err
+	}
+	if err := protect.Conn(conn); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("protect underlay udp: %w", err)
+	}
+	if f.obfsType == "" {
+		return conn, nil
 	}
 	switch f.obfsType {
 	case "salamander":
