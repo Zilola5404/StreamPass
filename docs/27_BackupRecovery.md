@@ -36,6 +36,19 @@ Artifacts:
 - `$BACKUP_DIR/streampass_latest.sql.gz` (symlink)
 - `$BACKUP_DIR/backup.log`
 
+### Off-site copy
+
+```bash
+# On VPS: encrypt → /var/backups/streampass-offsite (cron 03:15 UTC)
+BACKUP_ENCRYPT_KEY=... OFFSITE_DIR=/var/backups/streampass-offsite bash scripts/backup-offsite.sh
+
+# Optional second host:
+OFFSITE_SSH=user@other:/var/backups/streampass bash scripts/backup-offsite.sh
+
+# From operator PC (pull = off-site relative to VPS):
+.\scripts\PullBackupsOffsite.ps1
+```
+
 ### Local / Windows
 
 ```powershell

@@ -66,6 +66,7 @@ services:
       ADMIN_API_KEY: ${ADMIN_API_KEY:?set ADMIN_API_KEY in .env}
       CHECK_INTERVAL: 60s
       CHECK_TIMEOUT: 5s
+      HEALTH_UDP_ONLY_PORTS: "8443,24443,34443"
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped

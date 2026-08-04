@@ -17,9 +17,14 @@
 |----|--------|------|------|-----|
 | `nl-native-1` | `nl` | `212.43.156.33` | 443 | Native Hysteria (StreamPass) |
 | `nl-amsterdam-1` | `nl` | `212.43.157.167` | 32528 | Hiddify / sing-box |
+| `de-frankfurt-1` | `de` | `212.43.156.33` | 8443 | Region listener (same VPS; exit IP = NL until real DE VPS) |
+| `pl-warsaw-1` | `pl` | `212.43.156.33` | 24443 | Region listener (same VPS; exit IP = NL until real PL VPS) |
+| `fi-helsinki-1` | `fi` | `212.43.156.33` | 34443 | Region listener (same VPS; exit IP = NL until real FI VPS) |
 
 Канонические коды регионов (BL-026): `de` Frankfurt, `nl` Amsterdam, `pl` Warsaw, `fi` Helsinki.
-Каталог: `GET /api/v1/regions`. Новые VPS регистрируются через Admin → Relays (`POST /api/v1/servers`) с `region` из каталога.
+Каталог: `GET /api/v1/regions`. Скрипты: `scripts/setup-region-relays.sh`, `scripts/register-region-relays.sh`.
+
+> **География:** DE/PL/FI listeners сейчас на том же NL VPS (для picker/ranking). Настоящие exit-IP в DE/PL/FI появятся после отдельных VPS.
 
 ### nl-native-1 — native Hysteria на backend-сервере
 

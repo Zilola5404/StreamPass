@@ -22,6 +22,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -69,6 +71,9 @@ type config struct {
 	adminKey      string
 	checkInterval time.Duration
 	checkTimeout  time.Duration
+	// udpOnlyPorts are Hysteria listeners without TCP; a failed TCP probe
+	// must not flip them to unhealthy (region DE/PL/FI ports on shared VPS).
+	udpOnlyPorts map[int]bool
 }
 
 func loadConfig() (config, error) {
@@ -89,7 +94,28 @@ func loadConfig() (config, error) {
 		adminKey:      adminKey,
 		checkInterval: interval,
 		checkTimeout:  timeout,
+		udpOnlyPorts:  parseUDPOnlyPorts(os.Getenv("HEALTH_UDP_ONLY_PORTS")),
 	}, nil
+}
+
+func parseUDPOnlyPorts(raw string) map[int]bool {
+	out := map[int]bool{}
+	if strings.TrimSpace(raw) == "" {
+		// Defaults for StreamPass region listeners on the API VPS.
+		raw = "8443,24443,34443"
+	}
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		n, err := strconv.Atoi(part)
+		if err != nil {
+			continue
+		}
+		out[n] = true
+	}
+	return out
 }
 
 func envDurationOr(key string, def time.Duration) time.Duration {
@@ -115,6 +141,13 @@ func runOnce(client *http.Client, cfg config, log *slog.Logger) {
 
 	for _, srv := range servers {
 		healthy, rttMillis := probeTCP(srv.Host, srv.Port, cfg.checkTimeout)
+		if !healthy && cfg.udpOnlyPorts[srv.Port] {
+			log.Info("skip unhealthy flip for udp-only port",
+				slog.String("server_id", srv.ID),
+				slog.Int("port", srv.Port),
+			)
+			continue
+		}
 
 		if err := reportHealth(client, cfg, srv.ID, healthy, rttMillis); err != nil {
 			log.Error("failed to report health",
