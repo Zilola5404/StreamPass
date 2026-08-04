@@ -267,6 +267,8 @@
       const cfg = await apiPublic("/config");
       el.configMeta.textContent = `version=${cfg.version} updated_at=${cfg.updated_at || "—"}`;
       el.configForm.min_supported_client_version.value = cfg.min_supported_client_version || "";
+      el.configForm.latest_client_version.value = cfg.latest_client_version || "";
+      el.configForm.client_download_url.value = cfg.client_download_url || "";
       el.configForm.telemetry_enabled.checked = !!cfg.telemetry_enabled;
       el.configForm.rule_poll_interval_sec.value = cfg.rule_poll_interval_sec ?? 300;
       el.configForm.relay_poll_interval_sec.value = cfg.relay_poll_interval_sec ?? 60;
@@ -283,6 +285,8 @@
     const fd = new FormData(el.configForm);
     const body = {
       min_supported_client_version: String(fd.get("min_supported_client_version") || "").trim(),
+      latest_client_version: String(fd.get("latest_client_version") || "").trim(),
+      client_download_url: String(fd.get("client_download_url") || "").trim(),
       telemetry_enabled: el.configForm.telemetry_enabled.checked,
       rule_poll_interval_sec: Number(fd.get("rule_poll_interval_sec") || 0),
       relay_poll_interval_sec: Number(fd.get("relay_poll_interval_sec") || 0),

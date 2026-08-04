@@ -13,7 +13,7 @@
 | No on-device routing | Decision Engine + rule hot-reload done; DIRECT/RELAY underlay sockets use `VpnService.protect()` (+10) |
 | Exclusions local-only | Synced via GET/PUT `/api/v1/exclusions` (BL-014); local SharedPreferences cache remains |
 | Boot auto-connect | «Автоподключение» при boot не поднимает VPN до открытия приложения (см. `BootReceiver.kt`) |
-| No auto-update | Client, rules, certs — manual update only |
+| No auto-update | Client APK: soft/hard prompt via GET /config (`latest_client_version` + `client_download_url`); rules/config already poll. Certs still manual. |
 | Subscription cancel | Immediate revocation, not "stop auto-renewal" |
 
 ---

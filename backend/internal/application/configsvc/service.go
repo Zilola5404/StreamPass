@@ -7,6 +7,7 @@ package configsvc
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"streampass/backend/internal/domain/appconfig"
@@ -71,6 +72,10 @@ func validateConfig(cfg appconfig.Config) error {
 	if cfg.MinSupportedClientVer == "" {
 		return apperrors.New(apperrors.CodeInvalidInput, "min_supported_client_version must not be empty").
 			WithDetails(map[string]any{"field": "min_supported_client_version"})
+	}
+	if cfg.ClientDownloadURL != "" && !strings.HasPrefix(cfg.ClientDownloadURL, "https://") {
+		return apperrors.New(apperrors.CodeInvalidInput, "client_download_url must be https:// or empty").
+			WithDetails(map[string]any{"field": "client_download_url"})
 	}
 	if cfg.RulePollIntervalSec <= 0 {
 		return apperrors.New(apperrors.CodeInvalidInput, "rule_poll_interval_sec must be positive").

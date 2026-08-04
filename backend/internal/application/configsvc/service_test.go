@@ -83,6 +83,33 @@ func TestService_PublishThenGetLatest(t *testing.T) {
 	}
 }
 
+func TestService_Publish_RejectsNonHTTPSDownloadURL(t *testing.T) {
+	repo := &fakeRepo{}
+	svc := NewService(repo, fakeClock{t: time.Now()}, logger.New("test", "error"))
+
+	cfg := validConfig()
+	cfg.ClientDownloadURL = "http://example.com/app.apk"
+	if _, err := svc.Publish(context.Background(), cfg); err == nil {
+		t.Error("expected error for non-https download url, got nil")
+	}
+}
+
+func TestService_Publish_AcceptsHTTPSDownloadURL(t *testing.T) {
+	repo := &fakeRepo{}
+	svc := NewService(repo, fakeClock{t: time.Now()}, logger.New("test", "error"))
+
+	cfg := validConfig()
+	cfg.LatestClientVersion = "0.1.2"
+	cfg.ClientDownloadURL = "https://example.com/StreamPass.apk"
+	published, err := svc.Publish(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+	if published.ClientDownloadURL != cfg.ClientDownloadURL {
+		t.Fatalf("download url = %q", published.ClientDownloadURL)
+	}
+}
+
 func TestService_GetLatest_NoConfigPublishedYet(t *testing.T) {
 	repo := &fakeRepo{}
 	svc := NewService(repo, fakeClock{t: time.Now()}, logger.New("test", "error"))

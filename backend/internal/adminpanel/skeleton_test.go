@@ -26,6 +26,7 @@ func TestAdminPanelFiles(t *testing.T) {
 		"view-login", "view-app", "login-submit", "health-check",
 		"users-body", "relays-body", "relay-form",
 		"rules-json", "rules-publish", "config-form",
+		"latest_client_version", "client_download_url",
 	} {
 		if !strings.Contains(html, needle) {
 			t.Fatalf("index.html missing %q", needle)

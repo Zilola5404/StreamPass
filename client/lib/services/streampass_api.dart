@@ -179,6 +179,8 @@ class ApiException implements Exception {
 class ClientConfig {
   final int version;
   final String minSupportedClientVersion;
+  final String latestClientVersion;
+  final String clientDownloadUrl;
   final bool telemetryEnabled;
   final int rulePollIntervalSec;
   final int relayPollIntervalSec;
@@ -186,6 +188,8 @@ class ClientConfig {
   const ClientConfig({
     required this.version,
     required this.minSupportedClientVersion,
+    this.latestClientVersion = '',
+    this.clientDownloadUrl = '',
     required this.telemetryEnabled,
     required this.rulePollIntervalSec,
     required this.relayPollIntervalSec,
@@ -195,6 +199,8 @@ class ClientConfig {
         version: json['version'] as int,
         minSupportedClientVersion:
             json['min_supported_client_version'] as String,
+        latestClientVersion: (json['latest_client_version'] as String?) ?? '',
+        clientDownloadUrl: (json['client_download_url'] as String?) ?? '',
         telemetryEnabled: json['telemetry_enabled'] as bool,
         rulePollIntervalSec: json['rule_poll_interval_sec'] as int,
         relayPollIntervalSec: json['relay_poll_interval_sec'] as int,

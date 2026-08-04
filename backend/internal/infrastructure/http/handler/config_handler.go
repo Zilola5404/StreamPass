@@ -21,6 +21,8 @@ func NewConfigHandler(svc *configsvc.Service) *ConfigHandler {
 type configResponse struct {
 	Version               int    `json:"version"`
 	MinSupportedClientVer string `json:"min_supported_client_version"`
+	LatestClientVersion   string `json:"latest_client_version"`
+	ClientDownloadURL     string `json:"client_download_url"`
 	TelemetryEnabled      bool   `json:"telemetry_enabled"`
 	RulePollIntervalSec   int    `json:"rule_poll_interval_sec"`
 	RelayPollIntervalSec  int    `json:"relay_poll_interval_sec"`
@@ -39,6 +41,8 @@ func (h *ConfigHandler) GetLatest(w http.ResponseWriter, r *http.Request) {
 
 type publishConfigRequest struct {
 	MinSupportedClientVer string `json:"min_supported_client_version"`
+	LatestClientVersion   string `json:"latest_client_version"`
+	ClientDownloadURL     string `json:"client_download_url"`
 	TelemetryEnabled      bool   `json:"telemetry_enabled"`
 	RulePollIntervalSec   int    `json:"rule_poll_interval_sec"`
 	RelayPollIntervalSec  int    `json:"relay_poll_interval_sec"`
@@ -55,6 +59,8 @@ func (h *ConfigHandler) Publish(w http.ResponseWriter, r *http.Request) {
 
 	cfg := appconfig.Config{
 		MinSupportedClientVer: req.MinSupportedClientVer,
+		LatestClientVersion:   req.LatestClientVersion,
+		ClientDownloadURL:     req.ClientDownloadURL,
 		TelemetryEnabled:      req.TelemetryEnabled,
 		RulePollIntervalSec:   req.RulePollIntervalSec,
 		RelayPollIntervalSec:  req.RelayPollIntervalSec,
@@ -72,6 +78,8 @@ func toConfigResponse(cfg *appconfig.Config) configResponse {
 	return configResponse{
 		Version:               cfg.Version,
 		MinSupportedClientVer: cfg.MinSupportedClientVer,
+		LatestClientVersion:   cfg.LatestClientVersion,
+		ClientDownloadURL:     cfg.ClientDownloadURL,
 		TelemetryEnabled:      cfg.TelemetryEnabled,
 		RulePollIntervalSec:   cfg.RulePollIntervalSec,
 		RelayPollIntervalSec:  cfg.RelayPollIntervalSec,

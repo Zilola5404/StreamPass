@@ -17,6 +17,8 @@ import (
 type Config struct {
 	Version               int
 	MinSupportedClientVer string
+	LatestClientVersion   string
+	ClientDownloadURL     string
 	TelemetryEnabled      bool
 	RulePollIntervalSec   int
 	RelayPollIntervalSec  int

@@ -34,7 +34,7 @@
 |----|----------|----------|-----------|--------|-------------|---------------|
 | BL-020 | Admin Panel UI | Web UI для операторов вместо X-Admin-Key | P2 | Done | — | 2026-08-04 |
 | BL-021 | Prometheus + Grafana | Мониторинг (ТЗ §18) | P2 | Done | — | 2026-08-04 |
-| BL-022 | Auto Update клиента | OTA обновления APK | P2 | Open | BL-003 | TODO |
+| BL-022 | Auto Update клиента | OTA обновления APK | P2 | Done | BL-003 | 2026-08-04 |
 | BL-023 | Windows клиент | WFP adapter (ТЗ §3) | P2 | Open | BL-001 | TODO |
 | BL-024 | iOS клиент | Network Extension (ТЗ §3) | P2 | Open | BL-001 | TODO |
 | BL-025 | macOS клиент | Network Extension (ТЗ §3) | P2 | Open | BL-001 | TODO |

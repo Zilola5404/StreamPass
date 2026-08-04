@@ -162,12 +162,16 @@
 {
   "version": 1,
   "min_supported_client_version": "0.1.0",
+  "latest_client_version": "0.1.1",
+  "client_download_url": "https://example.com/StreamPass.apk",
   "telemetry_enabled": true,
   "rule_poll_interval_sec": 86400,
   "relay_poll_interval_sec": 300,
   "updated_at": "2026-08-01T10:00:00Z"
 }
 ```
+
+`latest_client_version` + `client_download_url` — BL-022 Auto Update (пустой URL = без optional prompt).
 
 ---
 
@@ -177,7 +181,7 @@
 |---|---|
 | **Назначение** | Publish новую конфигурацию |
 | **Auth** | X-Admin-Key |
-| **Request** | Fields from config response |
+| **Request** | Fields from config response (`client_download_url` только `https://` или пусто) |
 | **Response 201** | Config object |
 
 ---

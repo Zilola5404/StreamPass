@@ -26,16 +26,16 @@ func NewAppConfigRepository(db *sql.DB) *AppConfigRepository {
 // Latest returns the highest-versioned config.
 func (r *AppConfigRepository) Latest(ctx context.Context) (*appconfig.Config, error) {
 	const q = `
-		SELECT version, min_supported_client_version, telemetry_enabled,
-		       rule_poll_interval_sec, relay_poll_interval_sec, updated_at
+		SELECT version, min_supported_client_version, latest_client_version, client_download_url,
+		       telemetry_enabled, rule_poll_interval_sec, relay_poll_interval_sec, updated_at
 		FROM app_configs
 		ORDER BY version DESC
 		LIMIT 1`
 
 	var c appconfig.Config
 	err := r.db.QueryRowContext(ctx, q).Scan(
-		&c.Version, &c.MinSupportedClientVer, &c.TelemetryEnabled,
-		&c.RulePollIntervalSec, &c.RelayPollIntervalSec, &c.UpdatedAt,
+		&c.Version, &c.MinSupportedClientVer, &c.LatestClientVersion, &c.ClientDownloadURL,
+		&c.TelemetryEnabled, &c.RulePollIntervalSec, &c.RelayPollIntervalSec, &c.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, appconfig.ErrNoConfig
@@ -63,12 +63,12 @@ func (r *AppConfigRepository) Publish(ctx context.Context, c appconfig.Config, p
 
 	const insert = `
 		INSERT INTO app_configs
-			(version, min_supported_client_version, telemetry_enabled,
-			 rule_poll_interval_sec, relay_poll_interval_sec, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6)`
+			(version, min_supported_client_version, latest_client_version, client_download_url,
+			 telemetry_enabled, rule_poll_interval_sec, relay_poll_interval_sec, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 	_, err = tx.ExecContext(ctx, insert,
-		nextVersion, c.MinSupportedClientVer, c.TelemetryEnabled,
-		c.RulePollIntervalSec, c.RelayPollIntervalSec, publishedAt,
+		nextVersion, c.MinSupportedClientVer, c.LatestClientVersion, c.ClientDownloadURL,
+		c.TelemetryEnabled, c.RulePollIntervalSec, c.RelayPollIntervalSec, publishedAt,
 	)
 	if err != nil {
 		return nil, apperrors.Wrap(apperrors.CodeInternal, "failed to insert config", err)

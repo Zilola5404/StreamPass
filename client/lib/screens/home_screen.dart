@@ -12,12 +12,14 @@ import '../services/rule_engine_service.dart';
 import '../services/settings_service.dart';
 import '../services/streampass_api.dart';
 import '../services/vpn_channel.dart';
+import '../services/client_update.dart';
 import '../theme/app_theme.dart';
 import '../widgets/connect_orb.dart';
 import 'settings_screen.dart';
 import 'subscription_screen.dart';
 import 'servers_screen.dart';
 import 'statistics_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class HomeScreen extends StatefulWidget {
   final StreamPassApi api;
@@ -51,8 +53,73 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _bootstrap() async {
+    await _checkClientUpdate();
     await _loadSubscription();
     await _loadStartupData();
+  }
+
+  Future<void> _checkClientUpdate() async {
+    try {
+      final cfg = await widget.api.fetchConfig();
+      final result = evaluateClientUpdate(
+        currentVersion: BuildInfo.version,
+        minSupportedVersion: cfg.minSupportedClientVersion,
+        latestVersion: cfg.latestClientVersion,
+        downloadUrl: cfg.clientDownloadUrl,
+      );
+      if (!mounted || !result.hasUpdate) return;
+      _connectLog.info('update', 'client update check', {
+        'urgency': result.urgency.name,
+        'current': result.currentVersion,
+        'latest': result.latestVersion ?? '',
+        'min': result.minSupportedVersion ?? '',
+      });
+      await _showUpdateDialog(result);
+    } catch (e) {
+      _connectLog.warn('update', 'config fetch for update check failed', {'error': '$e'});
+    }
+  }
+
+  Future<void> _showUpdateDialog(UpdateCheckResult result) async {
+    final required = result.urgency == UpdateUrgency.required;
+    final url = result.downloadUrl;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: !required,
+      builder: (ctx) => AlertDialog(
+        title: Text(required ? 'Требуется обновление' : 'Доступно обновление'),
+        content: Text(
+          required
+              ? 'Эта версия клиента (${result.currentVersion}) больше не поддерживается. '
+                  'Минимум: ${result.minSupportedVersion ?? "—"}. '
+                  'Установите новую версию, чтобы продолжить.'
+              : 'Доступна версия ${result.latestVersion}. Сейчас установлена ${result.currentVersion}.',
+        ),
+        actions: [
+          if (!required)
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Позже'),
+            ),
+          if (url != null && url.isNotEmpty)
+            FilledButton(
+              onPressed: () async {
+                final uri = Uri.tryParse(url);
+                if (uri != null) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+                if (!required && ctx.mounted) Navigator.of(ctx).pop();
+              },
+              child: const Text('Скачать'),
+            )
+          else if (required)
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Понятно'),
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadSubscription() async {
