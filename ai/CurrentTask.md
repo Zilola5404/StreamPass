@@ -4,11 +4,8 @@
 
 ## Главная задача
 
-**BL-011: Integration tests backend** (следующий Open P1)
-
-## Описание
-
-Integration tests: auth, billing, relay с Postgres testcontainers.
+P1 backlog закрыт (кроме опциональных доработок).  
+Следующее по приоритету: **P2** (Admin Panel / Prometheus) или полировка VPN на устройстве.
 
 ## Skipped
 
@@ -16,6 +13,5 @@ Integration tests: auth, billing, relay с Postgres testcontainers.
 
 ## Completed
 
-- BL-013 Release signing (`key.properties` + Gradle)
-- BL-016 DNS Cache + DoH (UDP/53 → Cloudflare DoH + TTL cache)
-- Build: **v0.1.1+12 (dns-doh-v1)**
+- BL-011 Integration tests (Postgres testcontainers + httptest)
+- BL-013 signing, BL-016 DNS/DoH, protect, exclusions, fallback…

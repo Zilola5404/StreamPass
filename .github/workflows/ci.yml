@@ -15,7 +15,7 @@ jobs:
         with:
           go-version: '1.22'
       - name: go test
-        run: go test ./...
+        run: go test ./... -count=1 -timeout 15m
       - name: go build server
         run: go build -o /tmp/streampass-server ./backend/cmd/server
 

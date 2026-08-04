@@ -20,7 +20,7 @@
 | ID | Название | Описание | Приоритет | Статус | Зависимости | Ответственный |
 |----|----------|----------|-----------|--------|-------------|---------------|
 | BL-010 | CI/CD GitHub Actions | build, test, docker compose build | P1 | Done | — | 2026-08-04 |
-| BL-011 | Integration tests backend | auth, billing, relay с Postgres testcontainers | P1 | Open | BL-010 | TODO |
+| BL-011 | Integration tests backend | auth, billing, relay с Postgres testcontainers | P1 | Done | BL-010 | 2026-08-04 |
 | BL-012 | Обновить README | Исправить статус Health Monitor, добавить client docs | P1 | Done | — | 2026-08-04 |
 | BL-013 | Release signing Android | Production keystore вместо debug | P1 | Done | BL-003 | 2026-08-04 |
 | BL-014 | Exclusions sync | Синхронизация пользовательских исключений с backend | P1 | Done | BL-006 | 2026-08-04 |

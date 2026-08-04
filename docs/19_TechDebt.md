@@ -9,7 +9,7 @@
 | ID | Debt | Location | Effort |
 |----|------|----------|--------|
 | TD-001 | VPN tunnel stub — no real Hysteria2 | `client/go_core/mobile/tunnel.go` | Large |
-| TD-002 | No integration tests | backend application layer | Medium |
+| TD-002 | No integration tests | backend application layer | Done (BL-011) |
 | TD-003 | ЮKassa never live-tested | `backend/.../payment/yookassa/` | Small |
 | TD-004 | README outdated (Health Monitor) | `README.md` | Trivial |
 
