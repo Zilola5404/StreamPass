@@ -1,6 +1,6 @@
 # StreamPass — Security Checklist
 
-> Дата: 2026-08-03
+> Дата: 2026-08-05
 
 ---
 
@@ -64,7 +64,7 @@
 |-------|--------|--------|
 | Token storage | ⚠️ | SharedPreferences (not encrypted) |
 | Certificate pinning | ❌ | Not implemented |
-| Release signing | ❌ | Debug keys (BUG-005) |
+| Release signing | ✅ | BL-013: `key.properties` + JKS path; warn+debug fallback if missing |
 | VPN permission | ✅ | Standard Android VPN permission flow |
 | Connect diagnostics log | ✅ | On-device only; user-initiated copy; no URLs/payloads/secrets (ADR-010) |
 | ProGuard/R8 | TODO | Not verified for release |
@@ -73,7 +73,7 @@
 
 ## Pre-Production Checklist
 
-- [ ] Production Android keystore
+- [x] Production Android keystore path (BL-013; keep JKS off VCS)
 - [ ] Real domain with valid TLS cert
 - [ ] Rotate JWT_SECRET and ADMIN_API_KEY
 - [ ] Enable PostgreSQL SSL for external connections

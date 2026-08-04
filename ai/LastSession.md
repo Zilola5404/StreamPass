@@ -1,21 +1,26 @@
 # Last Session
 
-> Updated: 2026-08-04
+> 2026-08-05
 
 ## Completed
 
-- BL-020 Admin Panel (`admin/` SPA, Caddy `/admin/`, tests)
-- BL-021 Monitoring: backend `/metrics`, Prometheus, node-exporter, Grafana overview dashboard
-- VPN +15 local APK (uncommitted with prior session fixes)
+- Docs audit: синхронизация `14_AIContext`, `03_CurrentState`, KnownLimitations, AI sprint pack, SmokeTest
+- Ранее: BL-026/027/031/032/033, admin login fix, APK v0.1.1+17
 
-## Pending
+## Prod snapshot
 
-- Server deploy (needs SSH) for admin + monitoring
-- Device VPN E2E with +15
-- Optional: business gauges (relay load / active users) on top of HTTP+node metrics
+- API /admin /regions OK
+- Backups cron on `/var/backups/streampass`
+- Grafana/Prometheus localhost-only
+- Relays: NL only in DB
 
-## Next P2
+## Explicitly not done
 
-- BL-022 Auto Update
-- BL-026 multiple relay regions
-- BL-027 go.sum (partially present)
+- ЮKassa live (BL-004/030)
+- Windows / iOS / macOS (BL-023…025)
+- Off-site backup copy
+- Physical device re-verify +17 (manual)
+
+## Hand-off
+
+Читать: `docs/14_AIContext.md` → `docs/04_Backlog.md` → `ai/CurrentTask.md`

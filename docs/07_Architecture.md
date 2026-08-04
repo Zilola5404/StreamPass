@@ -1,6 +1,6 @@
 # StreamPass — Архитектура
 
-> Дата: 2026-08-03 | Версия: 1.0
+> Дата: 2026-08-05 | Версия: 1.1
 
 ---
 
@@ -13,7 +13,7 @@ graph TB
         AuthSvc[Auth Service]
         APISvc[StreamPass API Client]
         VPNCh[VPN Channel]
-        GoCore[Go Core - STUB]
+        GoCore[Go Core Hysteria2]
         VPNService[Android VPNService]
         UI --> AuthSvc
         UI --> APISvc
@@ -26,27 +26,33 @@ graph TB
         Caddy[Caddy :443 TLS]
         Backend[Go Backend :8080]
         HM[Health Monitor]
+        AdminUI[Admin UI /admin]
+        Prom[Prometheus]
+        Graf[Grafana]
         PG[(PostgreSQL 16)]
         Redis[(Redis 7)]
         Caddy --> Backend
+        Caddy --> AdminUI
         Backend --> PG
         Backend --> Redis
         HM --> Backend
+        Prom --> Backend
+        Graf --> Prom
     end
 
     subgraph Relay["Relay Servers"]
-        R1[Hysteria2 Relay DE]
+        R1[Hysteria2 Relay NL]
         R2[Hysteria2 Relay NL]
     end
 
     APISvc -->|HTTPS /api/v1| Caddy
-    GoCore -.->|UDP Hysteria2| R1
-    GoCore -.->|UDP Hysteria2| R2
+    GoCore -->|UDP Hysteria2| R1
+    GoCore -->|UDP Hysteria2| R2
     HM -->|TCP probe| R1
     HM -->|TCP probe| R2
 ```
 
-> Пунктир: Go Core tunnel — stub, не реализован end-to-end.
+> Go Core: real Hysteria2 transport + Decision Engine (не stub). Prod relays: NL only; multi-region software ready.
 
 ---
 
@@ -145,10 +151,10 @@ graph TB
     VPN --> MainAct
     AuthS --> SharedPrefs[(SharedPreferences)]
     API -->|HTTP| Backend
-    Tunnel -.-> GoCoreAAR[streampasscore.aar STUB]
+    Tunnel --> GoCoreAAR[streampasscore.aar]
 ```
 
-**Экраны:** onboarding, home, servers, subscription, settings, exclusions, statistics, diagnostics.
+**Экраны:** onboarding, home, servers/regions, subscription, settings, exclusions, statistics, diagnostics.
 
 ---
 
@@ -207,9 +213,12 @@ erDiagram
 | Reverse Proxy | Caddy 2 | `Caddyfile` |
 | Backend | Go 1.22, distroless | `backend/Dockerfile` |
 | Health Monitor | Go worker | `backend/cmd/healthmonitor/Dockerfile` |
+| Admin UI | Static files | `admin/` via Caddy `/admin/` |
 | Database | PostgreSQL 16-alpine | `docker-compose.yml` |
 | Cache | Redis 7-alpine | `docker-compose.yml` |
+| Metrics | Prometheus + Grafana | `infrastructure/` |
 | TLS | Caddy auto-HTTPS | `212-43-156-33.nip.io` |
+| Backups | Daily cron | BL-033 |
 
 ---
 
@@ -240,14 +249,14 @@ Client → GET /api/v1/subscription → active_until
 
 ---
 
-## 7. Planned Architecture (NOT IMPLEMENTED)
+## 7. Planned Architecture (NOT YET / OPTIONAL)
 
-По ТЗ §4, но **не реализовано**:
+Остаётся вне текущего MVP-закрытия:
 
-- Client Core (Go) с Decision Engine, Rule Engine, DNS Cache
-- Platform Adapters: WFP (Windows), Network Extension (macOS/iOS)
-- 90% shared code across platforms
-- Prometheus + Grafana monitoring
+- Platform Adapters: WFP (Windows), Network Extension (macOS/iOS) — BL-023…025
+- Optional TCP underlay fallback (UDP ports Done — BL-017)
+- Off-site backup copy (local daily cron Done — BL-033)
+- ЮKassa live payment verification (BL-004 Skipped; BL-030 Blocked)
 
 ---
 
@@ -260,6 +269,7 @@ Client → GET /api/v1/subscription → active_until
 | `backend/internal/infrastructure/postgres/migrations/` | DB schema |
 | `client/lib/main.dart` | Flutter entry + API URL |
 | `client/android/.../StreamPassVpnService.kt` | VPN TUN |
-| `client/go_core/mobile/tunnel.go` | Tunnel stub |
+| `client/go_core/mobile/tunnel.go` | Hysteria2 tunnel + Decision Engine |
+| `admin/` | Operator Admin UI |
 | `docker-compose.yml` | Full stack |
 | `shared/config/` | YAML config loader |

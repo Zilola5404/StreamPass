@@ -1,13 +1,13 @@
 # StreamPass — Dependencies
 
-> Дата: 2026-08-03
+> Дата: 2026-08-05
 
 ---
 
 ## Go (Backend)
 
 **Module:** `streampass` | **Go version:** 1.22.2  
-**Source:** `go.mod`
+**Source:** `go.mod` + `go.sum` (present, BL-027)
 
 | Dependency | Version | Purpose | Type |
 |------------|---------|---------|------|
@@ -36,7 +36,7 @@ replace github.com/lib/pq => ./vendor-src/pq
 
 ## Flutter (Client)
 
-**Source:** `client/pubspec.yaml` | **Version:** 0.1.0 | **Dart SDK:** >=3.3.0 <4.0.0
+**Source:** `client/pubspec.yaml` | **Version:** 0.1.1+17 | **Dart SDK:** >=3.3.0 <4.0.0
 
 | Package | Version | Purpose |
 |---------|---------|---------|
@@ -53,11 +53,12 @@ replace github.com/lib/pq => ./vendor-src/pq
 ## Go Core (Client Tunnel)
 
 **Module:** `streampass/go_core` | **Go version:** 1.22.2  
-**Source:** `client/go_core/go.mod`
+**Source:** `client/go_core/go.mod` + `go.sum`
 
 | Dependency | Status |
 |------------|--------|
-| golang.org/x/mobile | Replace → `../vendor-src/mobile` — **NOT FOUND** |
+| golang.org/x/mobile | Replace → `../vendor-src/mobile` — **present** |
+| streampasscore.aar | Built; used from `client/android/app/libs/` |
 
 ---
 
@@ -70,6 +71,7 @@ replace github.com/lib/pq => ./vendor-src/pq
 | Caddy | caddy | 2-alpine |
 | Backend | Built from `backend/Dockerfile` | Go 1.22-bookworm → distroless |
 | Healthmonitor | Built from `backend/cmd/healthmonitor/Dockerfile` | Go 1.22 |
+| Prometheus / Grafana | compose services | BL-021 |
 
 ---
 
@@ -77,20 +79,20 @@ replace github.com/lib/pq => ./vendor-src/pq
 
 | Service | Purpose | Status |
 |---------|---------|--------|
-| ЮKassa (yookassa.ru) | Payment processing | Client coded, not live-tested |
-| Hysteria2 | VPN relay transport | External VPS, not in repo |
+| ЮKassa (yookassa.ru) | Payment processing | Client coded, live Skipped (BL-004) |
+| Hysteria2 | VPN relay transport | External VPS (NL in prod) |
 | nip.io | Dynamic DNS for MVP | `212-43-156-33.nip.io` |
 
 ---
 
-## Missing / TODO
+## Present (formerly TODO)
 
-| Item | Impact |
+| Item | Status |
 |------|--------|
-| `go.sum` | Non-reproducible builds |
-| `vendor-src/mobile` | gomobile build fails |
-| `streampasscore.aar` | Android tunnel bridge fails |
-| CI/CD deps | No automated pipeline |
+| `go.sum` (root + go_core) | ✅ Present |
+| `vendor-src/mobile` | ✅ Present |
+| `streampasscore.aar` | ✅ In `android/app/libs/` |
+| CI/CD | ✅ `.github/workflows/ci.yml` |
 
 ---
 
@@ -100,4 +102,4 @@ replace github.com/lib/pq => ./vendor-src/pq
 2. New external deps require ADR (`docs/11_Decisions.md`)
 3. Vendoring via `vendor-src/` with `replace` in go.mod
 4. No `go get` without documenting in this file
-5. Pin versions in go.mod / pubspec.yaml
+5. Pin versions in go.mod / pubspec.yaml; keep go.sum committed

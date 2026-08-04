@@ -1,6 +1,6 @@
 # StreamPass — Project Dashboard
 
-> Last updated: 2026-08-03
+> Last updated: 2026-08-05
 
 ---
 
@@ -8,23 +8,25 @@
 
 | Area | Progress | Status |
 |------|----------|--------|
-| Backend API | 80% | 🟢 Functional |
-| Android UI | 55% | 🟡 UI ready, VPN stub |
-| VPN Tunnel | 5% | 🔴 Stub only |
-| Billing | 60% | 🟡 Code ready, not live-tested |
-| CI/CD | 0% | 🔴 Not configured |
-| Documentation | 100% | 🟢 Initialized |
-| Tests (unit) | 40% | 🟡 Partial coverage |
-| Tests (integration) | 0% | 🔴 Not implemented |
+| Backend API | 95% | 🟢 Functional (prod) |
+| Android UI + VPN | 90% | 🟢 Connect + rules + regions |
+| VPN Tunnel | 90% | 🟢 Hysteria2 (not stub) |
+| Billing | 60% | 🟡 Code ready, live Skipped (BL-004) |
+| CI/CD | 100% | 🟢 GitHub Actions |
+| Admin Panel | 100% | 🟢 `/admin/` |
+| Monitoring / Backup | 100% | 🟢 Grafana/Prometheus + daily backups |
+| Documentation | 100% | 🟢 Kept current |
+| Tests (unit) | 60% | 🟢 Partial + growing |
+| Tests (integration) | 80% | 🟢 BL-011 + SmokeTest + loadtest |
 
-**Overall MVP: ~35%**
+**Overall MVP: ~85%**
 
 ---
 
 ## Active Sprint
 
-**Goal:** Documentation initialization + identify MVP blockers  
-**Focus:** VPN tunnel implementation (next)
+**Goal:** Stabilize Android MVP on prod; optional monetization / multi-OS only on request  
+**Focus:** Device recheck +17; YooKassa only if explicitly requested
 
 See: `ai/CurrentSprint.md`
 
@@ -32,10 +34,10 @@ See: `ai/CurrentSprint.md`
 
 ## Top Blockers
 
-1. 🔴 VPN tunnel stub (go_core) — BL-001
-2. 🔴 streampasscore.aar not built — BL-002
-3. 🟡 ЮKassa not live-tested — BL-004
-4. 🟡 No CI/CD — BL-010
+1. 🟡 ЮKassa not live-tested — BL-004 **Skipped** (intentional)
+2. 🟡 BL-030 auto-renewal **Blocked** on BL-004
+3. ⚪ BL-023/024/025 Windows / iOS / macOS — **Open intentional** (do not start without request)
+4. ⚪ Measured client perf (T1–T4) + physical device recheck
 
 ---
 
@@ -43,10 +45,11 @@ See: `ai/CurrentSprint.md`
 
 | Date | Event |
 |------|-------|
+| 2026-08-05 | Docs sync to product reality (VPN Done, admin, monitoring, +17) |
+| 2026-08-04 | BL-020…022,026,027,031–033; APK v0.1.1+17 |
+| 2026-08-04 | CI, signing, DNS/DoH, exclusions, Decision Engine |
+| 2026-08-03 | BL-001…003 VPN tunnel + AAR + E2E verify |
 | 2026-08-03 | AI documentation initialized |
-| — | Backend linked with Android client (6a6f029) |
-| — | Relay data fix in VPN service (50e9e15) |
-| — | First MVP release (9570b95) |
 
 ---
 
@@ -68,19 +71,16 @@ See: `ai/CurrentSprint.md`
 
 | Metric | Value |
 |--------|-------|
-| Git commits | 8 |
-| Backend Go files | ~50+ |
-| Flutter screens | 8 |
-| API endpoints | 20 |
-| DB tables | 7 |
-| Unit tests (Go) | 7 files |
-| Unit tests (Flutter) | 3 files |
-| Open bugs | 5 |
-| Open backlog items | 20+ |
+| Prod | `https://212-43-156-33.nip.io` |
+| Admin | `/admin/` |
+| APK | v0.1.1+17 |
+| Relays (prod) | NL nodes only (multi-region software ready) |
+| Open bugs (active) | 0 critical tunnel bugs |
+| Open backlog intentional | BL-023…025, BL-004 Skipped, BL-030 Blocked |
 
 ---
 
 ## Next Milestone
 
-**MVP VPN Working** — user can connect with one button, foreign IP verified.  
-Blockers: BL-001, BL-002, BL-003, BL-005, BL-006
+**MVP acceptance polish** — device E2E recheck; optional ЮKassa live; measured T1–T4.  
+Not blockers for connect path: BL-001…003,005,006 Done.

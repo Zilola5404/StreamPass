@@ -1,6 +1,6 @@
 # StreamPass — Deployment
 
-> Дата: 2026-08-03
+> Дата: 2026-08-05
 
 ---
 
@@ -20,7 +20,7 @@ git clone <repo-url> streampass && cd streampass
 # 2. Configure secrets
 cp .env.example .env
 # Edit .env: DB_PASSWORD, JWT_SECRET, ADMIN_API_KEY (required)
-# Optional: YOOKASSA_*, REDIS_PASSWORD
+# Optional: YOOKASSA_*, REDIS_PASSWORD, GRAFANA_*
 
 # 3. Deploy
 docker compose up -d --build
@@ -42,6 +42,12 @@ curl https://212-43-156-33.nip.io/health
 | backend | 8080 | — (via Caddy) |
 | healthmonitor | — | — |
 | caddy | 80, 443 | 80, 443 |
+| admin UI | — | via Caddy `/admin/` |
+| prometheus | 9090 | local-only (127.0.0.1) |
+| grafana | 3000 | local-only (127.0.0.1) |
+| node-exporter | 9100 | internal |
+
+**Prod:** `https://212-43-156-33.nip.io` · Admin: `https://212-43-156-33.nip.io/admin/`
 
 ---
 
@@ -66,9 +72,10 @@ flutter run --dart-define=STREAMPASS_API_URL=http://10.0.2.2:8080/api/v1
 
 ```bash
 cd client
+# BL-013 Done: place key.properties + JKS (not committed)
 flutter build apk --release
 # Output: build/app/outputs/flutter-apk/app-release.apk
-# NOTE: Currently uses debug signing keys (TODO: BL-013)
+# Current ship: StreamPass-v0.1.1+17-signed-arm64.apk
 ```
 
 ---
@@ -78,7 +85,8 @@ flutter build apk --release
 Hysteria2 relay deployed separately on Ubuntu VPS.  
 Instructions in `docs/02_TZ.md` (relay setup section).
 
-Not managed by StreamPass docker-compose.
+Not managed by StreamPass docker-compose.  
+Prod: NL nodes; multi-region software ready (DE/PL/FI catalog).
 
 ---
 
@@ -108,12 +116,7 @@ docker compose down -v       # delete postgres_data volume
 
 ## Caddy Configuration
 
-**File:** `Caddyfile`
-```
-212-43-156-33.nip.io {
-    reverse_proxy backend:8080
-}
-```
+**File:** `Caddyfile` — reverse_proxy backend; serves `admin/` at `/admin/`; blocks public `/metrics`.
 
 For production domain, update Caddyfile and restart caddy service.
 
@@ -129,18 +132,28 @@ No separate deployment needed.
 
 ---
 
+## Monitoring & Backups
+
+| Component | Detail |
+|-----------|--------|
+| Prometheus | `infrastructure/prometheus/`; scrape backend metrics |
+| Grafana | `infrastructure/grafana/`; `GRAFANA_ADMIN_*` in `.env` |
+| Backups | Daily cron (BL-033) → `/var/backups/streampass`; off-site optional |
+
+See `infrastructure/README.md`.
+
+---
+
 ## CI/CD
 
-**Status:** Not implemented.
+**Status:** Done (BL-010) — `.github/workflows/ci.yml`
 
-Planned workflow:
-1. Push to main → GitHub Actions
+Workflow:
+1. Push / PR → GitHub Actions
 2. `go test ./...` + `flutter test`
-3. `docker compose build`
-4. Push images to registry
-5. Deploy to VPS (manual or automated)
+3. Build checks as configured in workflow
 
-See `docs/04_Backlog.md` BL-010.
+Deploy to VPS remains manual (`docker compose up -d --build`).
 
 ---
 
@@ -149,9 +162,12 @@ See `docs/04_Backlog.md` BL-010.
 | Check | Command |
 |-------|---------|
 | API health | `curl /health` |
+| Admin UI | open `/admin/` |
 | Auth | `curl -X POST /api/v1/login` |
+| Smoke | `.\scripts\SmokeTest.ps1` |
 | Docker logs | `docker compose logs -f backend` |
 | HM logs | `docker compose logs -f healthmonitor` |
+| Grafana | `http://127.0.0.1:3000` (local) |
 | DB | `docker compose exec postgres psql -U streampass -c '\dt'` |
 
 ---
@@ -163,3 +179,4 @@ See `docs/04_Backlog.md` BL-010.
 - Automated rollback
 - Secret manager integration
 - Multi-region *hardware* (доп. VPS DE/PL/FI) — софт готов (каталог + picker); физические ноды добавляются через Admin
+- Off-site backup copy (local daily Done)

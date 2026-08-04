@@ -1,6 +1,6 @@
 # StreamPass — Performance
 
-> Дата: 2026-08-03
+> Дата: 2026-08-05
 
 ---
 
@@ -8,10 +8,10 @@
 
 | Metric | Target | Current Status |
 |--------|--------|----------------|
-| Client startup | ≤ 2 seconds | TODO: Not measured |
-| Connection establishment | ≤ 5 seconds | ❌ Tunnel stub — N/A |
-| Auto-recovery after disconnect | ≤ 10 seconds | ❌ Not implemented |
-| Server availability | ≥ 99.9% | TODO: Not measured |
+| Client startup | ≤ 2 seconds | TODO: Not measured on device |
+| Connection establishment | ≤ 5 seconds | ⚠️ Path works (Hysteria2); not formally measured |
+| Auto-recovery after disconnect | ≤ 10 seconds | ⚠️ Logic present; not formally measured |
+| Server availability | ≥ 99.9% | TODO: Not measured over 30d |
 | Rule update without reinstall | Required | ✅ API-based |
 
 ---
@@ -102,10 +102,10 @@ Prometheus + Grafana (BL-021). Public `/metrics` blocked in Caddy.
 
 | Priority | Optimization | Impact |
 |----------|-------------|--------|
-| P1 | Implement VPN tunnel | Unblocks all client perf metrics |
+| P1 | Measure T1–T4 on device / prod | Close acceptance gap |
 | P2 | Add response caching for GET /rules, /config | Reduce DB reads |
 | P2 | Connection pooling tuning under load | Stability |
-| P3 | CDN for static assets (future web admin) | Latency |
+| P3 | CDN for static assets (admin already local) | Latency |
 | P3 | Multiple backend instances + LB | Horizontal scaling |
 
 ---

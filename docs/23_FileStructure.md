@@ -1,6 +1,6 @@
 # StreamPass — File Structure
 
-> Дата: 2026-08-03 | Actual repository layout
+> Дата: 2026-08-05 | Actual repository layout
 
 ---
 
@@ -8,9 +8,12 @@
 StreamPass/
 ├── README.md                          # Backend quick start
 ├── go.mod                             # Root Go module (streampass)
-├── docker-compose.yml                 # Full stack: PG, Redis, backend, HM, Caddy
-├── Caddyfile                          # Reverse proxy config
+├── go.sum                             # Dependency checksums (BL-027)
+├── docker-compose.yml                 # Full stack: PG, Redis, backend, HM, Caddy, Prom, Grafana
+├── Caddyfile                          # Reverse proxy + /admin/
 ├── .env.example                       # Secrets template
+├── .github/
+│   └── workflows/ci.yml               # CI: go test + flutter test (BL-010)
 │
 ├── shared/                            # Shared Go packages
 │   ├── config/                        # YAML config loader + tests
@@ -26,76 +29,69 @@ StreamPass/
 │   │       └── Dockerfile
 │   ├── internal/
 │   │   ├── domain/                    # Domain models
-│   │   │   ├── user/
-│   │   │   ├── rule/
-│   │   │   ├── relay/
-│   │   │   ├── appconfig/
-│   │   │   ├── subscription/
-│   │   │   └── telemetry/
 │   │   ├── application/               # Use cases / services
-│   │   │   ├── auth/
-│   │   │   ├── billing/
-│   │   │   ├── configsvc/
-│   │   │   ├── relay/
-│   │   │   ├── rule/
-│   │   │   ├── telemetry/
-│   │   │   └── admin/
+│   │   ├── integrationtest/           # Postgres integration tests (BL-011)
 │   │   └── infrastructure/
 │   │       ├── postgres/              # Repositories + migrations
-│   │       │   └── migrations/
-│   │       │       ├── 0001_init.up.sql
-│   │       │       └── 0002_relay_connection_config.up.sql
-│   │       ├── redisclient/           # Custom Redis + SessionStore
-│   │       ├── security/              # Argon2, JWT
-│   │       ├── payment/yookassa/      # ЮKassa HTTP client
+│   │       ├── redisclient/
+│   │       ├── security/
+│   │       ├── payment/yookassa/
+│   │       ├── metrics/               # Prometheus metrics
 │   │       └── http/
-│   │           ├── router/router.go   # ★ All routes
-│   │           ├── handler/           # HTTP handlers
-│   │           ├── middleware/        # Auth, rate limit, logging
-│   │           └── response.go        # JSON helpers
 │   ├── config.example.yaml
 │   └── Dockerfile
 │
+├── admin/                             # ★ Operator Admin UI (BL-020)
+│   ├── index.html
+│   ├── app.js
+│   ├── styles.css
+│   └── README.md
+│
+├── infrastructure/                    # ★ Monitoring configs (BL-021)
+│   ├── prometheus/prometheus.yml
+│   ├── grafana/provisioning/
+│   ├── hysteria-test/
+│   └── README.md
+│
 ├── client/                            # Flutter mobile app
 │   ├── lib/
-│   │   ├── main.dart                  # ★ Entry point, API URL
-│   │   ├── screens/                   # UI screens (8)
-│   │   └── services/                  # auth, api, vpn, settings
+│   │   ├── main.dart
+│   │   ├── screens/
+│   │   └── services/
 │   ├── android/
 │   │   └── app/src/main/kotlin/com/streampass/app/
 │   │       ├── MainActivity.kt
-│   │       ├── StreamPassVpnService.kt  # ★ VPN TUN
+│   │       ├── StreamPassVpnService.kt
 │   │       ├── TunnelBridge.kt
 │   │       ├── BootReceiver.kt
 │   │       └── NativeSettingsChannel.kt
-│   ├── go_core/                       # Go tunnel core (Hysteria2)
-│   │   ├── mobile/tunnel.go           # ★ gomobile entry
-│   │   ├── internal/hyconfig/         # hysteria2:// URI parser
-│   │   ├── internal/tunbridge/        # sing-tun ↔ hysteria bridge
+│   ├── go_core/                       # Go tunnel core (Hysteria2) — NOT stub
+│   │   ├── mobile/                    # gomobile entry (tunnel, log)
+│   │   ├── internal/
+│   │   │   ├── decision/              # Decision Engine
+│   │   │   ├── dnscache/              # DNS Cache + DoH
+│   │   │   ├── hyconfig/              # hysteria2:// parse + fallback
+│   │   │   ├── protect/               # VpnService.protect
+│   │   │   └── tunbridge/             # sing-tun ↔ hysteria
 │   │   ├── go.mod, go.sum
-│   │   └── README.md                  # gomobile build guide
+│   │   └── README.md
 │   ├── android/app/libs/
-│   │   └── streampasscore.aar         # gomobile bind output
-│   ├── test/                          # Flutter tests
+│   │   └── streampasscore.aar
+│   ├── test/                          # Flutter unit + e2e mock
 │   └── pubspec.yaml
 │
 ├── vendor-src/                        # Vendored Go modules
-│   ├── crypto/                        # golang.org/x/crypto (argon2)
-│   ├── sys/                           # golang.org/x/sys (transitive)
-│   ├── pq/                            # github.com/lib/pq
-│   └── mobile/                        # golang.org/x/mobile (gomobile)
+│   ├── crypto/
+│   ├── sys/
+│   ├── pq/
+│   └── mobile/                        # golang.org/x/mobile (present)
 │
-├── docs/                              # ★ Project documentation (34 files)
-├── ai/                                # ★ AI session state (8 files)
-├── reports/                           # ★ Analysis reports
-├── prompts/                           # ★ AI role prompts
-├── templates/                         # Doc templates
-└── scripts/                           # PowerShell automation
-    ├── Build.ps1
-    ├── RunTests.ps1
-    ├── Backup.ps1
-    ├── GenerateDocs.ps1
-    └── SmokeTest.ps1
+├── docs/
+├── ai/
+├── reports/
+├── prompts/
+├── templates/
+└── scripts/                           # SmokeTest, Backup, LoadTest, Build, …
 ```
 
 ---
@@ -109,8 +105,10 @@ StreamPass/
 | Flutter App | `client/lib/main.dart` |
 | VPN Service | `client/android/.../StreamPassVpnService.kt` |
 | Tunnel Core | `client/go_core/mobile/tunnel.go` |
+| Admin UI | `admin/index.html` |
 | Routes | `backend/internal/infrastructure/http/router/router.go` |
 | Migrations | `backend/internal/infrastructure/postgres/migrations/` |
+| CI | `.github/workflows/ci.yml` |
 
 ---
 
@@ -118,10 +116,10 @@ StreamPass/
 
 | Item | Status |
 |------|--------|
-| `.github/workflows/` | Not found |
-| iOS/Windows/macOS targets | Not found |
+| iOS/Windows/macOS targets | Not found (BL-023…025 Open) |
 | `client/android_old/` | Gitignored backup |
-| `client/go_core/streampasscore.aar` | Build artifact (gitignored; use `android/app/libs/`) |
+| `key.properties` / `*.jks` | Local only (BL-013; not committed) |
+| `client/go_core/streampasscore.aar` | Prefer `android/app/libs/` |
 
 ---
 

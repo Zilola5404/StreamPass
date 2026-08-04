@@ -1,7 +1,7 @@
 # StreamPass — AI Handoff Guide
 
 > Инструкция передачи проекта между AI-сессиями (Cursor, Claude Code, Copilot, Codex)  
-> Дата: 2026-08-03
+> Дата: 2026-08-05
 
 ---
 
@@ -132,12 +132,13 @@ prompts/
 
 ## Частые ошибки AI (избегать)
 
-1. **Придумывать компоненты** — OAuth, Telegram, Admin Panel UI не существуют
+1. **Придумывать компоненты** — OAuth, Telegram не существуют; Admin UI **есть** (`admin/`, `/admin/`)
 2. **Не обновлять docs** — после каждой задачи обновлять Progress + LastSession
 3. **Ломать Clean Architecture** — business logic в handlers
 4. **Коммитить без запроса** — только по explicit request
-5. **Игнорировать stub status** — VPN tunnel НЕ работает, go_core = stub
-6. **Доверять README blindly** — Health Monitor section outdated
+5. **Считать VPN stub** — туннель **работает** (Hysteria2 + AAR); не помечать BL-001…003 как Open
+6. **Стартовать BL-023/024/025 или ЮKassa live** без явного запроса пользователя
+7. **Игнорировать backlog** — статусы в `docs/04_Backlog.md` (BL-004 Skipped, BL-030 Blocked)
 
 ---
 

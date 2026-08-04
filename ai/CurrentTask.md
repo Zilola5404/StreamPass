@@ -1,20 +1,17 @@
 # Current Task
 
-> Updated: 2026-08-04
+> Updated: 2026-08-05
 
-## Done this session
+## Done
 
-- **BL-031** Flutter E2E with mock backend (`test/e2e_flow_test.dart`)
-- **BL-032** API loadtest (`scripts/loadtest`, LoadTest.ps1, optional k6)
-- Earlier: BL-026/027/033, APK +17
+- Docs sync to product (AIContext, CurrentState, KnownLimitations, AI pack, SmokeTest)
+- BL-031 / BL-032 / BL-033 / BL-026 / APK +17 earlier
 
 ## Explicitly skipped / blocked
 
-- BL-004 / BL-030 — ЮKassa
-- BL-023 / BL-024 / BL-025 — Windows / iOS / macOS clients
+- BL-004 / BL-030 — ЮKassa  
+- BL-023 / BL-024 / BL-025 — Windows / iOS / macOS  
 
-## Next (optional)
+## Idle
 
-- Device VPN E2E with +17
-- Off-site backup copy
-- When ЮKassa ready → BL-030
+Ждать запрос пользователя (device E2E / off-site backup / payments / new OS).

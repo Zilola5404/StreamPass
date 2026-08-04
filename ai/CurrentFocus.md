@@ -1,31 +1,19 @@
 # Current Focus
 
-> Updated: 2026-08-03
+> 2026-08-05
 
-## Главный фокус проекта сейчас
+## Focus
 
-**BL-005: Decision Engine (клиент) — per-connection DIRECT/RELAY routing.**
+Стабилизация и эксплуатация Android MVP; документация в sync.
 
-Hysteria2 transport в go_core реализован, AAR подключён. Следующий критический шаг — проверка на устройстве с live relay.
+## Do
 
-## Why This Focus
+- Device E2E +17 при наличии телефона
+- Off-site backup (optional)
+- Мелкие баги / docs при расхождениях
 
-- Backend: MVP functional
-- Android UI: screens + VPNService готовы
-- VPN tunnel: go_core + AAR — done (BL-001/002)
-- Decision Engine / Rule Engine — следующий этап после E2E
+## Don't (без явного запроса)
 
-## What NOT to focus on now
-
-- Admin Panel UI (P2)
-- iOS/Windows/macOS clients (post-MVP)
-- Prometheus/Grafana (post-MVP)
-- Крупные рефакторинги документации без изменений кода
-
-## Success Metric
-
-User presses Connect → VPN active → ifconfig.me shows relay IP.
-
-## Related Backlog
-
-BL-003 → BL-005 → BL-006 → BL-004 → BL-010
+- Live ЮKassa / BL-030
+- Windows / iOS / macOS клиенты
+- Большой рефакторинг работающего VPN path

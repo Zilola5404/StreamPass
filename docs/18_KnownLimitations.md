@@ -1,6 +1,6 @@
 # StreamPass — Known Limitations
 
-> Дата: 2026-08-03 | Только подтверждённые ограничения из кода
+> Дата: 2026-08-05 | Только подтверждённые ограничения
 
 ---
 
@@ -8,13 +8,11 @@
 
 | Limitation | Detail |
 |------------|--------|
-| Single platform | Android only; no iOS, Windows, macOS |
-| One-button connect | Android VPN: connect works; data-plane uses `VpnService.protect()` (v0.1.1+10) |
-| No on-device routing | Decision Engine + rule hot-reload done; DIRECT/RELAY underlay sockets use `VpnService.protect()` (+10) |
-| Exclusions local-only | Synced via GET/PUT `/api/v1/exclusions` (BL-014); local SharedPreferences cache remains |
-| Boot auto-connect | «Автоподключение» при boot не поднимает VPN до открытия приложения (см. `BootReceiver.kt`) |
-| No auto-update | Client APK: soft/hard prompt via GET /config (`latest_client_version` + `client_download_url`); rules/config already poll. Certs still manual. |
-| Subscription cancel | Immediate revocation, not "stop auto-renewal" |
+| Single platform | Android only; iOS / Windows / macOS — Open (BL-023…025) |
+| Region coverage | Софт multi-region готов; в проде пока только NL relays |
+| Boot auto-connect | «Автоподключение» при boot не поднимает VPN до открытия приложения |
+| Subscription cancel | Immediate revocation; auto-renewal Blocked (нужна ЮKassa) |
+| Cert rotation | Client soft/hard APK update есть; ротация TLS certs relay — manual |
 
 ---
 
@@ -22,14 +20,13 @@
 
 | Limitation | Detail |
 |------------|--------|
-| Go monolith | No horizontal scaling without load balancer + multiple instances |
-| Custom JWT/Redis | Not battle-tested at scale |
+| Go monolith | No HA without multiple instances + LB |
 | Redis no persistence | Sessions lost on Redis restart |
-| Health check | TCP probe only, not full Hysteria2 handshake |
-| No go.sum | Reproducible builds not guaranteed |
-| Admin via API key | No RBAC, no audit log |
+| Health check | TCP probe only (не полный Hysteria2 handshake) |
+| Admin via API key | `/admin/` + `X-Admin-Key`; нет RBAC / audit log |
 | Telemetry no FK | Orphan events if user deleted |
 | PostgreSQL sslmode=disable | Internal Docker network only |
+| TCP underlay | UDP fallback портов есть; TCP underlay — later |
 
 ---
 
@@ -37,12 +34,11 @@
 
 | Limitation | Detail |
 |------------|--------|
-| Single VPS | No HA, no failover |
-| nip.io domain | Not suitable for production branding |
-| No CI/CD | Manual build and deploy |
-| No monitoring | No Prometheus/Grafana |
-| No automated backup | ~~Postgres volume only~~ → daily cron (BL-033) |
-| Caddy single instance | No CDN, no WAF |
+| Single VPS | No HA / multi-AZ failover |
+| nip.io domain | OK для MVP; не брендовый prod domain |
+| Monitoring bind | Grafana/Prometheus на `127.0.0.1` (не публично) |
+| Backup locality | Daily local gzip cron; off-site copy ещё нет |
+| Caddy single instance | No CDN / WAF |
 
 ---
 
@@ -50,16 +46,15 @@
 
 | Limitation | Detail |
 |------------|--------|
-| Debug signing (Android) | Release uses `key.properties` + JKS when present; otherwise debug fallback (BL-013) |
-| connection_config plaintext | Relay secrets in DB without encryption |
-| No refresh token rotation | Client stores refresh, no auto-refresh flow |
-| Webhook no signature verify | Relies on re-fetch from provider |
+| connection_config plaintext | Relay secrets in DB without field-level encryption |
+| Webhook signature | ЮKassa path relies on provider re-fetch (live не проверен) |
+| Admin key static | Rotation manual |
 
 ---
 
-## MVP Scope Exclusions (by design, ТЗ §21)
+## MVP Scope Exclusions (ТЗ §21)
 
-Kubernetes, ML, AI routing, MASQUE, Multipath QUIC, custom transport, ASN/GeoIP routing, browser extension, Linux desktop, OpenWRT, corporate version, referral system, multi-hop.
+Kubernetes, ML, AI routing, MASQUE, Multipath QUIC, custom transport, ASN/GeoIP, browser extension, Linux desktop, OpenWRT, corporate, referral, multi-hop.
 
 ---
 
@@ -67,6 +62,6 @@ Kubernetes, ML, AI routing, MASQUE, Multipath QUIC, custom transport, ASN/GeoIP 
 
 | Limitation | Workaround |
 |------------|------------|
-| No Admin Panel | Use curl with X-Admin-Key |
-| No CI/CD | Manual `go test ./...` before deploy |
-| VPN stub | External Hiddify client with manual config (temporary) |
+| No DE/PL/FI VPS yet | Register new relays in Admin → Relays with region `de`/`pl`/`fi` |
+| Off-site backup | Copy `/var/backups/streampass` to second host / S3 manually |
+| Live ЮKassa | Sandbox keys + BL-004 when requested |

@@ -1,6 +1,6 @@
 # StreamPass — Environment
 
-> Дата: 2026-08-03
+> Дата: 2026-08-05
 
 ---
 
@@ -48,6 +48,14 @@
 | `ADMIN_API_KEY` | (from .env) | Admin key for HM |
 | `CHECK_INTERVAL` | `60s` | Probe interval |
 | `CHECK_TIMEOUT` | `5s` | TCP probe timeout |
+
+### Grafana / Monitoring
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GRAFANA_ADMIN_USER` | `admin` | Grafana login user |
+| `GRAFANA_ADMIN_PASSWORD` | `changeme` | Grafana login password (change in prod) |
+| `GRAFANA_ROOT_URL` | `http://127.0.0.1:3000` | Grafana root URL (local-only) |
 
 ---
 

@@ -1,41 +1,43 @@
 # Current Sprint
 
-> Sprint start: 2026-08-03 | Duration: TODO
+> Sprint: 2026-08-03 → 2026-08-05 | Closed for MVP Android track
 
 ## Sprint Goal
 
-Завершить VPN tunnel (go_core + AAR) и провести E2E тест на Android.
+Довести Android MVP: VPN, rules, admin/ops, regions, backups, tests — **достигнуто**.
 
 ## Tasks
 
-| ID | Task | Status | Assignee |
-|----|------|--------|----------|
-| DOC-001 | Initialize AI-friendly documentation | ✅ Done | AI |
-| DOC-002 | Create analysis reports | ✅ Done | AI |
-| DOC-003 | Create role-specific prompts | ✅ Done | AI |
-| BL-001 | Hysteria2 tunnel in go_core | ✅ Done | AI |
-| BL-002 | Build streampasscore.aar | ✅ Done | AI |
-| BL-003 | End-to-end VPN on Android | 🔄 Next | TODO |
-| BL-005 | Decision Engine on client | ⬜ Open | TODO |
-| BL-006 | Rule Engine on client | ⬜ Open | TODO |
+| ID | Task | Status |
+|----|------|--------|
+| DOC-001…003 | AI docs / reports / prompts | ✅ |
+| BL-001…003 | Tunnel + AAR + E2E code | ✅ |
+| BL-005…006 | Decision + Rule Engine | ✅ |
+| BL-010…017 | CI, tests, signing, exclusions, refresh, DNS, fallback | ✅ |
+| BL-020…022 | Admin, monitoring, auto-update | ✅ |
+| BL-026…027 | Regions + go.sum | ✅ |
+| BL-031…033 | Flutter E2E, loadtest, backups | ✅ |
+| BL-004 / 030 | ЮKassa / auto-renew | ⏭ Skipped / Blocked |
+| BL-023…025 | Win / iOS / macOS | ⬜ Open (out of sprint) |
 
 ## Progress
 
-- Documentation: 100%
-- VPN tunnel (code + AAR): ~90% (E2E test pending)
-- Sprint overall: ~70%
+- Android MVP track: ~95% (device re-check optional)
+- Ops (admin/monitor/backup/regions): Done
+- Payments live: not started by choice
 
 ## Blockers
 
-1. E2E test requires physical Android device + live relay with `connection_config`
-2. No CI pipeline for gomobile/AAR yet
+Нет критических блокеров для Android MVP. ЮKassa и другие ОС — сознательно отложены.
 
 ## Daily Log
 
 | Date | Done |
 |------|------|
-| 2026-08-03 | Full documentation; BL-001/002 Hysteria2 tunnel + AAR |
+| 2026-08-03 | Docs init; tunnel + AAR |
+| 2026-08-04 | Full P1/P2/P3 (кроме ЮKassa/desktop); APK +17; admin login fix |
+| 2026-08-05 | Docs sync to product reality |
 
-## Retrospective Notes
+## Retrospective
 
-TODO: After BL-003 device test
+Документация отставала от кода — синхронизирована 2026-08-05. Дальше: обновлять CurrentState/AIContext при каждом Done BL.

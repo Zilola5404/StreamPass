@@ -7,17 +7,20 @@
 | **API (prod)** | `https://212-43-156-33.nip.io/api/v1` |
 | **Клиент** | Flutter Android (`client/`), go_core → `streampasscore.aar` |
 | **Backend** | Go 1.22 Clean Architecture (`backend/`) |
-| **Статус** | MVP в разработке — см. `docs/04_Backlog.md` |
+| **Статус** | Android MVP (код) готов — см. `docs/04_Backlog.md` / `docs/03_CurrentState.md` |
 
 ## Репозиторий
 
 ```
 backend/          — API-сервер (auth, billing, relays, rules, exclusions…)
-client/           — Flutter Android + go_core (Hysteria2 / Decision Engine)
-shared/           — общий Go-код (errors, logger, config, idgen)
+client/           — Flutter Android + go_core (Hysteria2 / Decision / DNS)
+admin/            — Operator UI (/admin/)
+shared/           — общий Go-код (+ region catalog)
+infrastructure/   — Prometheus / Grafana provisioning
 docs/             — ТЗ, backlog, API, architecture
-.ai / ai/         — контекст для агентов (CurrentTask.md)
+ai/               — контекст для агентов (CurrentTask.md)
 .github/workflows — CI: go test, flutter analyze/test, docker compose build
+scripts/          — Backup, SmokeTest, LoadTest, …
 ```
 
 ## Backend — быстрый старт
@@ -52,12 +55,15 @@ flutter build apk --release --target-platform android-arm64
 
 ### Что умеет клиент сейчас
 
-- Connect / disconnect VPN (Hysteria2 + TUN)
-- `VpnService.protect` для underlay-сокетов
+- Connect / disconnect VPN (Hysteria2 + TUN + `protect`)
 - Decision Engine + hot-reload правил (`GET /rules`)
+- DNS Cache + DoH
 - Пользовательские исключения (`GET/PUT /exclusions`)
 - UDP fallback портов 443 → 8443 → 24443
 - Авто-refresh access token (`POST /refresh`)
+- Выбор региона / relay (BL-026)
+- Soft/hard update prompt по `GET /config` (BL-022)
+- APK: `v0.1.1+17`
 
 ## Документация
 
@@ -81,10 +87,13 @@ flutter build apk --release --target-platform android-arm64
 
 ## Что ещё открыто
 
-- Live-тест ЮKassa (BL-004 — пропущен)  
-- Production signing APK (BL-013)  
-- DNS Cache + DoH (BL-016)  
-- TCP fallback underlay (после UDP в BL-017)  
-- Admin Panel UI, мониторинг — P2  
+- Live-тест ЮKassa (BL-004 — Skipped) → auto-renewal (BL-030 Blocked)  
+- Windows / iOS / macOS клиенты (BL-023…025)  
+- Off-site копия бэкапов (локальный cron уже есть)  
+- Физический device E2E re-check APK +17  
+- TCP underlay fallback (UDP ports уже есть, BL-017)  
+- Брендовый домен вместо nip.io  
+
+**Уже Done:** Admin UI, Prometheus/Grafana, DNS/DoH, release signing path, regions, backups, CI, Flutter E2E, loadtest.
 
 Полный список: `docs/04_Backlog.md`.
