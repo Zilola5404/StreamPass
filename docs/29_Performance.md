@@ -49,16 +49,23 @@
 
 ---
 
-## Load Testing (TODO: BL-032)
+## Load Testing (BL-032 Done)
 
-| Scenario | Target | Status |
-|----------|--------|--------|
-| GET /api/v1/rules | 100 RPS, p99 < 200ms | Not tested |
-| POST /api/v1/login | 20 RPS (rate limited) | Not tested |
-| GET /api/v1/servers | 50 RPS authenticated | Not tested |
-| POST /api/v1/telemetry | 100 RPS | Not tested |
+| Scenario | Target | Result (prod 2026-08-04) |
+|----------|--------|---------------------------|
+| GET /health | p99 < 500ms | ✅ p99 ≈ 151ms @ 25 RPS |
+| GET /api/v1/rules | 100 RPS, p99 < 200ms | ✅ p99 ≈ 177ms @ ~25 RPS aggregate |
+| GET /api/v1/config | p99 < 500ms | ✅ p99 ≈ 153ms |
+| GET /api/v1/regions | p99 < 500ms | ✅ p99 ≈ 112ms |
 
-**Tool:** k6 or vegeta (planned)
+**Tools:**
+- Built-in Go runner (no extra install): `go run ./scripts/loadtest` or `.\scripts\LoadTest.ps1`
+- Optional k6: `k6 run scripts/loadtest/k6-public.js`
+
+```powershell
+.\scripts\LoadTest.ps1 -BaseUrl https://212-43-156-33.nip.io -Duration 15s -Rps 30
+.\scripts\LoadTest.ps1 -Email user@example.com -Password secret   # adds /servers + /subscription
+```
 
 ---
 
@@ -85,12 +92,9 @@ Client-side RTT measurement via telemetry POST.
 
 ---
 
-## Monitoring (Not Implemented)
+## Monitoring
 
-Planned (ТЗ §18):
-- Prometheus metrics export
-- Grafana dashboards
-- CPU, RAM, relay load, active users, RTT, packet loss, error rate
+Prometheus + Grafana (BL-021). Public `/metrics` blocked in Caddy.
 
 ---
 

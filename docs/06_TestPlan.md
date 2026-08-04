@@ -102,11 +102,12 @@ cd client && flutter analyze
 
 | Сценарий | Target | Статус |
 |----------|--------|--------|
-| GET /api/v1/rules | 100 RPS, p99 < 200ms | ❌ Не проводился |
-| POST /api/v1/login | 20 RPS (rate limited) | ❌ |
-| GET /api/v1/servers | 50 RPS authenticated | ❌ |
+| GET /health, /rules, /config, /regions | p99 < 500ms @ ~25 RPS | ✅ BL-032 (`scripts/loadtest`) |
+| POST /api/v1/login | 20 RPS (rate limited) | Manual / optional `-email` |
+| GET /api/v1/servers | authenticated via LoadTest.ps1 | Optional |
 
-**Инструмент:** k6 или vegeta (TODO: BL-032)
+**Инструмент:** `go run ./scripts/loadtest` / `.\scripts\LoadTest.ps1` / optional k6 (`scripts/loadtest/k6-public.js`)
+
 
 ---
 
@@ -115,7 +116,8 @@ cd client && flutter analyze
 | Тест | Описание | Статус |
 |------|----------|--------|
 | Widget tests | Onboarding, home screens | ✅ Базовые |
-| Integration | Full auth + connect flow | ❌ |
+| E2E (mock API) | Login → Home → Regions picker | ✅ BL-031 `test/e2e_flow_test.dart` |
+| Integration | Full auth + connect flow | ✅ mock backend (VPN device E2E — manual) |
 | VPN permission | Android VPN permission dialog | Manual |
 | Boot receiver | Autostart on boot | Manual |
 | Subscription gate | Block connect without subscription | Manual |

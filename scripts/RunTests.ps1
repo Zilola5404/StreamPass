@@ -2,7 +2,7 @@
 # Usage: .\scripts\RunTests.ps1 [-Target Backend|Client|All]
 
 param(
-    [ValidateSet("Backend", "Client", "All")]
+    [ValidateSet("Backend", "Client", "All", "Load")]
     [string]$Target = "All"
 )
 
@@ -31,9 +31,19 @@ function Test-Client {
     Pop-Location
 }
 
+function Test-Load {
+    Write-Host "=== Load Test (BL-032, short) ===" -ForegroundColor Cyan
+    Push-Location $Root
+    go run ./scripts/loadtest -base https://212-43-156-33.nip.io -duration 5s -rps 15
+    if ($LASTEXITCODE -ne 0) { throw "loadtest failed" }
+    Write-Host "Load test: OK" -ForegroundColor Green
+    Pop-Location
+}
+
 switch ($Target) {
     "Backend" { Test-Backend }
     "Client"  { Test-Client }
+    "Load"    { Test-Load }
     "All"     { Test-Backend; Test-Client }
 }
 

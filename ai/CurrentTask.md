@@ -2,14 +2,19 @@
 
 > Updated: 2026-08-04
 
-## Done
+## Done this session
 
-- **BL-033** Postgres backup automation: `backup-postgres.sh`, restore, cron installer, docs
-- **BL-026** multi-region + APK **v0.1.1+17**
-- **BL-027** go.sum Done
+- **BL-031** Flutter E2E with mock backend (`test/e2e_flow_test.dart`)
+- **BL-032** API loadtest (`scripts/loadtest`, LoadTest.ps1, optional k6)
+- Earlier: BL-026/027/033, APK +17
 
-## Next
+## Explicitly skipped / blocked
 
-- Off-site backup copy (S3) — optional follow-up
-- BL-023 Windows / BL-031 Flutter E2E / BL-032 load tests
-- Device E2E with +17 APK
+- BL-004 / BL-030 — ЮKassa
+- BL-023 / BL-024 / BL-025 — Windows / iOS / macOS clients
+
+## Next (optional)
+
+- Device VPN E2E with +17
+- Off-site backup copy
+- When ЮKassa ready → BL-030

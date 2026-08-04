@@ -45,9 +45,9 @@
 
 | ID | Название | Описание | Приоритет | Статус | Зависимости | Ответственный |
 |----|----------|----------|-----------|--------|-------------|---------------|
-| BL-030 | Subscription auto-renewal | Автопродление подписки через ЮKassa | P3 | Open | BL-004 | TODO |
-| BL-031 | E2E tests Flutter | Integration tests с mock backend | P3 | Open | BL-003 | TODO |
-| BL-032 | Load tests API | k6/vegeta на /api/v1 | P3 | Open | BL-010 | TODO |
+| BL-030 | Subscription auto-renewal | Автопродление подписки через ЮKassa | P3 | Blocked | BL-004 (Skipped) | — |
+| BL-031 | E2E tests Flutter | Integration tests с mock backend | P3 | Done | BL-003 | 2026-08-04 |
+| BL-032 | Load tests API | k6/vegeta на /api/v1 | P3 | Done | BL-010 | 2026-08-04 |
 | BL-033 | Backup automation | Postgres backup cron | P3 | Done | — | 2026-08-04 |
 
 ---
