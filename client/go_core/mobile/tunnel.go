@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/netip"
 	"sync"
-	"time"
 
 	"github.com/apernet/hysteria/core/v2/client"
 	"streampass/go_core/internal/decision"
@@ -72,29 +71,22 @@ type tunnelRuntime struct {
 func PrepareRelay(relayHost string, relayPort int, connectionConfig string) string {
 	StopTunnel()
 
-	cfg, parsed, err := hyconfig.BuildClientConfig(connectionConfig, relayHost, relayPort)
-	if err != nil {
-		return err.Error()
-	}
-
-	start := time.Now()
-	hyClient, _, err := client.NewClient(cfg)
+	result, err := hyconfig.ConnectWithFallback(connectionConfig, relayHost, relayPort)
 	if err != nil {
 		return fmt.Errorf("hysteria connect: %w", err).Error()
 	}
-	pingMs := int(time.Since(start).Milliseconds())
 
 	relayLabel := relayHost
 	if relayLabel == "" {
-		relayLabel = parsed.ServerHost
+		relayLabel = result.Parsed.ServerHost
 	}
 
 	tunnelMu.Lock()
 	prepared = &tunnelRuntime{
-		hy:         hyClient,
-		mtu:        parsed.MTU,
+		hy:         result.Client,
+		mtu:        result.Parsed.MTU,
 		relayLabel: relayLabel,
-		pingMs:     pingMs,
+		pingMs:     result.PingMs,
 	}
 	tunnelMu.Unlock()
 	return ""
@@ -208,26 +200,19 @@ func runTunnel(fd int, relayHost string, relayPort int, connectionConfig string,
 	} else {
 		stopTunnelSessions()
 
-		cfg, parsed, err := hyconfig.BuildClientConfig(connectionConfig, relayHost, relayPort)
+		result, err := hyconfig.ConnectWithFallback(connectionConfig, relayHost, relayPort)
 		if err != nil {
-			emitError(cb, err)
+			emitError(cb, fmt.Errorf("hysteria connect: %w", err))
 			return
 		}
-
-		start := time.Now()
-		var err2 error
-		hyClient, _, err2 = client.NewClient(cfg)
-		if err2 != nil {
-			emitError(cb, fmt.Errorf("hysteria connect: %w", err2))
-			return
-		}
-		pingMs = int(time.Since(start).Milliseconds())
-		if parsed.MTU > 0 {
-			mtu = parsed.MTU
+		hyClient = result.Client
+		pingMs = result.PingMs
+		if result.Parsed.MTU > 0 {
+			mtu = result.Parsed.MTU
 		}
 		relayLabel = relayHost
 		if relayLabel == "" {
-			relayLabel = parsed.ServerHost
+			relayLabel = result.Parsed.ServerHost
 		}
 	}
 

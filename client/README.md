@@ -1,17 +1,29 @@
-# streampass
+# StreamPass Client (Flutter / Android)
 
-A new Flutter project.
+Android-клиент StreamPass: UI на Flutter, туннель в Go (`go_core`) через gomobile AAR.
 
-## Getting Started
+## Сборка APK (лёгкий arm64)
 
-This project is a starting point for a Flutter application.
+```bash
+flutter pub get
+flutter build apk --release --target-platform android-arm64
+```
 
-A few resources to get you started if this is your first Flutter project:
+Файл: `build/app/outputs/flutter-apk/app-release.apk` (~18 MB).
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Go core (AAR)
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+# JAVA_HOME = Android Studio JBR
+cd go_core
+gomobile bind -target=android -androidapi=21 -o streampasscore.aar ./mobile
+cp streampasscore.aar ../android/app/libs/
+```
+
+См. также `go_core/README.md`.
+
+## Основные экраны
+
+Home (connect), servers, subscription, settings / exclusions, diagnostics, statistics.
+
+API base задаётся в приложении (prod: `https://212-43-156-33.nip.io/api/v1`).

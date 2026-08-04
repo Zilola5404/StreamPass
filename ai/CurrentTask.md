@@ -4,20 +4,15 @@
 
 ## Главная задача
 
-**BL-010: CI/CD GitHub Actions** (ЮKassa BL-004 пропущена)
-
-## Описание
-
-GitHub Actions: build, test, (опционально docker push).
+**BL-013: Release signing Android** (следующий Open P1)  
+или **BL-016: DNS Cache + DoH** — по приоритету продукта.
 
 ## Skipped
 
-**BL-004: Live-тест ЮKassa** — пропущена по решению 2026-08-04
+**BL-004: Live-тест ЮKassa** — пропущена 2026-08-04
 
-## Previous Task (Completed)
+## Completed this session
 
-**Protect + BL-014** — 2026-08-04
-
-- `VpnService.protect(fd)` / SocketProtector — интернет при connected
-- Exclusions sync: GET/PUT `/api/v1/exclusions`
-- Build: **v0.1.1+10 (protect-fix-v1)**
+- Protect + BL-014 (v0.1.1+10)
+- BL-010 CI/CD, BL-012 README, BL-015 refresh (клиент), BL-017 UDP fallback
+- Build: **v0.1.1+11 (fallback-udp-v1)**
