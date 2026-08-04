@@ -63,6 +63,7 @@ class StreamPassVpnService : VpnService() {
     private var tunnelBridge: TunnelBridge? = null
     private val scope = CoroutineScope(Dispatchers.IO + Job())
     private val mainHandler = Handler(Looper.getMainLooper())
+    @Volatile private var tornDown = false
 
     private var relayId: String = ""
     private var relayHost: String = ""
@@ -75,6 +76,7 @@ class StreamPassVpnService : VpnService() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        tornDown = false
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -123,10 +125,11 @@ class StreamPassVpnService : VpnService() {
 
     private suspend fun establishTunnel() {
         try {
+            if (tornDown) return
             if (relayHost.isEmpty()) {
                 throw IllegalStateException("No relay host provided — was GET /servers called first?")
             }
-            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+8 crashfix")
+            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+9 disconnectfix")
             ConnectLogger.log(this, "establishTunnel: validating connection_config")
             if (connectionConfig.isBlank()) {
                 throw IllegalStateException("connection_config is empty — relay misconfigured in backend")
@@ -149,10 +152,16 @@ class StreamPassVpnService : VpnService() {
             // otherwise QUIC packets to the relay loop into the empty interface.
             ConnectLogger.log(this, "PrepareRelay before TUN (relay=$relayHost:$relayPort)")
             val prepareErr = bridge.prepareRelay(relayHost, relayPort, connectionConfig)
+            if (tornDown) return
             if (prepareErr != null) {
                 throw IllegalStateException(prepareErr)
             }
             ConnectLogger.log(this, "PrepareRelay OK, establishing TUN")
+
+            if (tornDown) {
+                bridge.stopTunnel()
+                return
+            }
 
             tunInterface = Builder()
                 .setSession("StreamPass")
@@ -168,8 +177,16 @@ class StreamPassVpnService : VpnService() {
                 ?: throw IllegalStateException("VPN interface could not be established")
             ConnectLogger.log(this, "TUN established fd=$fd mtu=1400")
 
+            if (tornDown) {
+                tunInterface?.close()
+                tunInterface = null
+                bridge.stopTunnel()
+                return
+            }
+
             bridge.startTunnel(fd, relayHost, relayPort, connectionConfig, rulesJson, exclusionsJson)
         } catch (e: Exception) {
+            if (tornDown) return
             Log.e(TAG, "establishTunnel failed", e)
             ConnectLogger.log(this, "establishTunnel failed: ${e.message}")
             emit("error", error = e.message ?: "unknown error")
@@ -185,18 +202,36 @@ class StreamPassVpnService : VpnService() {
     }
 
     private fun tearDown() {
+        if (tornDown) return
+        tornDown = true
         ConnectLogger.log(this, "tearDown")
-        releaseResources()
-        emit("disconnected")
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        scope.launch {
+            try {
+                releaseResources()
+            } catch (t: Throwable) {
+                Log.e(TAG, "releaseResources failed", t)
+                ConnectLogger.log(this@StreamPassVpnService, "releaseResources failed: ${t.message}")
+            }
+            mainHandler.post {
+                emit("disconnected")
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
+        }
     }
 
     override fun onDestroy() {
         // Never call stopSelf() from onDestroy — that crashes the process
         // when Android tears down the service (e.g. after APK update).
         ConnectLogger.log(this, "onDestroy")
-        releaseResources()
+        if (!tornDown) {
+            tornDown = true
+            try {
+                releaseResources()
+            } catch (t: Throwable) {
+                Log.e(TAG, "onDestroy releaseResources failed", t)
+            }
+        }
         instance = null
         super.onDestroy()
     }

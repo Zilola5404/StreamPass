@@ -22,9 +22,10 @@ type StatusCallback interface {
 }
 
 var (
-	tunnelMu sync.Mutex
-	active   *tunnelRuntime
-	prepared *tunnelRuntime
+	tunnelMu   sync.Mutex
+	active     *tunnelRuntime
+	prepared   *tunnelRuntime
+	runTunnelWg sync.WaitGroup
 )
 
 type tunnelRuntime struct {
@@ -86,7 +87,11 @@ func takePreparedSession() *tunnelRuntime {
 // rulesJSON / exclusionsJSON are optional payloads from GET /api/v1/rules
 // and local user exclusions (BL-005 Decision Engine).
 func StartTunnel(fd int, relayHost string, relayPort int, connectionConfig string, rulesJSON string, exclusionsJSON string, cb StatusCallback) {
-	go runTunnel(fd, relayHost, relayPort, connectionConfig, rulesJSON, exclusionsJSON, cb)
+	runTunnelWg.Add(1)
+	go func() {
+		defer runTunnelWg.Done()
+		runTunnel(fd, relayHost, relayPort, connectionConfig, rulesJSON, exclusionsJSON, cb)
+	}()
 }
 
 // DecideRoute evaluates routing for diagnostics (host may be empty when only IP known).
@@ -134,6 +139,11 @@ func ActiveRulesVersion() int {
 
 // StopTunnel stops the active tunnel session, if any.
 func StopTunnel() {
+	stopTunnelSessions()
+	runTunnelWg.Wait()
+}
+
+func stopTunnelSessions() {
 	tunnelMu.Lock()
 	if prepared != nil {
 		prepared.close()
@@ -169,7 +179,7 @@ func runTunnel(fd int, relayHost string, relayPort int, connectionConfig string,
 		relayLabel = relaySession.relayLabel
 		pingMs = relaySession.pingMs
 	} else {
-		StopTunnel()
+		stopTunnelSessions()
 
 		cfg, parsed, err := hyconfig.BuildClientConfig(connectionConfig, relayHost, relayPort)
 		if err != nil {
