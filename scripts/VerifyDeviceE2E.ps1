@@ -22,7 +22,7 @@ Write-Host "API: $BaseUrl"
 Write-Host "APK: $ApkPath"
 
 & "$Root\scripts\SmokeTest.ps1" -BaseUrl $BaseUrl
-if ($LASTEXITCODE -ne 0) { throw "smoke failed" }
+if (-not $?) { throw "smoke failed" }
 
 $regions = Invoke-RestMethod "$BaseUrl/api/v1/regions"
 Write-Host ("Regions: " + (($regions | ForEach-Object { $_.code }) -join ", "))

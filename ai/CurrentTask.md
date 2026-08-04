@@ -2,16 +2,18 @@
 
 > Updated: 2026-08-05
 
-## Done
+## Done just now
 
-- Docs sync to product (AIContext, CurrentState, KnownLimitations, AI pack, SmokeTest)
-- BL-031 / BL-032 / BL-033 / BL-026 / APK +17 earlier
+- DE/PL/FI region listeners on API VPS (8443/24443/34443) + DB register + healthy
+- Off-site: encrypted dir on VPS + pull to `backups/offsite` on PC
+- Healthmonitor skips UDP-only unhealthy flips
+- APK **v0.1.1+18** built
+- API smoke PASS; **no adb device** → VPN connect remains manual on phone
 
-## Explicitly skipped / blocked
+## Note
 
-- BL-004 / BL-030 — ЮKassa  
-- BL-023 / BL-024 / BL-025 — Windows / iOS / macOS  
+DE/PL/FI exit IP is still NL (same VPS) until separate geo hosts exist.
 
-## Idle
+## APK
 
-Ждать запрос пользователя (device E2E / off-site backup / payments / new OS).
+`client/build/app/outputs/flutter-apk/StreamPass-v0.1.1+18-signed-arm64.apk`
