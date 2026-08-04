@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StreamPass Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <section id="view-login" class="view login-view" hidden>
+      <div class="login-panel">
+        <p class="brand">StreamPass</p>
+        <h1>Admin</h1>
+        <p class="lede">Операторская панель. Ключ хранится только в sessionStorage этой вкладки.</p>
+        <label>
+          API base
+          <input id="login-base" type="url" placeholder="https://example.com/api/v1" autocomplete="off" />
+        </label>
+        <label>
+          X-Admin-Key
+          <input id="login-key" type="password" placeholder="ADMIN_API_KEY" autocomplete="off" />
+        </label>
+        <p id="login-error" class="error" hidden></p>
+        <button id="login-submit" type="button">Войти</button>
+      </div>
+    </section>
+
+    <section id="view-app" class="view app-view" hidden>
+      <header class="topbar">
+        <div>
+          <p class="brand compact">StreamPass Admin</p>
+          <p id="session-base" class="muted mono"></p>
+        </div>
+        <button id="logout" type="button" class="ghost">Выйти</button>
+      </header>
+      <nav class="tabs" id="tabs">
+        <button type="button" data-tab="health" class="tab active">Health</button>
+        <button type="button" data-tab="users" class="tab">Users</button>
+        <button type="button" data-tab="relays" class="tab">Relays</button>
+        <button type="button" data-tab="rules" class="tab">Rules</button>
+        <button type="button" data-tab="config" class="tab">Config</button>
+      </nav>
+      <main>
+        <div id="tab-health" class="tab-panel">
+          <h2>Health</h2>
+          <p class="muted">Проверка доступа к API и валидности Admin Key через <code>GET /servers/all</code>.</p>
+          <button id="health-check" type="button">Проверить</button>
+          <pre id="health-out" class="mono panel"></pre>
+        </div>
+
+        <div id="tab-users" class="tab-panel" hidden>
+          <div class="row-actions">
+            <h2 style="margin:0;flex:1">Users</h2>
+            <button id="users-refresh" type="button" class="ghost">Обновить</button>
+          </div>
+          <p id="users-error" class="error" hidden></p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>Subscription</th>
+                  <th>Until</th>
+                  <th>Created</th>
+                  <th>ID</th>
+                </tr>
+              </thead>
+              <tbody id="users-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="tab-relays" class="tab-panel" hidden>
+          <div class="row-actions">
+            <h2 style="margin:0;flex:1">Relays</h2>
+            <button id="relays-refresh" type="button" class="ghost">Обновить</button>
+          </div>
+          <p id="relays-error" class="error" hidden></p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Region</th>
+                  <th>Endpoint</th>
+                  <th>Health</th>
+                  <th>RTT</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="relays-body"></tbody>
+            </table>
+          </div>
+
+          <h3>Register relay</h3>
+          <form id="relay-form" class="form-grid">
+            <label>ID <input name="id" required placeholder="nl-native-1" /></label>
+            <label>Region <input name="region" required placeholder="nl" /></label>
+            <label>Host <input name="host" required placeholder="212.43.156.33" /></label>
+            <label>Port <input name="port" type="number" required value="443" /></label>
+            <label>connection_config
+              <textarea name="connection_config" rows="3" required placeholder="hysteria2://…"></textarea>
+            </label>
+            <button type="submit">Создать</button>
+          </form>
+        </div>
+
+        <div id="tab-rules" class="tab-panel" hidden>
+          <div class="row-actions">
+            <h2 style="margin:0;flex:1">Rules</h2>
+            <button id="rules-refresh" type="button" class="ghost">Загрузить текущие</button>
+          </div>
+          <p id="rules-meta" class="muted mono"></p>
+          <p id="rules-error" class="error" hidden></p>
+          <label>JSON rules array
+            <textarea id="rules-json" rows="16" class="mono" placeholder='[{"kind":"domain","pattern":"*.ru","mode":"DIRECT"}]'></textarea>
+          </label>
+          <div class="row-actions" style="margin-top:0.75rem">
+            <button id="rules-publish" type="button">Publish POST /rules</button>
+          </div>
+          <pre id="rules-out" class="mono panel"></pre>
+        </div>
+
+        <div id="tab-config" class="tab-panel" hidden>
+          <div class="row-actions">
+            <h2 style="margin:0;flex:1">Config</h2>
+            <button id="config-refresh" type="button" class="ghost">Загрузить текущий</button>
+          </div>
+          <p id="config-meta" class="muted mono"></p>
+          <p id="config-error" class="error" hidden></p>
+          <form id="config-form" class="form-grid">
+            <label>min_supported_client_version
+              <input name="min_supported_client_version" required placeholder="0.1.0" />
+            </label>
+            <label class="row-actions" style="align-items:center">
+              <input name="telemetry_enabled" type="checkbox" />
+              telemetry_enabled
+            </label>
+            <label>rule_poll_interval_sec
+              <input name="rule_poll_interval_sec" type="number" required value="300" />
+            </label>
+            <label>relay_poll_interval_sec
+              <input name="relay_poll_interval_sec" type="number" required value="60" />
+            </label>
+            <button type="submit">Publish POST /config</button>
+          </form>
+          <pre id="config-out" class="mono panel"></pre>
+        </div>
+      </main>
+    </section>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

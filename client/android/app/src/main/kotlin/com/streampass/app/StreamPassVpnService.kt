@@ -29,6 +29,15 @@ class StreamPassVpnService : VpnService() {
         var eventSink: EventChannel.EventSink? = null
         private var instance: StreamPassVpnService? = null
 
+        @Volatile
+        var lastEvent: String = "disconnected"
+        @Volatile
+        var lastRelay: String? = null
+        @Volatile
+        var lastPingMs: Int? = null
+        @Volatile
+        var lastError: String? = null
+
         private const val ACTION_CONNECT = "com.streampass.app.CONNECT"
         private const val NOTIFICATION_CHANNEL_ID = "streampass_vpn_status"
         private const val NOTIFICATION_ID = 1
@@ -57,6 +66,15 @@ class StreamPassVpnService : VpnService() {
             return bridge?.updateRules(rulesJson, exclusionsJson)
                 ?: "no active tunnel"
         }
+
+        /** Snapshot for Flutter MethodChannel getStatus (AUDIT-003 BUG-004). */
+        fun statusSnapshot(): Map<String, Any?> = mapOf(
+            "event" to lastEvent,
+            "relay" to lastRelay,
+            "pingMs" to lastPingMs,
+            "error" to lastError,
+            "active" to (instance != null && lastEvent == "connected"),
+        )
     }
 
     private var tunInterface: ParcelFileDescriptor? = null
@@ -129,7 +147,7 @@ class StreamPassVpnService : VpnService() {
             if (relayHost.isEmpty()) {
                 throw IllegalStateException("No relay host provided — was GET /servers called first?")
             }
-            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+12 dns-doh")
+            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+15 audit003")
             ConnectLogger.log(this, "establishTunnel: validating connection_config")
             if (connectionConfig.isBlank()) {
                 throw IllegalStateException("connection_config is empty — relay misconfigured in backend")
@@ -149,6 +167,7 @@ class StreamPassVpnService : VpnService() {
             tunnelBridge = bridge
 
             // Protect underlay sockets BEFORE PrepareRelay so QUIC survives TUN default route.
+            bridge.setEventLogger { msg -> ConnectLogger.log(this@StreamPassVpnService, msg) }
             bridge.setSocketProtector { fd ->
                 val ok = protect(fd)
                 ConnectLogger.log(this@StreamPassVpnService, "protect(fd=$fd)=$ok")
@@ -170,10 +189,10 @@ class StreamPassVpnService : VpnService() {
                 return
             }
 
+            // 10.10.0.1/30 — first host so sing-tun Next()=10.10.0.2 (unicast), not broadcast.
             tunInterface = Builder()
                 .setSession("StreamPass")
-                // /30 gives sing-tun system stack a second address in-prefix (required).
-                .addAddress("10.10.0.2", 30)
+                .addAddress("10.10.0.1", 30)
                 .addDnsServer("1.1.1.1")
                 .addDnsServer("1.0.0.1")
                 .addRoute("0.0.0.0", 0)
@@ -182,8 +201,7 @@ class StreamPassVpnService : VpnService() {
 
             val fd = tunInterface?.fd
                 ?: throw IllegalStateException("VPN interface could not be established")
-            ConnectLogger.log(this, "TUN established fd=$fd mtu=1400")
-
+            ConnectLogger.log(this, "TUN established fd=$fd mtu=1400 addr=10.10.0.1/30")
             if (tornDown) {
                 tunInterface?.close()
                 tunInterface = null
@@ -212,7 +230,7 @@ class StreamPassVpnService : VpnService() {
     private fun tearDown() {
         if (tornDown) return
         tornDown = true
-        ConnectLogger.log(this, "tearDown")
+        ConnectLogger.log(this, "[vpn] stop begin")
         scope.launch {
             try {
                 releaseResources()
@@ -222,6 +240,7 @@ class StreamPassVpnService : VpnService() {
             }
             mainHandler.post {
                 emit("disconnected")
+                ConnectLogger.log(this@StreamPassVpnService, "[vpn] stop complete")
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
@@ -251,6 +270,10 @@ class StreamPassVpnService : VpnService() {
     }
 
     private fun emit(event: String, relay: String? = null, pingMs: Int? = null, error: String? = null) {
+        lastEvent = event
+        lastRelay = relay
+        lastPingMs = pingMs
+        lastError = error
         mainHandler.post {
             val payload = mutableMapOf<String, Any?>("event" to event)
             relay?.let { payload["relay"] = it }

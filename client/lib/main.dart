@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'theme/app_theme.dart';
 import 'services/auth_service.dart';
 import 'services/streampass_api.dart';
+import 'services/vpn_channel.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/home_screen.dart';
 
@@ -15,6 +16,8 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   // Avoid blocking/crashing on first frame when fonts cannot be downloaded.
   GoogleFonts.config.allowRuntimeFetching = false;
+  // Subscribe EventChannel early so native VPN events are not dropped.
+  VpnChannel.ensureListening();
 
   final authService = AuthService(baseUrl: _apiBaseUrl);
   final api = StreamPassApi(baseUrl: _apiBaseUrl, authService: authService);

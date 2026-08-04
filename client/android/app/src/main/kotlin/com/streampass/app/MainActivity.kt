@@ -54,6 +54,9 @@ class MainActivity : FlutterActivity() {
                         StreamPassVpnService.stop(this)
                         result.success(null)
                     }
+                    "getStatus" -> {
+                        result.success(StreamPassVpnService.statusSnapshot())
+                    }
                     "updateRules" -> {
                         result.success(updateRoutingRules(call.arguments as? Map<*, *>))
                     }

@@ -48,7 +48,7 @@
 | **Проблема** | Как защитить admin endpoints до построения UI |
 | **Решение** | Static `X-Admin-Key` header, constant-time compare |
 | **Причина** | MVP scope — admin UI не входит |
-| **Последствия** | Операторы используют curl/Postman; key rotation manual |
+| **Последствия** | Операторы используют curl/Postman; key rotation manual. **Update 2026-08-04:** BL-020 добавил static Admin UI на `/admin/` с тем же `X-Admin-Key` (без RBAC). |
 
 ---
 

@@ -144,12 +144,17 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onStatus(VpnStatusUpdate update) {
     if (!mounted) return;
 
-    if (update.event == VpnEvent.connected) {
-      _ruleEngine.start(initialVersion: _pendingRulesVersion);
-    } else if (update.event == VpnEvent.disconnected) {
-      _ruleEngine.stop();
+    try {
+      if (update.event == VpnEvent.connected) {
+        unawaited(_ruleEngine.start(initialVersion: _pendingRulesVersion));
+      } else if (update.event == VpnEvent.disconnected) {
+        _ruleEngine.stop();
+      }
+    } catch (_) {
+      // Rule engine must never crash the UI / process.
     }
 
+    if (!mounted) return;
     setState(() {
       switch (update.event) {
         case VpnEvent.connecting:

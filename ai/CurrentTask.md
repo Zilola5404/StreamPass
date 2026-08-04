@@ -4,14 +4,19 @@
 
 ## Главная задача
 
-P1 backlog закрыт (кроме опциональных доработок).  
-Следующее по приоритету: **P2** (Admin Panel / Prometheus) или полировка VPN на устройстве.
+Деплой на сервер: `admin/` + monitoring stack (Prometheus/Grafana/node-exporter) + Caddyfile.
 
-## Skipped
+## Сделано локально
 
-**BL-004: Live-тест ЮKassa** — пропущена 2026-08-04
+| Этап | Статус |
+|------|--------|
+| VPN +15 | APK готов; device E2E manual |
+| BL-020 Admin Panel | Done (`/admin/`) |
+| BL-021 Prometheus + Grafana | Done (compose + `/metrics` + dashboard) |
 
-## Completed
+## Next
 
-- BL-011 Integration tests (Postgres testcontainers + httptest)
-- BL-013 signing, BL-016 DNS/DoH, protect, exclusions, fallback…
+1. **Deploy** `admin/`, `Caddyfile`, `docker-compose.yml`, `infrastructure/` на `212.43.156.33`
+2. Проверить `https://…/admin/` и Grafana `127.0.0.1:3000` (SSH tunnel)
+3. Device E2E APK +15
+4. BL-022 Auto Update **или** BL-027 go.sum hygiene

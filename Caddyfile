@@ -1,3 +1,21 @@
 212-43-156-33.nip.io {
-	reverse_proxy backend:8080
+	handle_path /admin/* {
+		root * /srv/admin
+		try_files {path} /index.html
+		file_server
+	}
+
+	redir /admin /admin/
+
+	# Metrics stay on the Docker network (Prometheus → backend:8080), not public.
+	handle /metrics {
+		respond 404
+	}
+	handle /api/v1/metrics {
+		respond 404
+	}
+
+	handle {
+		reverse_proxy backend:8080
+	}
 }

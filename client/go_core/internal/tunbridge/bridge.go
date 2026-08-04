@@ -54,6 +54,19 @@ func (s *Session) Close() {
 	}
 }
 
+// TunIPv4Prefix is the Android VpnService address + sing-tun system-stack prefix.
+// Must be the first host of a /30 (…1), so Addr().Next() is a unicast host (…2),
+// not the subnet broadcast (…3). Using 10.10.0.2/30 made Next()=10.10.0.3 and
+// broke TCP NAT → connected with no internet.
+func TunIPv4Prefix() netip.Prefix {
+	return netip.PrefixFrom(netip.MustParseAddr("10.10.0.1"), 30)
+}
+
+// TunIPv4Host is the address assigned on the Android TUN interface.
+func TunIPv4Host() string {
+	return TunIPv4Prefix().Addr().String()
+}
+
 // Start brings up the TUN stack and routes each flow via the Decision Engine.
 func Start(ctx context.Context, fd int, hyClient client.Client, mtu uint32, engine *decision.AtomicEngine) (*Session, error) {
 	if mtu == 0 {
@@ -67,9 +80,7 @@ func Start(ctx context.Context, fd int, hyClient client.Client, mtu uint32, engi
 		FileDescriptor: fd,
 		MTU:            mtu,
 		AutoRoute:      false,
-		Inet4Address: []netip.Prefix{
-			netip.PrefixFrom(netip.MustParseAddr("10.10.0.2"), 30),
-		},
+		Inet4Address:   []netip.Prefix{TunIPv4Prefix()},
 	}
 
 	tunDev, err := tun.New(tunOptions)
@@ -145,6 +156,11 @@ func (h *routingHandler) NewConnectionEx(
 	destination M.Socksaddr,
 	onClose N.CloseHandlerFunc,
 ) {
+	defer func() {
+		if r := recover(); r != nil {
+			_ = conn.Close()
+		}
+	}()
 	defer conn.Close()
 	if onClose != nil {
 		defer onClose(nil)
@@ -159,7 +175,10 @@ func (h *routingHandler) NewConnectionEx(
 			h.dialDirectTCP(ctx, conn, destination)
 		}
 	default:
-		h.dialRelayTCP(ctx, conn, destination)
+		// RELAY with silent failure left apps hanging — fall back to protected direct.
+		if !h.dialRelayTCP(ctx, conn, destination) {
+			h.dialDirectTCP(ctx, conn, destination)
+		}
 	}
 }
 
@@ -193,6 +212,11 @@ func (h *routingHandler) NewPacketConnectionEx(
 	destination M.Socksaddr,
 	onClose N.CloseHandlerFunc,
 ) {
+	defer func() {
+		if r := recover(); r != nil {
+			_ = conn.Close()
+		}
+	}()
 	defer conn.Close()
 	if onClose != nil {
 		defer onClose(nil)
@@ -218,6 +242,12 @@ func (h *routingHandler) NewPacketConnectionEx(
 }
 
 func (h *routingHandler) handleDNS(ctx context.Context, conn N.PacketConn, destination M.Socksaddr) {
+	defer func() {
+		if r := recover(); r != nil {
+			// Never let DNS path take down the VPN process.
+		}
+	}()
+
 	readBuffer := buf.NewPacket()
 	defer readBuffer.Release()
 	for {
@@ -309,7 +339,9 @@ func (h *routingHandler) relayUDP(ctx context.Context, conn N.PacketConn, destin
 			if err != nil {
 				return
 			}
-			if addr != destAddr {
+			// Hysteria may return "1.1.1.1:53" vs "[::ffff:1.1.1.1]:53" etc.
+			// Strict string equality dropped valid replies (AUDIT-003).
+			if !sameUDPEndpoint(addr, destAddr) {
 				continue
 			}
 			writeBuffer := buf.As(data)
@@ -429,4 +461,24 @@ func (h *routingHandler) copyUDP(ctx context.Context, conn N.PacketConn, remote 
 	}()
 
 	wg.Wait()
+}
+
+// sameUDPEndpoint compares Hysteria UDP reply addresses without relying on
+// brittle string equality (IPv4-mapped, bracket forms, etc.).
+func sameUDPEndpoint(a, b string) bool {
+	if a == b {
+		return true
+	}
+	aa, err1 := net.ResolveUDPAddr("udp", a)
+	bb, err2 := net.ResolveUDPAddr("udp", b)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	if aa.Port != bb.Port {
+		return false
+	}
+	if aa.IP == nil || bb.IP == nil {
+		return false
+	}
+	return aa.IP.Equal(bb.IP)
 }

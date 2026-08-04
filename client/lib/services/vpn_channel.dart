@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
 import 'connection_log.dart';
 import 'streampass_api.dart';
 
@@ -40,6 +42,55 @@ class VpnChannel {
   static final _log = ConnectionLog.instance;
 
   static Stream<VpnStatusUpdate>? _statusStream;
+  static StreamSubscription<VpnStatusUpdate>? _keepalive;
+
+  /// Last VPN event seen by Flutter (Diagnostics can show this without waiting
+  /// for a new EventChannel push).
+  static VpnStatusUpdate? lastStatus;
+
+  /// Ensure the EventChannel is subscribed early so [eventSink] is set before
+  /// native connect completes.
+  static void ensureListening() {
+    _keepalive ??= statusStream.listen((_) {});
+  }
+
+  static VpnStatusUpdate? _parseStatusMap(Map<dynamic, dynamic>? raw) {
+    if (raw == null) return null;
+    final map = Map<String, dynamic>.from(raw);
+    final eventName = map['event'] as String? ?? 'disconnected';
+    final event = VpnEvent.values.firstWhere(
+      (e) => e.name == eventName,
+      orElse: () => VpnEvent.disconnected,
+    );
+    return VpnStatusUpdate(
+      event,
+      relayName: map['relay'] as String?,
+      pingMs: map['pingMs'] as int?,
+      errorMessage: map['error'] as String?,
+    );
+  }
+
+  /// Query native VpnService for the real current status (AUDIT-003 BUG-004).
+  static Future<VpnStatusUpdate?> fetchNativeStatus() async {
+    try {
+      final raw = await _method.invokeMethod<Map<dynamic, dynamic>>('getStatus');
+      final update = _parseStatusMap(raw);
+      if (update != null) {
+        lastStatus = update;
+      }
+      return update;
+    } on PlatformException {
+      return lastStatus;
+    } on MissingPluginException {
+      return lastStatus;
+    }
+  }
+
+  /// Test helper: record a status as if it arrived from the EventChannel.
+  @visibleForTesting
+  static void debugSetLastStatus(VpnStatusUpdate? update) {
+    lastStatus = update;
+  }
 
   static Stream<VpnStatusUpdate> get statusStream {
     _statusStream ??= _events.receiveBroadcastStream().map((raw) {
@@ -55,9 +106,10 @@ class VpnChannel {
         errorMessage: map['error'] as String?,
       );
     }).map((update) {
+      lastStatus = update;
       _logVpnEvent(update);
       return update;
-    });
+    }).asBroadcastStream();
     return _statusStream!;
   }
 
@@ -82,6 +134,7 @@ class VpnChannel {
     String rulesJson = '',
     String exclusionsJson = '',
   }) async {
+    ensureListening();
     if (server.connectionConfig.isEmpty) {
       _log.error('vpn', 'connect blocked: empty connection_config', {'relayId': server.id});
       throw VpnConnectException(

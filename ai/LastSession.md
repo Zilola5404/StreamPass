@@ -4,11 +4,18 @@
 
 ## Completed
 
-- BL-006 Rule Engine (polling + hot-reload) — pushed `bcfb491`
-- Code review / audit fixes: pingMs, secrets redaction, refresh dedup, CI, ADR-010/011
-- Removed docx + `android_old` from Git
+- BL-020 Admin Panel (`admin/` SPA, Caddy `/admin/`, tests)
+- BL-021 Monitoring: backend `/metrics`, Prometheus, node-exporter, Grafana overview dashboard
+- VPN +15 local APK (uncommitted with prior session fixes)
 
-## Next
+## Pending
 
-- BL-014 Exclusions sync with backend
-- Rotate relay passwords on server (secrets were in git history before redaction)
+- Server deploy (needs SSH) for admin + monitoring
+- Device VPN E2E with +15
+- Optional: business gauges (relay load / active users) on top of HTTP+node metrics
+
+## Next P2
+
+- BL-022 Auto Update
+- BL-026 multiple relay regions
+- BL-027 go.sum (partially present)

@@ -27,14 +27,20 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   final _log = ConnectionLog.instance;
   StreamSubscription<ConnectionLogEntry>? _logSub;
 
+  StreamSubscription<VpnStatusUpdate>? _statusSub;
+
   @override
   void initState() {
     super.initState();
     _refreshLogs();
+    _last = VpnChannel.lastStatus;
+    if (_last?.event == VpnEvent.connected) {
+      _connectedSince ??= DateTime.now();
+    }
     _logSub = _log.stream.listen((_) {
       if (mounted) setState(() {});
     });
-    VpnChannel.statusStream.listen((update) {
+    _statusSub = VpnChannel.statusStream.listen((update) {
       if (!mounted) return;
       setState(() {
         _last = update;
@@ -45,6 +51,21 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
           _connectedSince = null;
         }
       });
+    });
+    unawaited(_syncNativeStatus());
+  }
+
+  Future<void> _syncNativeStatus() async {
+    final native = await VpnChannel.fetchNativeStatus();
+    if (!mounted || native == null) return;
+    setState(() {
+      _last = native;
+      if (native.event == VpnEvent.connected) {
+        _connectedSince ??= DateTime.now();
+      }
+      if (native.event == VpnEvent.disconnected) {
+        _connectedSince = null;
+      }
     });
   }
 
@@ -71,6 +92,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   @override
   void dispose() {
     _logSub?.cancel();
+    _statusSub?.cancel();
     super.dispose();
   }
 

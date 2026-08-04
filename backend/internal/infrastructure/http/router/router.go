@@ -12,6 +12,7 @@ import (
 
 	"streampass/backend/internal/infrastructure/http/handler"
 	"streampass/backend/internal/infrastructure/http/middleware"
+	"streampass/backend/internal/infrastructure/metrics"
 	"streampass/shared/logger"
 )
 
@@ -71,6 +72,8 @@ func New(d Deps) http.Handler {
 	// share one handler, so there's nothing to keep in sync.
 	mux.HandleFunc("GET /health", d.Health.Check)
 	mux.HandleFunc(v1("GET /health"), d.Health.Check)
+	mux.HandleFunc("GET /metrics", metrics.Handler)
+	mux.HandleFunc(v1("GET /metrics"), metrics.Handler)
 	mux.HandleFunc(v1("GET /rules"), d.Rule.GetLatest)
 	mux.HandleFunc(v1("GET /config"), d.Config.GetLatest)
 	mux.Handle(v1("POST /payments/webhook"), strictLimiter.Middleware()(http.HandlerFunc(d.Billing.HandleWebhook)))
@@ -103,6 +106,7 @@ func New(d Deps) http.Handler {
 	mux.Handle(v1("GET /users"), adminMW(http.HandlerFunc(d.Admin.ListUsers)))
 
 	return middleware.Chain(
+		metrics.Middleware,
 		middleware.Recover(d.Log),
 		middleware.Logging(d.Log),
 	)(mux)

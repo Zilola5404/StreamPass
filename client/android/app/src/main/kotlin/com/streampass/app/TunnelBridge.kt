@@ -52,11 +52,40 @@ class TunnelBridge(
         }
     }
 
+    fun setEventLogger(logFn: (String) -> Unit) {
+        try {
+            val core = coreClass() ?: return
+            val loggerClass = callbackClassNamed(core, "EventLogger")
+                ?: throw ClassNotFoundException("EventLogger")
+            val proxy = Proxy.newProxyInstance(
+                loggerClass.classLoader,
+                arrayOf(loggerClass),
+            ) { _, method, args ->
+                when (method.name) {
+                    "log" -> {
+                        val msg = args?.getOrNull(0)?.toString().orEmpty()
+                        if (msg.isNotEmpty()) logFn(msg)
+                    }
+                    else -> null
+                }
+                null
+            }
+            core.getMethod("setEventLogger", loggerClass).invoke(null, proxy)
+            ConnectLogger.log(context, "TunnelBridge.setEventLogger")
+        } catch (t: Throwable) {
+            Log.e(TAG, "setEventLogger failed", t)
+            ConnectLogger.log(context, "setEventLogger failed: ${t.message}")
+        }
+    }
+
     fun clearSocketProtector() {
         try {
             val core = coreClass() ?: return
             val protectorClass = callbackClassNamed(core, "SocketProtector") ?: return
-            core.getMethod("setSocketProtector", protectorClass).invoke(null, null as Any?)
+            // Explicit null argument array avoids Kotlin/Java overload ambiguity.
+            protectorClass.let { cls ->
+                core.getMethod("setSocketProtector", cls).invoke(null, *arrayOf<Any?>(null))
+            }
             ConnectLogger.log(context, "TunnelBridge.clearSocketProtector")
         } catch (t: Throwable) {
             Log.e(TAG, "clearSocketProtector failed", t)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/netip"
 	"sync"
+	"time"
 
 	"github.com/apernet/hysteria/core/v2/client"
 	"streampass/go_core/internal/decision"
@@ -158,8 +159,19 @@ func ActiveRulesVersion() int {
 
 // StopTunnel stops the active tunnel session, if any.
 func StopTunnel() {
+	logEvent("[vpn] stop begin")
 	stopTunnelSessions()
-	runTunnelWg.Wait()
+	done := make(chan struct{})
+	go func() {
+		runTunnelWg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(8 * time.Second):
+		// Avoid blocking Android main/IO forever if a flow is stuck.
+	}
+	logEvent("[vpn] stop complete")
 }
 
 func stopTunnelSessions() {
