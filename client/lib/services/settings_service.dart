@@ -3,18 +3,25 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Persists the toggles from ТЗ §20 ("Настройки"):
-/// Автозапуск / Автоподключение / Автовыбор Relay / Исключения.
+/// Автозапуск / Автоподключение / Автовыбор Relay / Исключения /
+/// preferred region & server (BL-026).
 class AppSettings {
   final bool autostart;
   final bool autoConnect;
   final bool autoSelectRelay;
   final List<String> exclusions;
+  /// Canonical region code (`de`/`nl`/`pl`/`fi`) or empty for any.
+  final String preferredRegion;
+  /// Concrete relay id when auto-select is off.
+  final String preferredServerId;
 
   const AppSettings({
     this.autostart = false,
     this.autoConnect = false,
     this.autoSelectRelay = true,
     this.exclusions = const [],
+    this.preferredRegion = '',
+    this.preferredServerId = '',
   });
 
   AppSettings copyWith({
@@ -22,12 +29,16 @@ class AppSettings {
     bool? autoConnect,
     bool? autoSelectRelay,
     List<String>? exclusions,
+    String? preferredRegion,
+    String? preferredServerId,
   }) {
     return AppSettings(
       autostart: autostart ?? this.autostart,
       autoConnect: autoConnect ?? this.autoConnect,
       autoSelectRelay: autoSelectRelay ?? this.autoSelectRelay,
       exclusions: exclusions ?? this.exclusions,
+      preferredRegion: preferredRegion ?? this.preferredRegion,
+      preferredServerId: preferredServerId ?? this.preferredServerId,
     );
   }
 }
@@ -37,6 +48,8 @@ class SettingsService {
   static const _kAutoConnect = 'sp_auto_connect';
   static const _kAutoRelay = 'sp_auto_relay';
   static const _kExclusions = 'sp_exclusions';
+  static const _kPreferredRegion = 'sp_preferred_region';
+  static const _kPreferredServer = 'sp_preferred_server';
 
   // Mirrors autostart/autoConnect into native SharedPreferences so
   // BootReceiver (which runs outside the Flutter engine) can read them
@@ -55,6 +68,8 @@ class SettingsService {
       autoConnect: prefs.getBool(_kAutoConnect) ?? false,
       autoSelectRelay: prefs.getBool(_kAutoRelay) ?? true,
       exclusions: exclusions,
+      preferredRegion: prefs.getString(_kPreferredRegion) ?? '',
+      preferredServerId: prefs.getString(_kPreferredServer) ?? '',
     );
   }
 
@@ -82,6 +97,12 @@ class SettingsService {
 
   Future<void> setAutoSelectRelay(bool value) async =>
       (await SharedPreferences.getInstance()).setBool(_kAutoRelay, value);
+
+  Future<void> setPreferredRegion(String code) async =>
+      (await SharedPreferences.getInstance()).setString(_kPreferredRegion, code);
+
+  Future<void> setPreferredServerId(String id) async =>
+      (await SharedPreferences.getInstance()).setString(_kPreferredServer, id);
 
   Future<void> setExclusions(List<String> domains) async {
     final prefs = await SharedPreferences.getInstance();

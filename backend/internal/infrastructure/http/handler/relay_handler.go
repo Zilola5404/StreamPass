@@ -7,6 +7,7 @@ import (
 	relaysvc "streampass/backend/internal/application/relay"
 	relaydomain "streampass/backend/internal/domain/relay"
 	httpx "streampass/backend/internal/infrastructure/http"
+	"streampass/shared/region"
 )
 
 type RelayHandler struct {
@@ -20,6 +21,7 @@ func NewRelayHandler(svc *relaysvc.Service) *RelayHandler {
 type serverDTO struct {
 	ID               string  `json:"id"`
 	Region           string  `json:"region"`
+	RegionName       string  `json:"region_name"`
 	Host             string  `json:"host"`
 	Port             int     `json:"port"`
 	Healthy          bool    `json:"healthy"`
@@ -28,8 +30,24 @@ type serverDTO struct {
 	ConnectionConfig string  `json:"connection_config"`
 }
 
+func toServerDTO(s relaydomain.Server) serverDTO {
+	code := region.Normalize(string(s.Region))
+	return serverDTO{
+		ID:               string(s.ID),
+		Region:           code,
+		RegionName:       region.LabelOf(code),
+		Host:             s.Host,
+		Port:             s.Port,
+		Healthy:          s.Healthy,
+		LoadRatio:        s.LoadRatio,
+		RTTMillis:        s.RTTMillis,
+		ConnectionConfig: s.ConnectionConfig,
+	}
+}
+
 func (h *RelayHandler) ListAvailable(w http.ResponseWriter, r *http.Request) {
-	servers, err := h.svc.ListAvailable(r.Context())
+	filter := r.URL.Query().Get("region")
+	servers, err := h.svc.ListAvailable(r.Context(), filter)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
@@ -37,18 +55,14 @@ func (h *RelayHandler) ListAvailable(w http.ResponseWriter, r *http.Request) {
 
 	dtos := make([]serverDTO, len(servers))
 	for i, s := range servers {
-		dtos[i] = serverDTO{
-			ID:               string(s.ID),
-			Region:           string(s.Region),
-			Host:             s.Host,
-			Port:             s.Port,
-			Healthy:          s.Healthy,
-			LoadRatio:        s.LoadRatio,
-			RTTMillis:        s.RTTMillis,
-			ConnectionConfig: s.ConnectionConfig,
-		}
+		dtos[i] = toServerDTO(s)
 	}
 	httpx.WriteJSON(w, http.StatusOK, dtos)
+}
+
+// ListRegions returns the canonical region catalog (ТЗ Этап 6).
+func (h *RelayHandler) ListRegions(w http.ResponseWriter, r *http.Request) {
+	httpx.WriteJSON(w, http.StatusOK, region.Catalog)
 }
 
 // ListAll handles "GET /servers/all" (admin-only, gated by
@@ -65,16 +79,7 @@ func (h *RelayHandler) ListAll(w http.ResponseWriter, r *http.Request) {
 
 	dtos := make([]serverDTO, len(servers))
 	for i, s := range servers {
-		dtos[i] = serverDTO{
-			ID:               string(s.ID),
-			Region:           string(s.Region),
-			Host:             s.Host,
-			Port:             s.Port,
-			Healthy:          s.Healthy,
-			LoadRatio:        s.LoadRatio,
-			RTTMillis:        s.RTTMillis,
-			ConnectionConfig: s.ConnectionConfig,
-		}
+		dtos[i] = toServerDTO(s)
 	}
 	httpx.WriteJSON(w, http.StatusOK, dtos)
 }
@@ -100,16 +105,7 @@ func (h *RelayHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpx.WriteJSON(w, http.StatusCreated, serverDTO{
-		ID:               string(srv.ID),
-		Region:           string(srv.Region),
-		Host:             srv.Host,
-		Port:             srv.Port,
-		Healthy:          srv.Healthy,
-		LoadRatio:        srv.LoadRatio,
-		RTTMillis:        srv.RTTMillis,
-		ConnectionConfig: srv.ConnectionConfig,
-	})
+	httpx.WriteJSON(w, http.StatusCreated, toServerDTO(*srv))
 }
 
 func (h *RelayHandler) Delete(w http.ResponseWriter, r *http.Request) {

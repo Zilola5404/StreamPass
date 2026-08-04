@@ -13,10 +13,13 @@
 
 ## Relay в PostgreSQL (production)
 
-| id | host | port | тип |
-|----|------|------|-----|
-| `nl-native-1` | `212.43.156.33` | 443 | Native Hysteria (StreamPass) |
-| `nl-amsterdam-1` | `212.43.157.167` | 32528 | Hiddify / sing-box |
+| id | region | host | port | тип |
+|----|--------|------|------|-----|
+| `nl-native-1` | `nl` | `212.43.156.33` | 443 | Native Hysteria (StreamPass) |
+| `nl-amsterdam-1` | `nl` | `212.43.157.167` | 32528 | Hiddify / sing-box |
+
+Канонические коды регионов (BL-026): `de` Frankfurt, `nl` Amsterdam, `pl` Warsaw, `fi` Helsinki.
+Каталог: `GET /api/v1/regions`. Новые VPS регистрируются через Admin → Relays (`POST /api/v1/servers`) с `region` из каталога.
 
 ### nl-native-1 — native Hysteria на backend-сервере
 
@@ -55,23 +58,24 @@ docker exec -it streampass-postgres-1 psql -U streampass -d streampass
 -- Native relay (156.33) — подставьте реальные пароли из env, не из Git
 INSERT INTO relay_servers (id, region, host, port, healthy, connection_config, updated_at)
 VALUES (
-  'nl-native-1', 'NL', '212.43.156.33', 443, true,
+  'nl-native-1', 'nl', '212.43.156.33', 443, true,
   'hysteria2://<AUTH_PASSWORD>@212.43.156.33:443/?obfs=salamander&obfs-password=<OBFS_PASSWORD>',
   NOW()
 )
-ON CONFLICT (id) DO UPDATE SET connection_config = EXCLUDED.connection_config, updated_at = NOW();
+ON CONFLICT (id) DO UPDATE SET connection_config = EXCLUDED.connection_config, region = EXCLUDED.region, updated_at = NOW();
 
 -- Hiddify relay (157.167)
 UPDATE relay_servers
 SET host = '212.43.157.167',
     port = 32528,
+    region = 'nl',
     connection_config = 'hysteria2://...',
     healthy = true,
     updated_at = NOW()
 WHERE id = 'nl-amsterdam-1';
 ```
 
-Или через Admin API (`POST /api/v1/admin/relays`).
+Или через Admin UI `/admin/` → Relays / Admin API `POST /api/v1/servers`.
 
 ## Установка native Hysteria
 

@@ -76,6 +76,7 @@ func New(d Deps) http.Handler {
 	mux.HandleFunc(v1("GET /metrics"), metrics.Handler)
 	mux.HandleFunc(v1("GET /rules"), d.Rule.GetLatest)
 	mux.HandleFunc(v1("GET /config"), d.Config.GetLatest)
+	mux.HandleFunc(v1("GET /regions"), d.Relay.ListRegions)
 	mux.Handle(v1("POST /payments/webhook"), strictLimiter.Middleware()(http.HandlerFunc(d.Billing.HandleWebhook)))
 
 	// --- Auth endpoints (stricter rate limit: brute-force resistance) ---

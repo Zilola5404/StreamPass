@@ -186,18 +186,30 @@
 
 ---
 
+### GET /api/v1/regions
+
+| | |
+|---|---|
+| **Назначение** | Каталог регионов (BL-026): Frankfurt, Amsterdam, Warsaw, Helsinki |
+| **Auth** | Нет |
+| **Response 200** | `[{"code":"de","city":"Frankfurt","country":"Germany","label":"Frankfurt (DE)"}, …]` |
+
+---
+
 ### GET /api/v1/servers
 
 | | |
 |---|---|
-| **Назначение** | Доступные relay-серверы для клиента (healthy only) |
+| **Назначение** | Доступные relay-серверы для клиента (healthy only), ранжирование load→RTT |
 | **Auth** | Bearer JWT |
+| **Query** | `region` (optional) — фильтр по коду/`Amsterdam`/`NL` (нормализуется в `de`/`nl`/`pl`/`fi`) |
 | **Response 200** | Array of servers |
 ```json
 [
   {
     "id": "de-frankfurt-1",
     "region": "de",
+    "region_name": "Frankfurt (DE)",
     "host": "212.43.159.198",
     "port": 443,
     "healthy": true,

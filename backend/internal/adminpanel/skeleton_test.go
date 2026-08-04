@@ -24,9 +24,10 @@ func TestAdminPanelFiles(t *testing.T) {
 	html := string(mustRead(t, filepath.Join(root, "index.html")))
 	for _, needle := range []string{
 		"view-login", "view-app", "login-submit", "health-check",
-		"users-body", "relays-body", "relay-form",
+		"users-body", "relays-body", "relay-form", "relay-region",
 		"rules-json", "rules-publish", "config-form",
 		"latest_client_version", "client_download_url",
+		"Frankfurt (DE)", "Warsaw (PL)",
 	} {
 		if !strings.Contains(html, needle) {
 			t.Fatalf("index.html missing %q", needle)

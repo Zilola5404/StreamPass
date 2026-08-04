@@ -11,19 +11,25 @@
 </head>
 <body>
   <div id="app">
-    <section id="view-login" class="view login-view" hidden>
+    <noscript>
+      <p style="padding:2rem;color:#d45d5d">Для админки нужен JavaScript.</p>
+    </noscript>
+    <section id="view-login" class="view login-view">
       <div class="login-panel">
         <p class="brand">StreamPass</p>
         <h1>Admin</h1>
-        <p class="lede">Операторская панель. Ключ хранится только в sessionStorage этой вкладки.</p>
-        <label>
-          API base
-          <input id="login-base" type="url" placeholder="https://example.com/api/v1" autocomplete="off" />
-        </label>
+        <p class="lede">Вставьте <code>ADMIN_API_KEY</code> из <code>.env</code> на сервере (не email/пароль приложения). Ключ только в этой вкладке.</p>
         <label>
           X-Admin-Key
-          <input id="login-key" type="password" placeholder="ADMIN_API_KEY" autocomplete="off" />
+          <input id="login-key" type="password" placeholder="вставьте ключ и нажмите Войти" autocomplete="off" autofocus />
         </label>
+        <details>
+          <summary>API base (обычно не менять)</summary>
+          <label style="margin-top:0.75rem">
+            API base
+            <input id="login-base" type="text" placeholder="https://example.com/api/v1" autocomplete="off" spellcheck="false" />
+          </label>
+        </details>
         <p id="login-error" class="error" hidden></p>
         <button id="login-submit" type="button">Войти</button>
       </div>
@@ -99,7 +105,14 @@
           <h3>Register relay</h3>
           <form id="relay-form" class="form-grid">
             <label>ID <input name="id" required placeholder="nl-native-1" /></label>
-            <label>Region <input name="region" required placeholder="nl" /></label>
+            <label>Region
+              <select name="region" required id="relay-region">
+                <option value="nl">Amsterdam (NL)</option>
+                <option value="de">Frankfurt (DE)</option>
+                <option value="pl">Warsaw (PL)</option>
+                <option value="fi">Helsinki (FI)</option>
+              </select>
+            </label>
             <label>Host <input name="host" required placeholder="212.43.156.33" /></label>
             <label>Port <input name="port" type="number" required value="443" /></label>
             <label>connection_config

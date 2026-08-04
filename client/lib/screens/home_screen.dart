@@ -13,6 +13,8 @@ import '../services/settings_service.dart';
 import '../services/streampass_api.dart';
 import '../services/vpn_channel.dart';
 import '../services/client_update.dart';
+import '../services/relay_picker.dart';
+import '../services/region_catalog.dart';
 import '../theme/app_theme.dart';
 import '../widgets/connect_orb.dart';
 import 'settings_screen.dart';
@@ -156,26 +158,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadStartupData() async {
     try {
+      final settings = await SettingsService().load();
       final servers = await widget.api.fetchServers();
-      final healthy = servers.where((server) => server.healthy).toList()
-        ..sort((a, b) {
-          final load = a.loadRatio.compareTo(b.loadRatio);
-          if (load != 0) return load;
-          return a.rttMs.compareTo(b.rttMs);
-        });
+      final selected = pickBestRelay(
+        servers,
+        preferredRegion: settings.preferredRegion,
+        preferredServerId: settings.preferredServerId,
+        autoSelect: settings.autoSelectRelay,
+      );
       if (!mounted) return;
       setState(() {
-        _selectedRelay = healthy.isNotEmpty
-            ? healthy.first
-            : servers.isNotEmpty
-                ? servers.first
-                : null;
+        _selectedRelay = selected;
         _pingMs = _selectedRelay?.rttMs;
         _loadingRelay = false;
       });
       _connectLog.info('api', 'servers loaded', {
         'count': '${servers.length}',
         'selected': _selectedRelay?.id ?? 'none',
+        'region': _selectedRelay?.region ?? '',
       });
       await _maybeAutoConnect();
     } on SessionExpiredException {
@@ -190,6 +190,23 @@ class _HomeScreenState extends State<HomeScreen> {
         _errorMessage = e is ApiException ? e.message : 'Не удалось загрузить список серверов';
         _state = ConnState.error;
       });
+    }
+  }
+
+  Future<void> _openServersPicker() async {
+    final result = await Navigator.of(context).push<RelayPickResult>(
+      MaterialPageRoute(
+        builder: (_) => ServersScreen(
+          api: widget.api,
+          authService: widget.authService,
+          selectedServerId: _selectedRelay?.id,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (result != null) {
+      setState(() => _loadingRelay = true);
+      await _loadStartupData();
     }
   }
 
@@ -375,6 +392,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         relay: _selectedRelay,
                         pingMs: _pingMs,
                         loading: _loadingRelay,
+                        onTap: _openServersPicker,
                       ),
                       const SizedBox(height: 14),
                       _RouteCard(
@@ -390,11 +408,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTapStatistics: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const StatisticsScreen()),
                   ),
-                  onTapServers: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => ServersScreen(api: widget.api, authService: widget.authService),
-                    ),
-                  ),
+                  onTapServers: _openServersPicker,
                   onTapSettings: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => SettingsScreen(api: widget.api)),
                   ),
@@ -529,51 +543,60 @@ class _RelayCard extends StatelessWidget {
   final RelayServer? relay;
   final int? pingMs;
   final bool loading;
+  final VoidCallback? onTap;
 
   const _RelayCard({
     required this.relay,
     required this.pingMs,
     required this.loading,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final title = loading
         ? 'Ищем лучший relay'
-        : relay?.region ?? 'Relay не найден';
+        : relay?.displayRegion ?? 'Relay не найден';
     final subtitle = relay == null
         ? 'Проверьте backend и список серверов'
         : relay!.healthy
-            ? 'Основной relay'
-            : 'Резервный relay';
+            ? relay!.id
+            : 'Резервный · ${relay!.id}';
 
-    return _GlassCard(
-      child: Row(
-        children: [
-          _FlagBadge(region: relay?.region),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 4),
-                Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-              ],
+    return GestureDetector(
+      onTap: onTap,
+      child: _GlassCard(
+        child: Row(
+          children: [
+            _FlagBadge(region: relay?.region),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 4),
+                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
             ),
-          ),
-          if (pingMs != null)
-            Text(
-              '$pingMs ms',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: AppColors.green,
-                    fontSize: 15,
-                  ),
-            ),
-          const SizedBox(width: 10),
-          const Icon(Icons.signal_cellular_alt_rounded,
-              color: AppColors.green, size: 20),
-        ],
+            if (pingMs != null)
+              Text(
+                '$pingMs ms',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: AppColors.green,
+                      fontSize: 15,
+                    ),
+              ),
+            const SizedBox(width: 10),
+            const Icon(Icons.signal_cellular_alt_rounded,
+                color: AppColors.green, size: 20),
+            if (onTap != null) ...[
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -761,16 +784,7 @@ class _FlagBadge extends StatelessWidget {
     );
   }
 
-  String _flagLabel(String? region) {
-    final value = region?.toLowerCase() ?? '';
-    if (value.contains('germany') || value.contains('frankfurt')) return 'DE';
-    if (value.contains('netherlands') || value.contains('amsterdam')) {
-      return 'NL';
-    }
-    if (value.contains('warsaw') || value.contains('poland')) return 'PL';
-    if (value.contains('finland') || value.contains('helsinki')) return 'FI';
-    return 'GL';
-  }
+  String _flagLabel(String? region) => regionFlag(region);
 }
 
 class _AmbientBackground extends StatelessWidget {

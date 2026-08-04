@@ -162,4 +162,4 @@ See `docs/04_Backlog.md` BL-010.
 - Blue-green deployment
 - Automated rollback
 - Secret manager integration
-- Multi-region deployment
+- Multi-region *hardware* (доп. VPS DE/PL/FI) — софт готов (каталог + picker); физические ноды добавляются через Admin

@@ -38,8 +38,8 @@
 | BL-023 | Windows клиент | WFP adapter (ТЗ §3) | P2 | Open | BL-001 | TODO |
 | BL-024 | iOS клиент | Network Extension (ТЗ §3) | P2 | Open | BL-001 | TODO |
 | BL-025 | macOS клиент | Network Extension (ТЗ §3) | P2 | Open | BL-001 | TODO |
-| BL-026 | Несколько relay регионов | Frankfurt, Amsterdam, Warsaw, Helsinki | P2 | Open | — | TODO |
-| BL-027 | go.sum в репозитории | Добавить go.sum для reproducible builds | P2 | Open | — | TODO |
+| BL-026 | Несколько relay регионов | Frankfurt, Amsterdam, Warsaw, Helsinki | P2 | Done | — | 2026-08-04 |
+| BL-027 | go.sum в репозитории | Добавить go.sum для reproducible builds | P2 | Done | — | 2026-08-04 |
 
 ## P3 — Backlog
 

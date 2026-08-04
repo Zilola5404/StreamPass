@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import 'connection_log.dart';
 import 'auth_service.dart';
+import 'region_catalog.dart';
 
 class StreamPassApi {
   final String baseUrl;
@@ -30,11 +31,25 @@ class StreamPassApi {
     return RuleSet.fromJson(body);
   }
 
-  Future<List<RelayServer>> fetchServers() async {
-    final body = await _get('/servers');
+  Future<List<RelayServer>> fetchServers({String? region}) async {
+    final q = (region != null && region.isNotEmpty)
+        ? '?region=${Uri.encodeQueryComponent(region)}'
+        : '';
+    final body = await _get('/servers$q');
     return (body as List<dynamic>)
         .map((item) => RelayServer.fromJson(item as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<List<RegionInfo>> fetchRegions() async {
+    try {
+      final body = await _get('/regions', authenticated: false);
+      return (body as List<dynamic>)
+          .map((item) => RegionInfo.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return List<RegionInfo>.from(fallbackRegions);
+    }
   }
 
   Future<void> sendTelemetry(TelemetryPayload payload) async {
@@ -253,6 +268,7 @@ class RouteRule {
 class RelayServer {
   final String id;
   final String region;
+  final String regionName;
   final String host;
   final int port;
   final bool healthy;
@@ -263,6 +279,7 @@ class RelayServer {
   const RelayServer({
     required this.id,
     required this.region,
+    this.regionName = '',
     required this.host,
     required this.port,
     required this.healthy,
@@ -271,9 +288,13 @@ class RelayServer {
     required this.connectionConfig,
   });
 
+  String get displayRegion =>
+      regionName.isNotEmpty ? regionName : regionLabel(region);
+
   factory RelayServer.fromJson(Map<String, dynamic> json) => RelayServer(
         id: json['id'] as String,
         region: json['region'] as String,
+        regionName: json['region_name'] as String? ?? '',
         host: json['host'] as String,
         port: json['port'] as int,
         healthy: json['healthy'] as bool,

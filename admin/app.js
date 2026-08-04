@@ -108,11 +108,21 @@
     return data;
   }
 
-  function showLogin(error) {
+  function sanitizeKey(raw) {
+    return String(raw || "")
+      .replace(/[\u200B-\u200D\uFEFF]/g, "")
+      .trim();
+  }
+
+  function showLogin(error, keepKey) {
     el.appView.hidden = true;
     el.loginView.hidden = false;
-    el.loginBase.value = getSession().base || defaultApiBase();
-    el.loginKey.value = "";
+    if (el.loginBase) {
+      el.loginBase.value = getSession().base || defaultApiBase();
+    }
+    if (!keepKey) {
+      el.loginKey.value = "";
+    }
     el.loginError.hidden = !error;
     el.loginError.textContent = error || "";
   }
@@ -212,7 +222,7 @@
             : `<span class="badge bad">unhealthy</span>`;
           return `<tr data-id="${esc(s.id)}">
             <td class="mono">${esc(s.id)}</td>
-            <td>${esc(s.region)}</td>
+            <td>${esc(s.region_name || s.region)}</td>
             <td class="mono">${esc(s.host)}:${esc(s.port)}</td>
             <td>${health}</td>
             <td class="mono">${esc(s.rtt_ms ?? "—")}</td>
@@ -305,22 +315,50 @@
     }
   }
 
-  el.loginSubmit.addEventListener("click", async () => {
-    const base = el.loginBase.value.trim().replace(/\/+$/, "");
-    const key = el.loginKey.value.trim();
+  async function tryLogin() {
+    const base = (el.loginBase.value || defaultApiBase()).trim().replace(/\/+$/, "");
+    const key = sanitizeKey(el.loginKey.value);
     if (!base || !key) {
-      showLogin("Укажите API base и Admin Key");
+      showLogin("Вставьте Admin Key", true);
       return;
     }
+    el.loginSubmit.disabled = true;
+    el.loginError.hidden = true;
     setSession(base, key);
     try {
       await api("/servers/all");
       showApp();
       activateTab("health");
-      await runHealthCheck();
+      // Health is best-effort: failure must not kick the operator back to login.
+      try {
+        await runHealthCheck();
+      } catch (healthErr) {
+        el.healthOut.textContent = JSON.stringify(
+          { ok: false, error: String(healthErr.message || healthErr) },
+          null,
+          2
+        );
+      }
     } catch (err) {
       clearSession();
-      showLogin(String(err.message || err));
+      const raw = String(err.message || err);
+      const hint =
+        /invalid or missing admin key|FORBIDDEN/i.test(raw)
+          ? "Неверный Admin Key. Нужен ADMIN_API_KEY из /root/StreamPass/.env (не пароль пользователя)."
+          : raw;
+      showLogin(hint, true);
+    } finally {
+      el.loginSubmit.disabled = false;
+    }
+  }
+
+  el.loginSubmit.addEventListener("click", () => {
+    tryLogin();
+  });
+  el.loginKey.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      tryLogin();
     }
   });
 
@@ -380,11 +418,19 @@
   });
 
   const session = getSession();
-  if (session.base && session.key) {
-    showApp();
-    activateTab("health");
-  } else {
-    showLogin();
+  try {
+    if (el.loginBase && !el.loginBase.value) {
+      el.loginBase.value = session.base || defaultApiBase();
+    }
+    if (session.base && session.key) {
+      showApp();
+      activateTab("health");
+    } else {
+      showLogin();
+    }
+  } catch (bootErr) {
+    console.error(bootErr);
+    showLogin(String(bootErr.message || bootErr), true);
   }
 
   window.StreamPassAdmin = {

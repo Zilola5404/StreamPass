@@ -2,16 +2,20 @@
 
 > Updated: 2026-08-04
 
-## In progress / done
+## Done
 
-- **BL-022 Auto Update** — local implementation ready (migration 0004, client check, admin Config fields)
-- Next: commit, push, deploy; rebuild APK +16 when needed for device
+- **BL-026** multi-region: catalog `de/nl/pl/fi`, `GET /regions`, `?region=` filter,
+  normalize on register, client picker, Admin region select, migration `0005`
+- **BL-027** `go.sum` already tracked in repo → marked Done
+- Admin login UX fix (session no longer cleared on health-check failure)
 
-## Deployed earlier
+## Ops note
 
-`391a64b` — VPN+15 / Admin / Monitoring
+Production still has **NL-only** relays. To add Frankfurt/Warsaw/Helsinki:
+1. Provision VPS + Hysteria
+2. Admin → Relays → register with region `de` / `pl` / `fi`
 
-## Next after BL-022
+## Next
 
-- Device E2E +16
-- BL-026 / BL-027
+- Device E2E +16 / new region APK
+- BL-023 Windows / BL-030 billing / BL-033 backups
