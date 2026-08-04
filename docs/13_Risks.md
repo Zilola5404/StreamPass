@@ -34,7 +34,7 @@
 |----|------|-------------|--------|-----------|
 | IR-01 | Single VPS — no HA | High | Critical | Multi-relay, future k8s (post-MVP) |
 | IR-02 | nip.io domain — not production-grade | High | Medium | Real domain before production |
-| IR-03 | No automated backup | High | Critical | BL-033, docs/27 |
+| IR-03 | No automated backup | High | Mitigated (BL-033 daily cron) | docs/27 |
 | IR-04 | No CI/CD — manual deploy errors | High | Medium | BL-010 |
 | IR-05 | Redis no persistence (no save/appendonly) | Medium | Medium | Sessions lost on restart — acceptable for MVP |
 | IR-06 | No monitoring (Prometheus/Grafana) | High | Medium | BL-021 |

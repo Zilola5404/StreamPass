@@ -174,6 +174,6 @@ erDiagram
 
 ## 6. Backup
 
-TODO: Автоматический backup не настроен.  
+Автоматический backup: `scripts/backup-postgres.sh` + daily cron (BL-033). См. `docs/27_BackupRecovery.md`.  
 Volume: `postgres_data` в docker-compose.  
 См. `docs/27_BackupRecovery.md`

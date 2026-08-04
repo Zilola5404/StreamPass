@@ -41,7 +41,7 @@
 | nip.io domain | Not suitable for production branding |
 | No CI/CD | Manual build and deploy |
 | No monitoring | No Prometheus/Grafana |
-| No automated backup | Postgres volume only |
+| No automated backup | ~~Postgres volume only~~ → daily cron (BL-033) |
 | Caddy single instance | No CDN, no WAF |
 
 ---

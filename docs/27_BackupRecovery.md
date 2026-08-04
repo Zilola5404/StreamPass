@@ -1,6 +1,6 @@
 # StreamPass — Backup & Recovery
 
-> Дата: 2026-08-03
+> Дата: 2026-08-04 | BL-033 Done
 
 ---
 
@@ -8,7 +8,7 @@
 
 | Component | Backup | Status |
 |-----------|--------|--------|
-| PostgreSQL | Docker volume `postgres_data` | ⚠️ No automated backup |
+| PostgreSQL | Daily cron + gzip dumps | ✅ Automated (BL-033) |
 | Redis | No persistence (no save/AOF) | Sessions ephemeral |
 | Caddy certs | Docker volume `caddy_data` | Auto-renewed by Caddy |
 | Code | Git repository | ✅ Remote on origin/main |
@@ -18,22 +18,39 @@
 
 ## PostgreSQL Backup
 
-### Manual Backup
-```bash
-# From host
-docker compose exec postgres pg_dump -U streampass streampass > backup_$(date +%Y%m%d).sql
+### Production (Linux VPS)
 
-# Restore
-docker compose exec -T postgres psql -U streampass streampass < backup_20260803.sql
+```bash
+# One-shot
+bash scripts/backup-postgres.sh
+
+# Install daily cron (03:00 UTC, 30-day retention)
+bash scripts/install-backup-cron.sh
+
+# Custom location / retention
+BACKUP_DIR=/var/backups/streampass RETENTION_DAYS=30 bash scripts/install-backup-cron.sh
 ```
 
-### Automated Backup (TODO: BL-033)
-```bash
-# Planned cron (daily)
-0 3 * * * docker compose exec -T postgres pg_dump -U streampass streampass | gzip > /backups/streampass_$(date +\%Y\%m\%d).sql.gz
+Artifacts:
+- `$BACKUP_DIR/streampass_YYYYMMDD_HHMMSS.sql.gz`
+- `$BACKUP_DIR/streampass_latest.sql.gz` (symlink)
+- `$BACKUP_DIR/backup.log`
+
+### Local / Windows
+
+```powershell
+.\scripts\Backup.ps1
+.\scripts\Backup.ps1 -OutputDir .\backups -RetentionDays 30
 ```
 
-**Script:** `scripts/Backup.ps1` — TODO: implement
+### Restore
+
+```bash
+# Dry gate — requires explicit confirmation
+CONFIRM=yes bash scripts/restore-postgres.sh /var/backups/streampass/streampass_latest.sql.gz
+```
+
+Restore stops `backend` + `healthmonitor`, recreates the DB, loads the dump, then starts them again.
 
 ---
 
@@ -52,20 +69,20 @@ Redis configured with `--save ""` and `--appendonly no`.
 1. Provision new VPS
 2. Install Docker + Docker Compose
 3. Clone repo, restore `.env`
-4. Restore PostgreSQL from latest backup
+4. Restore PostgreSQL: `CONFIRM=yes bash scripts/restore-postgres.sh <dump.sql.gz>`
 5. `docker compose up -d --build`
 6. Update DNS if IP changed
 7. Verify `/health`
+8. Re-install cron: `bash scripts/install-backup-cron.sh`
 
-**RTO:** TODO: Требуется уточнение (depends on backup frequency)  
-**RPO:** TODO: Требуется уточнение (depends on backup frequency)
+**RTO:** ~30–60 min (new VPS + restore)  
+**RPO:** ≤ 24 h (daily backup at 03:00 UTC)
 
 ### Scenario: Database corruption
 
-1. Stop backend: `docker compose stop backend`
-2. Restore from backup (see above)
-3. Restart: `docker compose start backend`
-4. Verify data integrity
+1. `CONFIRM=yes bash scripts/restore-postgres.sh /var/backups/streampass/streampass_latest.sql.gz`
+2. Verify Admin → Users / Relays
+3. Spot-check `/health`
 
 ### Scenario: Migration failure
 
@@ -89,17 +106,13 @@ Required secrets: `DB_PASSWORD`, `JWT_SECRET`, `ADMIN_API_KEY`, `YOOKASSA_*`
 |------|---------|--------|
 | Auth tokens | SharedPreferences (device) | User re-login |
 | Settings | SharedPreferences + native | Lost on uninstall |
-| Exclusions | Local only | Lost on uninstall |
-
-No server-side device backup.
+| Exclusions | Local + synced (BL-014) | Server is source of truth |
 
 ---
 
-## Recommendations (Pre-Production)
+## Recommendations (next)
 
-1. Daily automated PostgreSQL backup with 30-day retention
-2. Off-site backup storage (S3, another VPS)
-3. Test restore procedure monthly
-4. Document RTO/RPO targets
-5. Enable Redis persistence for production
-6. Backup `.env` securely outside repo
+1. Off-site copy of `$BACKUP_DIR` (S3 / second VPS) — not yet automated
+2. Monthly restore drill
+3. Enable Redis persistence when session durability matters
+4. Encrypted off-box copy of `.env`
