@@ -39,6 +39,7 @@ class StreamPassVpnService : VpnService() {
         var lastError: String? = null
 
         private const val ACTION_CONNECT = "com.streampass.app.CONNECT"
+        private const val ACTION_DISCONNECT = "com.streampass.app.DISCONNECT"
         private const val NOTIFICATION_CHANNEL_ID = "streampass_vpn_status"
         private const val NOTIFICATION_ID = 1
 
@@ -58,7 +59,14 @@ class StreamPassVpnService : VpnService() {
         }
 
         fun stop(context: Context) {
-            instance?.tearDown()
+            val svc = instance
+            if (svc != null) {
+                svc.tearDown()
+            } else {
+                context.startService(Intent(context, StreamPassVpnService::class.java).apply {
+                    action = ACTION_DISCONNECT
+                })
+            }
         }
 
         fun updateRules(rulesJson: String, exclusionsJson: String): String {
@@ -81,6 +89,7 @@ class StreamPassVpnService : VpnService() {
     private var tunnelBridge: TunnelBridge? = null
     private val scope = CoroutineScope(Dispatchers.IO + Job())
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val teardownLock = Any()
     @Volatile private var tornDown = false
 
     private var relayId: String = ""
@@ -98,6 +107,10 @@ class StreamPassVpnService : VpnService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_DISCONNECT) {
+            tearDown()
+            return START_NOT_STICKY
+        }
         if (intent?.action == ACTION_CONNECT) {
             relayId = intent.getStringExtra("id") ?: ""
             relayHost = intent.getStringExtra("host") ?: ""
@@ -190,14 +203,16 @@ class StreamPassVpnService : VpnService() {
             }
 
             // 10.10.0.1/30 — first host so sing-tun Next()=10.10.0.2 (unicast), not broadcast.
-            tunInterface = Builder()
+            val vpnBuilder = Builder()
                 .setSession("StreamPass")
                 .addAddress("10.10.0.1", 30)
                 .addDnsServer("1.1.1.1")
                 .addDnsServer("1.0.0.1")
                 .addRoute("0.0.0.0", 0)
                 .setMtu(1400)
-                .establish()
+            val bypassCount = VpnBypassApps.apply(vpnBuilder, packageManager)
+            ConnectLogger.log(this, "VPN bypass apps applied=$bypassCount")
+            tunInterface = vpnBuilder.establish()
 
             val fd = tunInterface?.fd
                 ?: throw IllegalStateException("VPN interface could not be established")
@@ -220,16 +235,34 @@ class StreamPassVpnService : VpnService() {
     }
 
     private fun releaseResources() {
-        tunnelBridge?.stopTunnel()
-        tunnelBridge?.clearSocketProtector()
-        tunnelBridge = null
-        tunInterface?.close()
+        // Close TUN first so no new packets enter Go while we tear down.
+        val tun = tunInterface
         tunInterface = null
+        try {
+            tun?.close()
+        } catch (t: Throwable) {
+            Log.e(TAG, "TUN close failed", t)
+        }
+
+        val bridge = tunnelBridge
+        tunnelBridge = null
+        try {
+            bridge?.stopTunnel()
+        } catch (t: Throwable) {
+            Log.e(TAG, "stopTunnel failed", t)
+        }
+        try {
+            bridge?.clearSocketProtector()
+        } catch (t: Throwable) {
+            Log.e(TAG, "clearSocketProtector failed", t)
+        }
     }
 
     private fun tearDown() {
-        if (tornDown) return
-        tornDown = true
+        synchronized(teardownLock) {
+            if (tornDown) return
+            tornDown = true
+        }
         ConnectLogger.log(this, "[vpn] stop begin")
         scope.launch {
             try {
@@ -239,10 +272,14 @@ class StreamPassVpnService : VpnService() {
                 ConnectLogger.log(this@StreamPassVpnService, "releaseResources failed: ${t.message}")
             }
             mainHandler.post {
-                emit("disconnected")
-                ConnectLogger.log(this@StreamPassVpnService, "[vpn] stop complete")
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                try {
+                    emit("disconnected")
+                    ConnectLogger.log(this@StreamPassVpnService, "[vpn] stop complete")
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                } catch (t: Throwable) {
+                    Log.e(TAG, "tearDown finalize failed", t)
+                }
             }
         }
     }

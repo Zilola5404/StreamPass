@@ -13,6 +13,7 @@ import '../services/settings_service.dart';
 import '../services/streampass_api.dart';
 import '../services/vpn_channel.dart';
 import '../services/client_update.dart';
+import '../services/connection_duration.dart';
 import '../services/relay_picker.dart';
 import '../services/region_catalog.dart';
 import '../theme/app_theme.dart';
@@ -46,6 +47,9 @@ class _HomeScreenState extends State<HomeScreen> {
   final _connectLog = ConnectionLog.instance;
   late final RuleEngineService _ruleEngine = RuleEngineService(api: widget.api);
   int _pendingRulesVersion = 0;
+  DateTime? _connectedSince;
+  Timer? _durationTimer;
+  String _durationLabel = 'Smart routing';
 
   @override
   void initState() {
@@ -58,6 +62,25 @@ class _HomeScreenState extends State<HomeScreen> {
     await _checkClientUpdate();
     await _loadSubscription();
     await _loadStartupData();
+    await _restoreVpnState();
+  }
+
+  Future<void> _restoreVpnState() async {
+    try {
+      final native = await VpnChannel.fetchNativeStatus();
+      if (!mounted || native == null) return;
+      if (native.event != VpnEvent.connected) return;
+      setState(() {
+        _state = ConnState.connected;
+        _connectedSince = DateTime.now();
+        _durationLabel = formatConnectionDuration(Duration.zero);
+        _pingMs = _effectivePing(native.pingMs);
+      });
+      _startDurationTimer();
+      unawaited(_ruleEngine.start(initialVersion: _pendingRulesVersion));
+    } catch (_) {
+      // Non-fatal — UI stays on disconnected until user connects.
+    }
   }
 
   Future<void> _checkClientUpdate() async {
@@ -220,9 +243,35 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _durationTimer?.cancel();
     _ruleEngine.stop();
     _sub?.cancel();
     super.dispose();
+  }
+
+  void _startDurationTimer() {
+    _durationTimer?.cancel();
+    _durationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final since = _connectedSince;
+      if (!mounted || since == null) return;
+      setState(() {
+        _durationLabel = formatConnectionDuration(DateTime.now().difference(since));
+      });
+    });
+  }
+
+  void _stopDurationTimer() {
+    _durationTimer?.cancel();
+    _durationTimer = null;
+    _connectedSince = null;
+    _durationLabel = 'Smart routing';
+  }
+
+  int? _effectivePing(int? nativePing) {
+    if (nativePing != null && nativePing > 0) return nativePing;
+    final relayPing = _selectedRelay?.rttMs;
+    if (relayPing != null && relayPing > 0) return relayPing;
+    return null;
   }
 
   void _onStatus(VpnStatusUpdate update) {
@@ -243,17 +292,24 @@ class _HomeScreenState extends State<HomeScreen> {
       switch (update.event) {
         case VpnEvent.connecting:
           _state = ConnState.connecting;
+          _stopDurationTimer();
         case VpnEvent.connected:
           _state = ConnState.connected;
-          _pingMs = update.pingMs ?? _selectedRelay?.rttMs;
+          _connectedSince = DateTime.now();
+          _durationLabel = formatConnectionDuration(Duration.zero);
+          _startDurationTimer();
+          _pingMs = _effectivePing(update.pingMs);
         case VpnEvent.disconnected:
           _state = ConnState.disconnected;
-          _pingMs = _selectedRelay?.rttMs;
+          _stopDurationTimer();
+          _pingMs = _effectivePing(_selectedRelay?.rttMs);
         case VpnEvent.permissionDenied:
           _state = ConnState.error;
+          _stopDurationTimer();
           _errorMessage = 'Нужно разрешение на VPN-соединение';
         case VpnEvent.error:
           _state = ConnState.error;
+          _stopDurationTimer();
           final msg = update.errorMessage ?? 'Ошибка подключения';
           if (msg.toLowerCase().contains('token expired') ||
               msg.contains('AUTH_TOKEN_EXPIRED')) {
@@ -267,8 +323,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _toggleConnection() async {
-    if (_state == ConnState.connected) {
-      await VpnChannel.disconnect();
+    if (_state == ConnState.connected || _state == ConnState.connecting) {
+      setState(() {
+        _state = ConnState.disconnected;
+        _stopDurationTimer();
+      });
+      try {
+        await VpnChannel.disconnect();
+      } catch (_) {
+        if (mounted) {
+          setState(() => _state = ConnState.disconnected);
+        }
+      }
       return;
     }
 
@@ -378,7 +444,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           state: _state,
                           label: statusText,
                           subtitle: _state == ConnState.connected
-                              ? '00:03:47'
+                              ? _durationLabel
                               : 'Smart routing',
                           onTap: _toggleConnection,
                         ),
@@ -580,7 +646,7 @@ class _RelayCard extends StatelessWidget {
                 ],
               ),
             ),
-            if (pingMs != null)
+            if (pingMs != null && pingMs! > 0)
               Text(
                 '$pingMs ms',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
