@@ -12,7 +12,7 @@ func TestDomainMatch_wildcardRu(t *testing.T) {
 		{Kind: decision.KindDomain, Pattern: "*.ru", Mode: decision.ModeDirect},
 		{Kind: decision.KindDomain, Pattern: "youtube.com", Mode: decision.ModeRelay},
 	}
-	e := decision.NewEngine(rules, nil, decision.ModeRelay)
+	e := decision.NewEngine(rules, nil, decision.DefaultMode)
 
 	cases := []struct {
 		host string
@@ -21,7 +21,7 @@ func TestDomainMatch_wildcardRu(t *testing.T) {
 		{"yandex.ru", decision.ModeDirect},
 		{"sub.mail.ru", decision.ModeDirect},
 		{"www.youtube.com", decision.ModeRelay},
-		{"google.com", decision.ModeRelay},
+		{"google.com", decision.ModeDirect},
 	}
 	for _, tc := range cases {
 		got := e.Decide(decision.Target{Host: tc.host})
@@ -36,7 +36,7 @@ func TestCIDRMatch_directRussianRange(t *testing.T) {
 		{Kind: decision.KindCIDR, Pattern: "178.248.232.0/21", Mode: decision.ModeDirect},
 		{Kind: decision.KindDomain, Pattern: "google.com", Mode: decision.ModeRelay},
 	}
-	e := decision.NewEngine(rules, nil, decision.ModeRelay)
+	e := decision.NewEngine(rules, nil, decision.DefaultMode)
 
 	ip := netip.MustParseAddr("178.248.233.10")
 	got := e.Decide(decision.Target{IP: ip})
@@ -46,8 +46,8 @@ func TestCIDRMatch_directRussianRange(t *testing.T) {
 
 	outside := netip.MustParseAddr("8.8.8.8")
 	got = e.Decide(decision.Target{IP: outside, Host: "dns.google"})
-	if got != decision.ModeRelay {
-		t.Fatalf("default for 8.8.8.8 = %s, want RELAY", got)
+	if got != decision.ModeDirect {
+		t.Fatalf("default for 8.8.8.8 = %s, want DIRECT", got)
 	}
 }
 

@@ -31,4 +31,6 @@ type RuleSet struct {
 }
 
 // DefaultMode applies when nothing matches.
-const DefaultMode = ModeRelay
+// StreamPass is a traffic accelerator (split tunnel), not a full-tunnel VPN:
+// unknown destinations stay DIRECT unless explicitly forced to RELAY/FALLBACK.
+const DefaultMode = ModeDirect
