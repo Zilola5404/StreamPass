@@ -1,6 +1,5 @@
 package com.streampass.app
 
-import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
@@ -130,8 +129,15 @@ object VpnBypassApps {
         }
 
         for (app in apps) {
-            if ((app.flags and ApplicationInfo.FLAG_SYSTEM) != 0) continue
+            // Do NOT skip FLAG_SYSTEM — many banks/gov apps ship as updated-system
+            // apps (FLAG_SYSTEM|FLAG_UPDATED_SYSTEM_APP) and would never be bypassed.
             val pkg = app.packageName.lowercase()
+            if (pkg.startsWith("com.android.") ||
+                pkg.startsWith("android.") ||
+                pkg.startsWith("com.google.android.")
+            ) {
+                continue
+            }
             val label = try {
                 pm.getApplicationLabel(app).toString().lowercase()
             } catch (_: Throwable) {

@@ -203,11 +203,13 @@ class StreamPassVpnService : VpnService() {
             }
 
             // 10.10.0.1/30 — first host so sing-tun Next()=10.10.0.2 (unicast), not broadcast.
+            // Yandex DNS first so .ru geo-DNS stays local when queries leave TUN
+            // via excludeRoute. Cloudflare remains as foreign fallback inside DoH.
             val vpnBuilder = Builder()
                 .setSession("StreamPass")
                 .addAddress("10.10.0.1", 30)
-                .addDnsServer("1.1.1.1")
-                .addDnsServer("1.0.0.1")
+                .addDnsServer("77.88.8.8")
+                .addDnsServer("77.88.8.1")
                 .setMtu(1400)
             val routeInfo = VpnRouteConfigurator.apply(vpnBuilder, assets)
             val bypassCount = VpnBypassApps.apply(vpnBuilder, packageManager)

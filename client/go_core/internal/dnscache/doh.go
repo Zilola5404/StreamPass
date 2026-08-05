@@ -18,10 +18,12 @@ import (
 
 // DoH talks to Cloudflare by IP so we never need to resolve a hostname
 // through the VPN DNS path (that would recurse into HandleQuery and hang/crash).
+// Russian TLDs (.ru/.рф/…) use Yandex plain DNS for correct geo answers (ТЗ DIRECT).
 const (
 	doHEndpoint   = "https://1.1.1.1/dns-query"
 	doHServerName = "cloudflare-dns.com"
 	plainDNSAddr  = "1.1.1.1:53"
+	ruDNSAddr     = "77.88.8.8:53"
 )
 
 // LogFunc receives diagnostic lines (optional).
@@ -137,19 +139,31 @@ func (r *Resolver) HandleQuery(ctx context.Context, query []byte) (resp []byte, 
 	}
 
 	start := time.Now()
-	raw, ttl, err := r.fetchDoH(ctx, query)
+	var raw []byte
+	var ttl time.Duration
 	via := "doh"
-	if err != nil {
-		raw, ttl, err = r.fetchPlainUDP(ctx, query)
-		via = "udp"
+
+	if IsRussianDomain(name) {
+		raw, ttl, err = r.fetchPlainUDPTo(ctx, query, ruDNSAddr)
+		via = "yandex"
 		if err != nil {
-			logLine(r.logf, fmt.Sprintf("[dns] query %s via=fail err=%v", trimDot(name), err))
-			return buildServFail(header, q)
+			raw, ttl, err = r.fetchPlainUDPTo(ctx, query, plainDNSAddr)
+			via = "udp-fallback"
 		}
 	} else {
-		dohOKOnce.Do(func() {
-			logLine(r.logf, "[dns] doh connected ip=1.1.1.1 sni=cloudflare-dns.com")
-		})
+		raw, ttl, err = r.fetchDoH(ctx, query)
+		if err != nil {
+			raw, ttl, err = r.fetchPlainUDPTo(ctx, query, plainDNSAddr)
+			via = "udp"
+		} else {
+			dohOKOnce.Do(func() {
+				logLine(r.logf, "[dns] doh connected ip=1.1.1.1 sni=cloudflare-dns.com")
+			})
+		}
+	}
+	if err != nil {
+		logLine(r.logf, fmt.Sprintf("[dns] query %s via=fail err=%v", trimDot(name), err))
+		return buildServFail(header, q)
 	}
 	r.cache.PutRaw(qtype, name, raw, ttl)
 	logLine(r.logf, fmt.Sprintf("[dns] query %s via=%s rtt=%dms", trimDot(name), via, time.Since(start).Milliseconds()))
@@ -190,6 +204,10 @@ func (r *Resolver) fetchDoH(ctx context.Context, query []byte) ([]byte, time.Dur
 }
 
 func (r *Resolver) fetchPlainUDP(ctx context.Context, query []byte) ([]byte, time.Duration, error) {
+	return r.fetchPlainUDPTo(ctx, query, plainDNSAddr)
+}
+
+func (r *Resolver) fetchPlainUDPTo(ctx context.Context, query []byte, addr string) ([]byte, time.Duration, error) {
 	var lc net.ListenConfig
 	lc.Control = protect.Control
 	pc, err := lc.ListenPacket(ctx, "udp", ":0")
@@ -198,7 +216,7 @@ func (r *Resolver) fetchPlainUDP(ctx context.Context, query []byte) ([]byte, tim
 	}
 	defer pc.Close()
 
-	raddr, err := net.ResolveUDPAddr("udp", plainDNSAddr)
+	raddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, 0, err
 	}

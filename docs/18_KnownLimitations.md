@@ -30,6 +30,10 @@
 | Android VPN key icon | `VpnService` всегда показывает системный ключ; снять флаг у приложения можно только через `addDisallowedApplication` |
 | Domain DIRECT ≠ OS bypass | Decision Engine DIRECT не снимает `TRANSPORT_VPN`; для Госуслуг/ФНС/банков нужен app-bypass |
 | KindAPP rules | Backend Kind=APP пока нет (не в ТЗ §6); список пакетов в клиенте + эвристика по установленным приложениям |
+| Browser under VPN | Chrome нельзя целиком disallow (иначе foreign sites не ускорятся); RU-сайты → split DNS + RU CIDR exclude |
+| Split DNS | `.ru/.su/.рф` → Yandex `77.88.8.8`; foreign → Cloudflare DoH (`dnscache`) |
+
+См. также: `docs/33_DirectVsVpnBypass.md`.
 
 ---
 

@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"streampass/go_core/internal/dnscache"
+	"streampass/go_core/internal/tunbridge"
 )
 
 // EventLogger receives diagnostic lines from the Go core (DNS bootstrap, stop, etc.).
@@ -23,11 +24,14 @@ func SetEventLogger(l EventLogger) {
 	eventLogMu.Unlock()
 	if l == nil {
 		dnscache.SetLogger(nil)
+		tunbridge.SetLogger(nil)
 		return
 	}
-	dnscache.SetLogger(func(message string) {
+	fn := func(message string) {
 		l.Log(message)
-	})
+	}
+	dnscache.SetLogger(fn)
+	tunbridge.SetLogger(fn)
 }
 
 func logEvent(message string) {

@@ -20,6 +20,30 @@ import (
 	"streampass/go_core/internal/protect"
 )
 
+// LogFunc receives diagnostic lines from the TUN bridge.
+type LogFunc func(message string)
+
+var (
+	logMu sync.RWMutex
+	logf  LogFunc
+)
+
+// SetLogger installs an optional diagnostic logger for dial failures.
+func SetLogger(fn LogFunc) {
+	logMu.Lock()
+	logf = fn
+	logMu.Unlock()
+}
+
+func logLine(msg string) {
+	logMu.RLock()
+	fn := logf
+	logMu.RUnlock()
+	if fn != nil {
+		fn(msg)
+	}
+}
+
 type Session struct {
 	cancel context.CancelFunc
 	stop   func()
@@ -185,6 +209,7 @@ func (h *routingHandler) NewConnectionEx(
 func (h *routingHandler) dialRelayTCP(ctx context.Context, conn net.Conn, destination M.Socksaddr) bool {
 	remote, err := h.client.TCP(destination.String())
 	if err != nil {
+		logLine(fmt.Sprintf("[tun] relay-tcp fail dest=%s err=%v", destination.String(), err))
 		return false
 	}
 	defer remote.Close()
@@ -199,6 +224,7 @@ func (h *routingHandler) dialDirectTCP(ctx context.Context, conn net.Conn, desti
 	}
 	remote, err := dialer.DialContext(ctx, "tcp", destination.String())
 	if err != nil {
+		logLine(fmt.Sprintf("[tun] direct-tcp fail dest=%s err=%v", destination.String(), err))
 		return
 	}
 	defer remote.Close()
