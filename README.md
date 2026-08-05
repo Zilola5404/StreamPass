@@ -90,7 +90,7 @@ flutter build apk --release --target-platform android-arm64
 - Live-тест ЮKassa (BL-004 — Skipped) → auto-renewal (BL-030 Blocked)  
 - Windows / iOS / macOS клиенты (BL-023…025)  
 - Физический device E2E re-check APK +24  
-- TCP underlay fallback (UDP ports уже есть, BL-017)  
+- TCP underlay fallback Done (BL-017): UDP ports + TCP 8443/24443 bridge  
 - Брендовый домен вместо nip.io  
 
 **Уже Done:** Admin UI, Prometheus/Grafana, DNS/DoH, release signing path, regions, backups, CI, Flutter E2E, loadtest, **app OS-bypass UI**, **OTA APK** (`/downloads/StreamPass.apk`).

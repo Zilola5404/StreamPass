@@ -4,17 +4,18 @@
 
 ## In progress / just done
 
-- **BL-034** App OS-bypass UI + OTA download hosting
-- Accelerator stack: RU CIDR split-tunnel, app bypass, split DNS (`v0.1.1+23` → `+24`)
-- Docs: `docs/33_DirectVsVpnBypass.md`
+- **BL-017 TCP underlay** — client framed TCP PacketConn + VPS `streampass-tcpunderlay` (TCP 8443/24443 → UDP 443)
+- Device E2E script refreshed for +25 (`scripts/VerifyDeviceE2E.ps1`)
+- Prior: BL-034 app bypass UI, split-tunnel, split DNS
 
 ## APK
 
-`client/build/app/outputs/flutter-apk/StreamPass-v0.1.1+24-signed-arm64.apk`
+`client/build/app/outputs/flutter-apk/StreamPass-v0.1.1+25-signed-arm64.apk`
 
-Public (after deploy): `https://212-43-156-33.nip.io/downloads/StreamPass.apk`
+Public: `https://212-43-156-33.nip.io/downloads/StreamPass.apk` (re-upload after build)
 
 ## Not in this stage
 
+- Branded domain
 - ЮKassa live (BL-004)
 - Windows / iOS / macOS (BL-023…025)

@@ -176,3 +176,60 @@ func TestIntegrationHysteriaHTTPHead(t *testing.T) {
 	}
 	_ = net.ParseIP("127.0.0.1") // ensure net imported
 }
+
+// TestIntegrationTCPUnderlayConnect handshakes via framed TCP→UDP bridge (ТЗ §10).
+func TestIntegrationTCPUnderlayConnect(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test skipped in short mode")
+	}
+	if os.Getenv("STREAMPASS_RELAY_TEST") == "0" {
+		t.Skip("STREAMPASS_RELAY_TEST=0")
+	}
+
+	uri := integrationConnectionConfig(t)
+	baseCfg, parsed, err := BuildClientConfig(uri, "", 0)
+	if err != nil {
+		t.Fatalf("build config: %v", err)
+	}
+	hostOnly, _, err := net.SplitHostPort(parsed.ServerHost)
+	if err != nil {
+		hostOnly = parsed.ServerHost
+	}
+	udpRemote, err := net.ResolveUDPAddr("udp", net.JoinHostPort(hostOnly, "443"))
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+
+	cfg := cloneClientConfig(baseCfg)
+	cfg.ServerAddr = udpRemote
+	cfg.ConnFactory = &tcpUnderlayConnFactory{
+		tcpAddr:   net.JoinHostPort(hostOnly, "8443"),
+		udpRemote: udpRemote,
+		obfsType:  parsed.ObfsType,
+		obfsPass:  parsed.ObfsPass,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	type result struct {
+		hy  client.Client
+		err error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		hy, _, err := client.NewClient(cfg)
+		ch <- result{hy: hy, err: err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		t.Fatal("TCP underlay handshake timed out")
+	case r := <-ch:
+		if r.err != nil {
+			t.Fatalf("TCP underlay connect: %v", r.err)
+		}
+		defer r.hy.Close()
+		t.Log("TCP underlay hysteria handshake OK")
+	}
+}

@@ -7,18 +7,23 @@ import (
 )
 
 // FallbackUDPPorts is the UDP dial order from ТЗ §10 after the primary port.
-// TCP 443/8443 are listed in the TZ but hysteria core v2 is QUIC/UDP-only;
-// those are skipped until a TCP underlay exists.
 var FallbackUDPPorts = []int{8443, 24443}
 
-// DialCandidate is one UDP endpoint to try for the relay handshake.
+// FallbackTCPPorts is tried after all UDP candidates fail (ТЗ §10).
+// TCP/443 is skipped on the StreamPass VPS because Caddy owns it; the
+// underlay bridge listens on TCP/8443 and TCP/24443 and forwards framed
+// datagrams to local Hysteria UDP/443.
+var FallbackTCPPorts = []int{8443, 24443}
+
+// DialCandidate is one endpoint to try for the relay handshake.
 type DialCandidate struct {
-	Host string // host:port
-	Port int
+	Host    string // host:port
+	Port    int
+	Network string // "udp" or "tcp"
 }
 
-// FallbackCandidates builds the UDP endpoint list: primary port first, then
-// ТЗ §10 alternates (deduped).
+// FallbackCandidates builds the dial list: primary UDP, then UDP alternates,
+// then TCP underlay ports (ТЗ §10), deduped per network+port.
 func FallbackCandidates(host string, primaryPort int) []DialCandidate {
 	hostOnly := host
 	if h, p, err := net.SplitHostPort(host); err == nil {
@@ -33,29 +38,37 @@ func FallbackCandidates(host string, primaryPort int) []DialCandidate {
 		primaryPort = 443
 	}
 
-	seen := map[int]struct{}{}
+	seen := map[string]struct{}{}
 	var out []DialCandidate
-	add := func(port int) {
+	add := func(network string, port int) {
 		if port <= 0 {
 			return
 		}
-		if _, ok := seen[port]; ok {
+		key := network + "/" + strconv.Itoa(port)
+		if _, ok := seen[key]; ok {
 			return
 		}
-		seen[port] = struct{}{}
+		seen[key] = struct{}{}
 		out = append(out, DialCandidate{
-			Host: net.JoinHostPort(hostOnly, strconv.Itoa(port)),
-			Port: port,
+			Host:    net.JoinHostPort(hostOnly, strconv.Itoa(port)),
+			Port:    port,
+			Network: network,
 		})
 	}
-	add(primaryPort)
+	add("udp", primaryPort)
 	for _, p := range FallbackUDPPorts {
-		add(p)
+		add("udp", p)
+	}
+	for _, p := range FallbackTCPPorts {
+		add("tcp", p)
 	}
 	return out
 }
 
 // FormatCandidate returns a short label for logs.
 func (c DialCandidate) String() string {
-	return fmt.Sprintf("udp/%d", c.Port)
+	if c.Network == "" {
+		return fmt.Sprintf("udp/%d", c.Port)
+	}
+	return fmt.Sprintf("%s/%d", c.Network, c.Port)
 }

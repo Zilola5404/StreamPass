@@ -26,7 +26,7 @@
 | Admin via API key | `/admin/` + `X-Admin-Key`; нет RBAC / audit log |
 | Telemetry no FK | Orphan events if user deleted |
 | PostgreSQL sslmode=disable | Internal Docker network only |
-| TCP underlay | UDP fallback портов есть; TCP underlay — later |
+| TCP underlay | Done: framed TCP→UDP bridge на VPS (`streampass-tcpunderlay`, TCP 8443/24443 → UDP 443). TCP/443 занят Caddy |
 | Android VPN key icon | `VpnService` всегда показывает системный ключ; снять флаг у приложения можно только через `addDisallowedApplication` |
 | Domain DIRECT ≠ OS bypass | Decision Engine DIRECT не снимает `TRANSPORT_VPN`; для Госуслуг/ФНС/банков нужен app-bypass |
 | KindAPP rules | Backend Kind=APP пока нет (не в ТЗ §6); список пакетов в клиенте + эвристика по установленным приложениям |

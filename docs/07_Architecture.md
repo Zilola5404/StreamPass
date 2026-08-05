@@ -254,7 +254,7 @@ Client → GET /api/v1/subscription → active_until
 Остаётся вне текущего MVP-закрытия:
 
 - Platform Adapters: WFP (Windows), Network Extension (macOS/iOS) — BL-023…025
-- Optional TCP underlay fallback (UDP ports Done — BL-017)
+- TCP underlay fallback Done (BL-017): framed TCP→UDP on VPS + client candidates
 - Off-site backup copy (local daily cron Done — BL-033)
 - ЮKassa live payment verification (BL-004 Skipped; BL-030 Blocked)
 

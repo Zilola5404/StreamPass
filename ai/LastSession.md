@@ -1,26 +1,21 @@
 # Last Session
 
-> 2026-08-05
+> Updated: 2026-08-06
 
 ## Completed
 
-- Docs audit: синхронизация `14_AIContext`, `03_CurrentState`, KnownLimitations, AI sprint pack, SmokeTest
-- Ранее: BL-026/027/031/032/033, admin login fix, APK v0.1.1+17
+- **BL-017 TCP underlay**: client `tcpPacketConn` + fallback TCP 8443/24443; VPS `streampass-tcpunderlay` active
+- Live handshake OK: `TestIntegrationTCPUnderlayConnect`
+- Device E2E script: smoke + regions/config/rules/download + TCP ports (adb manual — no device)
+- APK **v0.1.1+25** uploaded to `/downloads/StreamPass.apk`
 
-## Prod snapshot
+## APK
 
-- API /admin /regions OK
-- Backups cron on `/var/backups/streampass`
-- Grafana/Prometheus localhost-only
-- Relays: NL only in DB
+`client/build/app/outputs/flutter-apk/StreamPass-v0.1.1+25-signed-arm64.apk`  
+OTA: `https://212-43-156-33.nip.io/downloads/StreamPass.apk`
 
-## Explicitly not done
+## Not done
 
-- ЮKassa live (BL-004/030)
-- Windows / iOS / macOS (BL-023…025)
-- Off-site backup copy
-- Physical device re-verify +17 (manual)
-
-## Hand-off
-
-Читать: `docs/14_AIContext.md` → `docs/04_Backlog.md` → `ai/CurrentTask.md`
+- Branded domain
+- Physical-device connect flow (no adb device this session)
+- ЮKassa / desktop clients

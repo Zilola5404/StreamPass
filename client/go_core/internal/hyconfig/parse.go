@@ -182,6 +182,27 @@ func (f *protectedConnFactory) New(addr net.Addr) (net.PacketConn, error) {
 	}
 }
 
+func wrapObfs(conn net.PacketConn, obfsType, obfsPass string) (net.PacketConn, error) {
+	switch obfsType {
+	case "", "none":
+		return conn, nil
+	case "salamander":
+		if obfsPass == "" {
+			_ = conn.Close()
+			return nil, fmt.Errorf("salamander obfs requires obfs-password")
+		}
+		ob, err := obfs.NewSalamanderObfuscator([]byte(obfsPass))
+		if err != nil {
+			_ = conn.Close()
+			return nil, err
+		}
+		return obfs.WrapPacketConn(conn, ob), nil
+	default:
+		_ = conn.Close()
+		return nil, fmt.Errorf("unsupported obfs type %q", obfsType)
+	}
+}
+
 func normalizeCertHash(value string) string {
 	value = strings.TrimSpace(value)
 	if decoded, err := base64.StdEncoding.DecodeString(value); err == nil {

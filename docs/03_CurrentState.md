@@ -62,7 +62,7 @@
 |-----------|--------|
 | **Billing / ЮKassa** | Код есть; live-тест Skipped (BL-004); auto-renewal Blocked (BL-030) |
 | **Physical device E2E** | Код/APK готовы; ручная проверка на устройстве |
-| **TCP underlay fallback** | UDP ports Done (BL-017); TCP later |
+| **TCP underlay fallback** | Done (BL-017): client UDP→TCP candidates + VPS bridge |
 | **Off-site backup** | Локальный cron есть; копия off-box нет |
 | **nip.io** | Работает; брендовый домен нет |
 

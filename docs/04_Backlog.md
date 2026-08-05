@@ -26,7 +26,7 @@
 | BL-014 | Exclusions sync | Синхронизация пользовательских исключений с backend | P1 | Done | BL-006 | 2026-08-04 |
 | BL-015 | Refresh token rotation | Клиент: авто-обновление access token | P1 | Done | — | 2026-08-04 |
 | BL-016 | DNS Cache + DoH | Локальный DNS на клиенте (ТЗ §7) | P1 | Done | BL-005 | 2026-08-04 |
-| BL-017 | Fallback Strategy | UDP 443 → 8443 → 24443 (TCP later, QUIC-only) | P1 | Done | BL-001 | 2026-08-04 |
+| BL-017 | Fallback Strategy | UDP 443 → 8443 → 24443, затем TCP underlay 8443 → 24443 | P1 | Done | BL-001 | 2026-08-06 |
 
 ## P2 — Желательно
 

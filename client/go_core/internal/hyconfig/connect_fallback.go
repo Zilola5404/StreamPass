@@ -18,7 +18,7 @@ type ConnectResult struct {
 	Candidate DialCandidate
 }
 
-// ConnectWithFallback dials the relay trying UDP ports in ТЗ §10 order.
+// ConnectWithFallback dials the relay trying UDP then TCP underlay (ТЗ §10).
 func ConnectWithFallback(connectionConfig, relayHost string, relayPort int) (*ConnectResult, error) {
 	baseCfg, parsed, err := BuildClientConfig(connectionConfig, relayHost, relayPort)
 	if err != nil {
@@ -48,40 +48,67 @@ func ConnectWithFallback(connectionConfig, relayHost string, relayPort int) (*Co
 
 	var failures []string
 	for _, c := range FallbackCandidates(hostOnly, primary) {
-		addr, err := net.ResolveUDPAddr("udp", c.Host)
-		if err != nil {
-			failures = append(failures, fmt.Sprintf("%s: resolve: %v", c, err))
-			continue
-		}
-		cfg := cloneClientConfig(baseCfg)
-		cfg.ServerAddr = addr
-		// Fresh ConnFactory so each attempt gets its own protected UDP socket.
-		cfg.ConnFactory = &protectedConnFactory{
-			obfsType: parsed.ObfsType,
-			obfsPass: parsed.ObfsPass,
-		}
-
-		start := time.Now()
-		hy, _, err := client.NewClient(cfg)
+		result, err := dialCandidate(baseCfg, parsed, hostOnly, c)
 		if err != nil {
 			failures = append(failures, fmt.Sprintf("%s: %v", c, err))
 			continue
 		}
-
-		out := *parsed
-		out.ServerHost = c.Host
-		return &ConnectResult{
-			Client:    hy,
-			Parsed:    &out,
-			PingMs:    int(time.Since(start).Milliseconds()),
-			Candidate: c,
-		}, nil
+		return result, nil
 	}
 
 	if len(failures) == 0 {
 		return nil, fmt.Errorf("no fallback candidates")
 	}
-	return nil, fmt.Errorf("all UDP fallback endpoints failed: %s", strings.Join(failures, "; "))
+	return nil, fmt.Errorf("all fallback endpoints failed: %s", strings.Join(failures, "; "))
+}
+
+func dialCandidate(baseCfg *client.Config, parsed *Parsed, hostOnly string, c DialCandidate) (*ConnectResult, error) {
+	// QUIC peer identity for TCP underlay is always the main Hysteria UDP/443:
+	// the VPS bridge listens on TCP/8443+/24443 and forwards to 127.0.0.1:443.
+	quicPort := c.Port
+	if c.Network == "tcp" {
+		quicPort = 443
+	}
+	udpRemote, err := net.ResolveUDPAddr("udp", net.JoinHostPort(hostOnly, strconv.Itoa(quicPort)))
+	if err != nil {
+		return nil, fmt.Errorf("resolve: %w", err)
+	}
+
+	cfg := cloneClientConfig(baseCfg)
+	cfg.ServerAddr = udpRemote
+
+	switch c.Network {
+	case "tcp":
+		cfg.ConnFactory = &tcpUnderlayConnFactory{
+			tcpAddr:   c.Host,
+			udpRemote: udpRemote,
+			obfsType:  parsed.ObfsType,
+			obfsPass:  parsed.ObfsPass,
+		}
+	default:
+		cfg.ConnFactory = &protectedConnFactory{
+			obfsType: parsed.ObfsType,
+			obfsPass: parsed.ObfsPass,
+		}
+		if addr, err := net.ResolveUDPAddr("udp", c.Host); err == nil {
+			cfg.ServerAddr = addr
+		}
+	}
+
+	start := time.Now()
+	hy, _, err := client.NewClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	out := *parsed
+	out.ServerHost = c.Host
+	return &ConnectResult{
+		Client:    hy,
+		Parsed:    &out,
+		PingMs:    int(time.Since(start).Milliseconds()),
+		Candidate: c,
+	}, nil
 }
 
 func cloneClientConfig(in *client.Config) *client.Config {
