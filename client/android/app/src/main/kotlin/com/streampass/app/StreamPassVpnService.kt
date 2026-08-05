@@ -55,6 +55,7 @@ class StreamPassVpnService : VpnService() {
                 putExtra("connectionConfig", args?.get("connectionConfig") as? String ?: "")
                 putExtra("rulesJson", args?.get("rulesJson") as? String ?: "")
                 putExtra("exclusionsJson", args?.get("exclusionsJson") as? String ?: "[]")
+                putExtra("bypassPackagesJson", args?.get("bypassPackagesJson") as? String ?: "[]")
             })
         }
 
@@ -99,6 +100,7 @@ class StreamPassVpnService : VpnService() {
     private var connectionConfig: String = ""
     private var rulesJson: String = ""
     private var exclusionsJson: String = "[]"
+    private var bypassPackagesJson: String = "[]"
 
     override fun onCreate() {
         super.onCreate()
@@ -119,6 +121,7 @@ class StreamPassVpnService : VpnService() {
             connectionConfig = intent.getStringExtra("connectionConfig") ?: ""
             rulesJson = intent.getStringExtra("rulesJson") ?: ""
             exclusionsJson = intent.getStringExtra("exclusionsJson") ?: "[]"
+            bypassPackagesJson = intent.getStringExtra("bypassPackagesJson") ?: "[]"
 
             Log.i(TAG, "connect relayId=$relayId host=$relayHost port=$relayPort configLen=${connectionConfig.length}")
             ConnectLogger.log(this, "onStartCommand relayId=$relayId host=$relayHost port=$relayPort configLen=${connectionConfig.length} rulesLen=${rulesJson.length}")
@@ -212,8 +215,9 @@ class StreamPassVpnService : VpnService() {
                 .addDnsServer("77.88.8.1")
                 .setMtu(1400)
             val routeInfo = VpnRouteConfigurator.apply(vpnBuilder, assets)
-            val bypassCount = VpnBypassApps.apply(vpnBuilder, packageManager)
-            ConnectLogger.log(this, "split-tunnel mode=${routeInfo.mode} routes=${routeInfo.routeCount} ruExcludes=${routeInfo.excludeCount} appBypass=$bypassCount")
+            val extraBypass = parseBypassPackages(bypassPackagesJson)
+            val bypassCount = VpnBypassApps.apply(vpnBuilder, packageManager, extraBypass)
+            ConnectLogger.log(this, "split-tunnel mode=${routeInfo.mode} routes=${routeInfo.routeCount} ruExcludes=${routeInfo.excludeCount} appBypass=$bypassCount extraUser=${extraBypass.size}")
             tunInterface = vpnBuilder.establish()
 
             val fd = tunInterface?.fd
@@ -331,6 +335,19 @@ class StreamPassVpnService : VpnService() {
                 else -> "Отключено"
             }
             if (event != "disconnected") updateNotification(statusText)
+        }
+    }
+
+    private fun parseBypassPackages(raw: String): List<String> {
+        if (raw.isBlank() || raw == "[]") return emptyList()
+        return try {
+            val trimmed = raw.trim().removePrefix("[").removeSuffix("]")
+            if (trimmed.isBlank()) return emptyList()
+            trimmed.split(',')
+                .map { it.trim().trim('"').trim('\'') }
+                .filter { it.isNotEmpty() }
+        } catch (_: Throwable) {
+            emptyList()
         }
     }
 }

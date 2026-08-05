@@ -371,24 +371,28 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       var rulesJson = '';
       var exclusionsJson = '[]';
+      var bypassPackagesJson = '[]';
       try {
         final ruleSet = await widget.api.fetchRules();
         rulesJson = jsonEncode(ruleSet.toJson());
         final settings = await SettingsService().load();
         exclusionsJson = jsonEncode(settings.exclusions);
+        bypassPackagesJson = jsonEncode(settings.bypassPackages);
         _pendingRulesVersion = ruleSet.version;
         _connectLog.info('decision', 'rules loaded', {
           'version': '${ruleSet.version}',
           'count': '${ruleSet.rules.length}',
           'exclusions': '${settings.exclusions.length}',
+          'bypassApps': '${settings.bypassPackages.length}',
         });
       } catch (e) {
-        _connectLog.warn('decision', 'rules load failed, using default RELAY', {'error': '$e'});
+        _connectLog.warn('decision', 'rules load failed, using defaults', {'error': '$e'});
       }
       final accepted = await VpnChannel.connect(
         relay,
         rulesJson: rulesJson,
         exclusionsJson: exclusionsJson,
+        bypassPackagesJson: bypassPackagesJson,
       );
       if (!accepted && mounted) {
         setState(() => _state = ConnState.disconnected);

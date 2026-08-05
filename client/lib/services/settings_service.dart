@@ -14,6 +14,8 @@ class AppSettings {
   final String preferredRegion;
   /// Concrete relay id when auto-select is off.
   final String preferredServerId;
+  /// Extra Android packages excluded from VPN (OS bypass).
+  final List<String> bypassPackages;
 
   const AppSettings({
     this.autostart = false,
@@ -22,6 +24,7 @@ class AppSettings {
     this.exclusions = const [],
     this.preferredRegion = '',
     this.preferredServerId = '',
+    this.bypassPackages = const [],
   });
 
   AppSettings copyWith({
@@ -31,6 +34,7 @@ class AppSettings {
     List<String>? exclusions,
     String? preferredRegion,
     String? preferredServerId,
+    List<String>? bypassPackages,
   }) {
     return AppSettings(
       autostart: autostart ?? this.autostart,
@@ -39,6 +43,7 @@ class AppSettings {
       exclusions: exclusions ?? this.exclusions,
       preferredRegion: preferredRegion ?? this.preferredRegion,
       preferredServerId: preferredServerId ?? this.preferredServerId,
+      bypassPackages: bypassPackages ?? this.bypassPackages,
     );
   }
 }
@@ -50,6 +55,7 @@ class SettingsService {
   static const _kExclusions = 'sp_exclusions';
   static const _kPreferredRegion = 'sp_preferred_region';
   static const _kPreferredServer = 'sp_preferred_server';
+  static const _kBypassPackages = 'sp_bypass_packages';
 
   // Mirrors autostart/autoConnect into native SharedPreferences so
   // BootReceiver (which runs outside the Flutter engine) can read them
@@ -62,6 +68,10 @@ class SettingsService {
     final exclusions = raw != null
         ? List<String>.from(jsonDecode(raw) as List)
         : <String>[];
+    final bypassRaw = prefs.getString(_kBypassPackages);
+    final bypassPackages = bypassRaw != null
+        ? List<String>.from(jsonDecode(bypassRaw) as List)
+        : <String>[];
 
     return AppSettings(
       autostart: prefs.getBool(_kAutostart) ?? false,
@@ -70,6 +80,7 @@ class SettingsService {
       exclusions: exclusions,
       preferredRegion: prefs.getString(_kPreferredRegion) ?? '',
       preferredServerId: prefs.getString(_kPreferredServer) ?? '',
+      bypassPackages: bypassPackages,
     );
   }
 
@@ -107,5 +118,10 @@ class SettingsService {
   Future<void> setExclusions(List<String> domains) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kExclusions, jsonEncode(domains));
+  }
+
+  Future<void> setBypassPackages(List<String> packages) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kBypassPackages, jsonEncode(packages));
   }
 }

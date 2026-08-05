@@ -77,6 +77,7 @@ class MainActivity : FlutterActivity() {
 
         NativeSettingsChannel.register(this, flutterEngine.dartExecutor.binaryMessenger)
         DiagnosticsChannel.register(this, flutterEngine.dartExecutor.binaryMessenger)
+        InstalledAppsChannel.register(this, flutterEngine.dartExecutor.binaryMessenger)
     }
 
     /**

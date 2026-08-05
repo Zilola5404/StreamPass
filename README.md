@@ -89,11 +89,10 @@ flutter build apk --release --target-platform android-arm64
 
 - Live-тест ЮKassa (BL-004 — Skipped) → auto-renewal (BL-030 Blocked)  
 - Windows / iOS / macOS клиенты (BL-023…025)  
-- Off-site копия бэкапов (локальный cron уже есть)  
-- Физический device E2E re-check APK +17  
+- Физический device E2E re-check APK +24  
 - TCP underlay fallback (UDP ports уже есть, BL-017)  
 - Брендовый домен вместо nip.io  
 
-**Уже Done:** Admin UI, Prometheus/Grafana, DNS/DoH, release signing path, regions, backups, CI, Flutter E2E, loadtest.
+**Уже Done:** Admin UI, Prometheus/Grafana, DNS/DoH, release signing path, regions, backups, CI, Flutter E2E, loadtest, **app OS-bypass UI**, **OTA APK** (`/downloads/StreamPass.apk`).
 
 Полный список: `docs/04_Backlog.md`.

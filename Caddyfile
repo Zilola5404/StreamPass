@@ -7,6 +7,11 @@
 
 	redir /admin /admin/
 
+	handle_path /downloads/* {
+		root * /srv/downloads
+		file_server browse
+	}
+
 	# Metrics stay on the Docker network (Prometheus → backend:8080), not public.
 	handle /metrics {
 		respond 404

@@ -6,6 +6,7 @@ import '../services/settings_service.dart';
 import '../services/streampass_api.dart';
 import '../services/vpn_channel.dart';
 import 'exclusions_screen.dart';
+import 'app_bypass_screen.dart';
 import 'diagnostics_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -165,6 +166,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
               if (updated != null) {
                 await _saveExclusions(updated);
+              }
+            },
+          ),
+          ListTile(
+            title: const Text('Приложения без VPN'),
+            subtitle: Text(
+              _settings.bypassPackages.isEmpty
+                  ? 'Дополнительно к встроенному списку (Госуслуги, банки…)'
+                  : '${_settings.bypassPackages.length} приложений обходят VPN',
+            ),
+            trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+            onTap: () async {
+              final updated = await Navigator.of(context).push<List<String>>(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      AppBypassScreen(initialSelected: _settings.bypassPackages),
+                ),
+              );
+              if (updated != null) {
+                setState(() =>
+                    _settings = _settings.copyWith(bypassPackages: updated));
+                await _service.setBypassPackages(updated);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Список сохранён. Переподключите StreamPass, чтобы применить.',
+                      ),
+                    ),
+                  );
+                }
               }
             },
           ),

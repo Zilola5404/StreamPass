@@ -133,6 +133,7 @@ class VpnChannel {
     RelayServer server, {
     String rulesJson = '',
     String exclusionsJson = '',
+    String bypassPackagesJson = '[]',
   }) async {
     ensureListening();
     if (server.connectionConfig.isEmpty) {
@@ -157,6 +158,7 @@ class VpnChannel {
         'connectionConfig': server.connectionConfig,
         'rulesJson': rulesJson,
         'exclusionsJson': exclusionsJson,
+        'bypassPackagesJson': bypassPackagesJson,
       });
       _log.info('vpn', 'MethodChannel connect accepted', {'ok': '${ok ?? false}'});
       return ok ?? false;

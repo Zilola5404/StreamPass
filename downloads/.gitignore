@@ -1,0 +1,4 @@
+# Built APKs are deployed to the VPS; keep only placeholders in git.
+*.apk
+client-config.json
+publish-config-remote.sh

@@ -1,19 +1,20 @@
 # Current Task
 
-> Updated: 2026-08-05
+> Updated: 2026-08-06
 
-## Done just now
+## In progress / just done
 
-- DE/PL/FI region listeners on API VPS (8443/24443/34443) + DB register + healthy
-- Off-site: encrypted dir on VPS + pull to `backups/offsite` on PC
-- Healthmonitor skips UDP-only unhealthy flips
-- APK **v0.1.1+18** built
-- API smoke PASS; **no adb device** → VPN connect remains manual on phone
-
-## Note
-
-DE/PL/FI exit IP is still NL (same VPS) until separate geo hosts exist.
+- **BL-034** App OS-bypass UI + OTA download hosting
+- Accelerator stack: RU CIDR split-tunnel, app bypass, split DNS (`v0.1.1+23` → `+24`)
+- Docs: `docs/33_DirectVsVpnBypass.md`
 
 ## APK
 
-`client/build/app/outputs/flutter-apk/StreamPass-v0.1.1+18-signed-arm64.apk`
+`client/build/app/outputs/flutter-apk/StreamPass-v0.1.1+24-signed-arm64.apk`
+
+Public (after deploy): `https://212-43-156-33.nip.io/downloads/StreamPass.apk`
+
+## Not in this stage
+
+- ЮKassa live (BL-004)
+- Windows / iOS / macOS (BL-023…025)
