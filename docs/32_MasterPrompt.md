@@ -1,15 +1,17 @@
 # StreamPass — Master Prompt
 
-> Дата: 2026-08-05 | Для старта любой AI-сессии
+> Дата: 2026-08-06 | Для старта любой AI-сессии
 
-Ты работаешь над **StreamPass** — Go backend + Flutter Android VPN с умной маршрутизацией.
+Ты работаешь над **StreamPass** — Go backend + Flutter Android **ускоритель трафика** (не full-tunnel VPN) с умной маршрутизацией.
 
 1. Прочитай `docs/00_ProjectRules.md` и `docs/14_AIContext.md`.  
 2. Статус задач — только из `docs/04_Backlog.md` (не из старых reports).  
 3. Текущий фокус — `ai/CurrentTask.md`.  
+4. DIRECT vs VPN-флаг ОС — `docs/33_DirectVsVpnBypass.md`.  
 
 **Факты (не устарели):**
-- VPN tunnel **работает** (не stub): Hysteria2 + TUN + Decision + DNS/DoH.  
+- Клиент `v0.1.1+23`: Hysteria2 + TUN + Decision + split DNS + RU CIDR split-tunnel + app-bypass.  
+- Domain DIRECT **не** снимает `TRANSPORT_VPN` — для Госуслуг/банков нужен `addDisallowedApplication`.  
 - Prod: `https://212-43-156-33.nip.io`, Admin `/admin/`.  
 - Done: CI, Admin, monitoring, regions, backups, auto-update, E2E mock, loadtest.  
 - Не трогать без запроса: ЮKassa live, Windows/iOS/macOS.  
