@@ -1,6 +1,6 @@
 # StreamPass — Текущее состояние
 
-> Дата: 2026-08-05 | Источник: код + `docs/04_Backlog.md` + prod
+> Дата: 2026-08-06 | Источник: код + `docs/04_Backlog.md` + prod
 
 ---
 
@@ -21,18 +21,22 @@
 
 `postgres`, `redis`, `backend`, `healthmonitor`, `caddy` (+ volume `./admin`), `prometheus`, `node-exporter`, `grafana`.
 
-### Android Client (Flutter) — v0.1.1+17
+### Android Client (Flutter) — v0.1.1+23
 
 | Возможность | Статус |
 |-------------|--------|
-| VPN Connect (Hysteria2 + TUN + protect) | ✅ |
-| Decision Engine + Rule polling | ✅ |
-| DNS Cache + DoH | ✅ |
+| Ускоритель (Hysteria2 + TUN + protect) | ✅ |
+| Decision Engine + Rule polling (default DIRECT) | ✅ |
+| OS split-tunnel RU CIDR / intl routes | ✅ |
+| App bypass (Госуслуги/ФНС/банки, эвристика) | ✅ |
+| Split DNS (.ru → Yandex, foreign → DoH) | ✅ |
 | Exclusions sync | ✅ |
 | Refresh token | ✅ |
 | Region / relay picker | ✅ |
 | Soft/hard update prompt | ✅ |
 | APK release signing (key.properties) | ✅ когда JKS на месте |
+
+Диагностика DIRECT vs VPN: `docs/33_DirectVsVpnBypass.md`.
 
 ### Админка / ops
 
