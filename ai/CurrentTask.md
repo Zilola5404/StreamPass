@@ -2,20 +2,18 @@
 
 > Updated: 2026-08-06
 
-## In progress / just done
+## Just done
 
-- **BL-017 TCP underlay** — client framed TCP PacketConn + VPS `streampass-tcpunderlay` (TCP 8443/24443 → UDP 443)
-- Device E2E script refreshed for +25 (`scripts/VerifyDeviceE2E.ps1`)
-- Prior: BL-034 app bypass UI, split-tunnel, split DNS
+- **BL-017** TCP underlay + device E2E API checks (commit `44cf5e9`, APK +25)
+- **BL-035** Off-site backup: encrypt → `212.43.157.167` + pull to PC; fixed cron `+x`
 
-## APK
+## APK / OTA
 
-`client/build/app/outputs/flutter-apk/StreamPass-v0.1.1+25-signed-arm64.apk`
+`StreamPass-v0.1.1+25-signed-arm64.apk`  
+https://212-43-156-33.nip.io/downloads/StreamPass.apk
 
-Public: `https://212-43-156-33.nip.io/downloads/StreamPass.apk` (re-upload after build)
+## Next (when asked)
 
-## Not in this stage
-
-- Branded domain
-- ЮKassa live (BL-004)
-- Windows / iOS / macOS (BL-023…025)
+1. Branded domain (needs DNS purchase)
+2. Manual phone E2E (adb)
+3. ЮKassa live / other OS clients — only on explicit request

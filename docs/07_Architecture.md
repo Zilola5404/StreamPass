@@ -255,7 +255,7 @@ Client → GET /api/v1/subscription → active_until
 
 - Platform Adapters: WFP (Windows), Network Extension (macOS/iOS) — BL-023…025
 - TCP underlay fallback Done (BL-017): framed TCP→UDP on VPS + client candidates
-- Off-site backup copy (local daily cron Done — BL-033)
+- Off-site backup copy Done (BL-035): encrypt → second host + PC pull
 - ЮKassa live payment verification (BL-004 Skipped; BL-030 Blocked)
 
 ---

@@ -50,6 +50,7 @@
 | BL-032 | Load tests API | k6/vegeta на /api/v1 | P3 | Done | BL-010 | 2026-08-04 |
 | BL-033 | Backup automation | Postgres backup cron | P3 | Done | — | 2026-08-04 |
 | BL-034 | App OS-bypass UI | Выбор приложений без VPN + OTA APK URL | P2 | Done | BL-005 | 2026-08-06 |
+| BL-035 | Off-site backup | Шифрованная копия дампов на второй хост + pull на PC | P3 | Done | BL-033 | 2026-08-06 |
 
 ---
 

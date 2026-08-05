@@ -44,7 +44,7 @@
 | Single VPS | No HA / multi-AZ failover |
 | nip.io domain | OK для MVP; не брендовый prod domain |
 | Monitoring bind | Grafana/Prometheus на `127.0.0.1` (не публично) |
-| Backup locality | Daily local gzip cron; off-site copy ещё нет |
+| Backup locality | Daily dump на primary; encrypted off-site на `212.43.157.167` (BL-035) |
 | Caddy single instance | No CDN / WAF |
 
 ---
@@ -70,5 +70,5 @@ Kubernetes, ML, AI routing, MASQUE, Multipath QUIC, custom transport, ASN/GeoIP,
 | Limitation | Workaround |
 |------------|------------|
 | No DE/PL/FI VPS yet | Register new relays in Admin → Relays with region `de`/`pl`/`fi` |
-| Off-site backup | Copy `/var/backups/streampass` to second host / S3 manually |
+| Off-site backup | Done: `scripts/backup-offsite.sh` → second host + `PullBackupsOffsite.ps1` |
 | Live ЮKassa | Sandbox keys + BL-004 when requested |

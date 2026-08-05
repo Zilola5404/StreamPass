@@ -1,6 +1,6 @@
 # StreamPass — Backup & Recovery
 
-> Дата: 2026-08-04 | BL-033 Done
+> Дата: 2026-08-06 | BL-033 Done · BL-035 Off-site Done
 
 ---
 
@@ -9,6 +9,7 @@
 | Component | Backup | Status |
 |-----------|--------|--------|
 | PostgreSQL | Daily cron + gzip dumps | ✅ Automated (BL-033) |
+| PostgreSQL off-site | AES encrypt → second host `212.43.157.167` | ✅ BL-035 (03:15 UTC) |
 | Redis | No persistence (no save/AOF) | Sessions ephemeral |
 | Caddy certs | Docker volume `caddy_data` | Auto-renewed by Caddy |
 | Code | Git repository | ✅ Remote on origin/main |
@@ -36,18 +37,25 @@ Artifacts:
 - `$BACKUP_DIR/streampass_latest.sql.gz` (symlink)
 - `$BACKUP_DIR/backup.log`
 
-### Off-site copy
+### Off-site copy (BL-035)
 
 ```bash
-# On VPS: encrypt → /var/backups/streampass-offsite (cron 03:15 UTC)
-BACKUP_ENCRYPT_KEY=... OFFSITE_DIR=/var/backups/streampass-offsite bash scripts/backup-offsite.sh
+# Install/repair encrypted off-site cron (loads BACKUP_ENCRYPT_KEY from .env)
+bash scripts/install-offsite-backup-cron.sh
 
-# Optional second host:
-OFFSITE_SSH=user@other:/var/backups/streampass bash scripts/backup-offsite.sh
+# One-shot: encrypt → local mirror + scp to OFFSITE_SSH
+BACKUP_ENCRYPT_KEY=... OFFSITE_DIR=/var/backups/streampass-offsite \
+  OFFSITE_SSH=root@212.43.157.167:/var/backups/streampass \
+  bash scripts/backup-offsite.sh
 
-# From operator PC (pull = off-site relative to VPS):
+# From operator PC (third copy):
 .\scripts\PullBackupsOffsite.ps1
 ```
+
+Prod wiring:
+- Primary `212.43.156.33`: dump 03:00, encrypt+scp 03:15
+- Secondary `212.43.157.167`: `/var/backups/streampass/*.sql.gz.enc`
+- Operator PC: `backups/offsite/` (gitignored)
 
 ### Local / Windows
 

@@ -10,6 +10,7 @@
 ### Added
 - TCP underlay fallback (BL-017): client framed UDP-over-TCP + VPS `streampass-tcpunderlay` (TCP 8443/24443 → Hysteria UDP 443)
 - Device E2E script checks TCP underlay ports + config/download/rules (`scripts/VerifyDeviceE2E.ps1`)
+- Off-site encrypted Postgres backups to second host (BL-035)
 - Admin Panel UI at `/admin/` (BL-020)
 - Prometheus + Grafana local monitoring (BL-021)
 - Client auto-update via config API (BL-022)

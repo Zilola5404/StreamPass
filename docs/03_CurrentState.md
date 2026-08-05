@@ -63,7 +63,7 @@
 | **Billing / ЮKassa** | Код есть; live-тест Skipped (BL-004); auto-renewal Blocked (BL-030) |
 | **Physical device E2E** | Код/APK готовы; ручная проверка на устройстве |
 | **TCP underlay fallback** | Done (BL-017): client UDP→TCP candidates + VPS bridge |
-| **Off-site backup** | Локальный cron есть; копия off-box нет |
+| **Off-site backup** | Done (BL-035): encrypt → `157.167` + local enc mirror; cron 03:15 UTC |
 | **nip.io** | Работает; брендовый домен нет |
 
 ---
@@ -90,7 +90,7 @@
 
 ## Следующие шаги (приоритет)
 
-1. Ручной device E2E на +17 (по возможности)
-2. Off-site копия бэкапов (опционально)
+1. Ручной device E2E на телефоне (adb)
+2. Брендовый домен — только после покупки DNS
 3. ЮKassa live — только по явному запросу → затем BL-030
 4. Desktop/mobile другие ОС — только по явному запросу

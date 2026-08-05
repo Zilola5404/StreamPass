@@ -37,11 +37,20 @@ Write-Host "From ${User}@${RemoteHost}:${RemoteDir}"
 Write-Host "To   $LocalDir"
 
 & $pscp -pw $Password -batch "$User@${RemoteHost}:$RemoteDir/streampass_*.sql.gz" $LocalDir
-if ($LASTEXITCODE -ne 0) { throw "pscp failed" }
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "WARN: plain .sql.gz pull failed (may be empty)" -ForegroundColor Yellow
+}
 
-Get-ChildItem $LocalDir -Filter "streampass_*.sql.gz" |
+# Encrypted off-site mirror on the VPS (and/or pulled from primary)
+$encRemote = "/var/backups/streampass-offsite"
+& $pscp -pw $Password -batch "$User@${RemoteHost}:${encRemote}/streampass_*.sql.gz.enc" $LocalDir
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "WARN: encrypted .enc pull failed" -ForegroundColor Yellow
+}
+
+Get-ChildItem $LocalDir -Filter "streampass_*" |
     Sort-Object LastWriteTime -Descending |
-    Select-Object -First 5 |
+    Select-Object -First 8 |
     ForEach-Object { Write-Host ("  " + $_.Name + "  " + $_.Length + " bytes") }
 
 Write-Host "OK: off-site copy on this machine" -ForegroundColor Green

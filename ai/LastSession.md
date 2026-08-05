@@ -4,18 +4,14 @@
 
 ## Completed
 
-- **BL-017 TCP underlay**: client `tcpPacketConn` + fallback TCP 8443/24443; VPS `streampass-tcpunderlay` active
-- Live handshake OK: `TestIntegrationTCPUnderlayConnect`
-- Device E2E script: smoke + regions/config/rules/download + TCP ports (adb manual — no device)
-- APK **v0.1.1+25** uploaded to `/downloads/StreamPass.apk`
+- Pushed **BL-017** TCP underlay (`44cf5e9`)
+- **BL-035** off-site backups:
+  - Fixed `Permission denied` on cron (`chmod +x`)
+  - SSH key primary → secondary; encrypted scp to `212.43.157.167`
+  - Cron 03:00 dump / 03:15 off-site
+  - Operator pull via `PullBackupsOffsite.ps1` → `backups/offsite/`
 
-## APK
+## Residual
 
-`client/build/app/outputs/flutter-apk/StreamPass-v0.1.1+25-signed-arm64.apk`  
-OTA: `https://212-43-156-33.nip.io/downloads/StreamPass.apk`
-
-## Not done
-
-- Branded domain
-- Physical-device connect flow (no adb device this session)
-- ЮKassa / desktop clients
+- Branded domain, ЮKassa, Windows/iOS/macOS — not started (excluded / needs user)
+- Physical device connect still manual (no adb)

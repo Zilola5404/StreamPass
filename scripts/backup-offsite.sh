@@ -48,7 +48,18 @@ if [[ -n "$OFFSITE_DIR" ]]; then
 fi
 
 if [[ -n "$OFFSITE_SSH" ]]; then
+  # OFFSITE_SSH is user@host:/dir — ensure remote directory exists when possible.
+  remote_host="${OFFSITE_SSH%%:*}"
+  remote_path="${OFFSITE_SSH#*:}"
+  if [[ -n "$remote_host" && -n "$remote_path" && "$remote_path" != "$OFFSITE_SSH" ]]; then
+    ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$remote_host" \
+      "mkdir -p '$remote_path' && chmod 700 '$remote_path'" || \
+      log "WARN: could not mkdir on remote (will still try scp)"
+  fi
   scp -o StrictHostKeyChecking=accept-new "$enc" "$OFFSITE_SSH/streampass_${ts}.sql.gz.enc"
+  # Keep a stable latest name on the remote when ssh works.
+  ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$remote_host" \
+    "ln -sfn 'streampass_${ts}.sql.gz.enc' '$remote_path/streampass_latest.sql.gz.enc'" 2>/dev/null || true
   log "Uploaded to OFFSITE_SSH=$OFFSITE_SSH"
 fi
 

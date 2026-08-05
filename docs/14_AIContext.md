@@ -99,6 +99,6 @@ Composition root: `backend/cmd/server/main.go`
 **Done:** VPN tunnel, Decision/Rule Engine, DNS/DoH, CI, Admin UI, monitoring, auto-update, regions, backups, Flutter E2E mock, API loadtest.  
 **Blocked/Skipped:** ЮKassa live (BL-004), auto-renewal (BL-030).  
 **Open by design:** Windows / iOS / macOS clients.  
-**Ops residual:** physical device re-check +17; off-site backup copy; real domain.
+**Ops residual:** physical device re-check; branded domain; ЮKassa live on request.
 
 Полный backlog: `docs/04_Backlog.md`
