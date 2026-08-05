@@ -41,7 +41,7 @@ func (a *AtomicEngine) Update(rulesJSON, exclusionsJSON string) error {
 	if err != nil {
 		return err
 	}
-	engine := NewEngine(set.Rules, exclusions, DefaultMode)
+	engine := NewEngine(MergeWithDefaults(set.Rules), exclusions, DefaultMode)
 	a.mu.Lock()
 	a.engine = engine
 	a.version = set.Version
@@ -59,5 +59,5 @@ func NewAtomicEngineFromJSON(rulesJSON, exclusionsJSON string) (*AtomicEngine, e
 	if err != nil {
 		return nil, err
 	}
-	return NewAtomicEngine(NewEngine(set.Rules, exclusions, DefaultMode), set.Version), nil
+	return NewAtomicEngine(NewEngine(MergeWithDefaults(set.Rules), exclusions, DefaultMode), set.Version), nil
 }

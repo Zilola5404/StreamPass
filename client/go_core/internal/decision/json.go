@@ -80,5 +80,5 @@ func NewEngineFromJSON(rulesJSON, exclusionsJSON string) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewEngine(set.Rules, exclusions, DefaultMode), nil
+	return NewEngine(MergeWithDefaults(set.Rules), exclusions, DefaultMode), nil
 }

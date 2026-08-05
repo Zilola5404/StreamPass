@@ -23,8 +23,9 @@ func TestAtomicEngine_hotReload(t *testing.T) {
 	if engine.Version() != 2 {
 		t.Fatalf("version = %d", engine.Version())
 	}
-	if got := engine.Decide(decision.Target{Host: "yandex.ru"}); got != decision.ModeRelay {
-		t.Fatalf("v2 = %s, want RELAY", got)
+	// Built-in Russian DIRECT defaults take precedence over backend RELAY for *.ru.
+	if got := engine.Decide(decision.Target{Host: "yandex.ru"}); got != decision.ModeDirect {
+		t.Fatalf("v2 = %s, want DIRECT (default *.ru rule wins)", got)
 	}
 }
 

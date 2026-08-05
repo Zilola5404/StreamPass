@@ -208,10 +208,10 @@ class StreamPassVpnService : VpnService() {
                 .addAddress("10.10.0.1", 30)
                 .addDnsServer("1.1.1.1")
                 .addDnsServer("1.0.0.1")
-                .addRoute("0.0.0.0", 0)
                 .setMtu(1400)
+            val routeInfo = VpnRouteConfigurator.apply(vpnBuilder, assets)
             val bypassCount = VpnBypassApps.apply(vpnBuilder, packageManager)
-            ConnectLogger.log(this, "VPN bypass apps applied=$bypassCount")
+            ConnectLogger.log(this, "split-tunnel mode=${routeInfo.mode} routes=${routeInfo.routeCount} ruExcludes=${routeInfo.excludeCount} appBypass=$bypassCount")
             tunInterface = vpnBuilder.establish()
 
             val fd = tunInterface?.fd
