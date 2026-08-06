@@ -8,4 +8,6 @@ type PaymentRepository interface {
 	FindByProviderID(ctx context.Context, providerID string) (*Payment, error)
 	Create(ctx context.Context, p *Payment) error
 	MarkSucceeded(ctx context.Context, providerID string) error
+	// ListByUserID returns payments for a user, newest first (E06 history).
+	ListByUserID(ctx context.Context, userID string) ([]*Payment, error)
 }

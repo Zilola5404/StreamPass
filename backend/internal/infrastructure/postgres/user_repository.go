@@ -102,6 +102,51 @@ func (r *UserRepository) ExtendSubscription(ctx context.Context, id user.ID, act
 	return nil
 }
 
+// UpdatePasswordHash replaces the password hash and bumps updated_at.
+func (r *UserRepository) UpdatePasswordHash(ctx context.Context, id user.ID, passwordHash string, now time.Time) error {
+	const q = `UPDATE users SET password_hash = $2, updated_at = $3 WHERE id = $1`
+	res, err := r.db.ExecContext(ctx, q, id, passwordHash, now)
+	if err != nil {
+		return apperrors.Wrap(apperrors.CodeInternal, "failed to update password", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return apperrors.Wrap(apperrors.CodeInternal, "failed to confirm password update", err)
+	}
+	if n == 0 {
+		return user.ErrNotFound(string(id))
+	}
+	return nil
+}
+
+// Delete removes the user and cascading payment rows in one transaction.
+func (r *UserRepository) Delete(ctx context.Context, id user.ID) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return apperrors.Wrap(apperrors.CodeInternal, "failed to begin delete user tx", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM payments WHERE user_id = $1`, id); err != nil {
+		return apperrors.Wrap(apperrors.CodeInternal, "failed to delete user payments", err)
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, id)
+	if err != nil {
+		return apperrors.Wrap(apperrors.CodeInternal, "failed to delete user", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return apperrors.Wrap(apperrors.CodeInternal, "failed to confirm user delete", err)
+	}
+	if n == 0 {
+		return user.ErrNotFound(string(id))
+	}
+	if err := tx.Commit(); err != nil {
+		return apperrors.Wrap(apperrors.CodeInternal, "failed to commit delete user", err)
+	}
+	return nil
+}
+
 // List returns every registered user, newest first.
 func (r *UserRepository) List(ctx context.Context) ([]*user.User, error) {
 	const q = `

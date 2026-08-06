@@ -3,6 +3,7 @@ import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 import '../services/streampass_api.dart';
 import 'home_screen.dart';
+import 'forgot_password_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final AuthService authService;
@@ -131,6 +132,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+              if (!_isRegisterMode)
+                Center(
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ForgotPasswordScreen(
+                            authService: widget.authService,
+                          ),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      'Забыли пароль?',
+                      style: TextStyle(color: AppColors.textSecondary),
+                    ),
+                  ),
+                ),
               Center(
                 child: TextButton(
                   onPressed: () =>

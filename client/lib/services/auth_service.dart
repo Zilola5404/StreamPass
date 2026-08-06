@@ -175,6 +175,125 @@ class AuthService {
     await clearSession();
   }
 
+  /// POST /password/forgot — anti-enumeration; may include reset_token when
+  /// server has auth.expose_reset_token (no SMTP yet).
+  Future<ForgotPasswordResult> forgotPassword(String email) async {
+    try {
+      final res = await _client.post(
+        Uri.parse('${apiBaseUrl}/password/forgot'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email.trim()}),
+      );
+      if (res.statusCode != 200) {
+        return ForgotPasswordResult(success: false, message: _errorMessage(res));
+      }
+      final body = _decodeBody(res.body) as Map<String, dynamic>?;
+      return ForgotPasswordResult(
+        success: true,
+        message: (body?['message'] as String?) ??
+            'Если аккаунт с таким адресом существует, инструкции отправлены.',
+        resetToken: body?['reset_token'] as String?,
+      );
+    } catch (_) {
+      return ForgotPasswordResult(
+        success: false,
+        message: 'Сервис временно недоступен. Проверьте подключение к серверу.',
+      );
+    }
+  }
+
+  Future<AuthResult> resetPassword(String token, String newPassword) async {
+    try {
+      final res = await _client.post(
+        Uri.parse('${apiBaseUrl}/password/reset'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'token': token, 'new_password': newPassword}),
+      );
+      if (res.statusCode == 204 || res.statusCode == 200) {
+        return AuthResult(success: true);
+      }
+      return AuthResult(success: false, error: _errorMessage(res));
+    } catch (_) {
+      return AuthResult(
+        success: false,
+        error: 'Сервис временно недоступен. Проверьте подключение к серверу.',
+      );
+    }
+  }
+
+  Future<UserProfile?> fetchProfile() async {
+    if (!await ensureValidSession()) return null;
+    final token = await storedToken;
+    if (token == null) return null;
+    final res = await _client.get(
+      Uri.parse('${apiBaseUrl}/me'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    if (res.statusCode != 200) return null;
+    final body = _decodeBody(res.body) as Map<String, dynamic>?;
+    if (body == null) return null;
+    return UserProfile.fromJson(body);
+  }
+
+  Future<AuthResult> changePassword(String currentPassword, String newPassword) async {
+    if (!await ensureValidSession()) {
+      return AuthResult(success: false, error: 'Сессия истекла. Войдите снова.');
+    }
+    final token = await storedToken;
+    try {
+      final res = await _client.put(
+        Uri.parse('${apiBaseUrl}/me/password'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'current_password': currentPassword,
+          'new_password': newPassword,
+        }),
+      );
+      if (res.statusCode == 204 || res.statusCode == 200) {
+        await clearSession();
+        return AuthResult(success: true);
+      }
+      return AuthResult(success: false, error: _errorMessage(res));
+    } catch (_) {
+      return AuthResult(
+        success: false,
+        error: 'Сервис временно недоступен. Проверьте подключение к серверу.',
+      );
+    }
+  }
+
+  Future<AuthResult> deleteAccount() async {
+    if (!await ensureValidSession()) {
+      return AuthResult(success: false, error: 'Сессия истекла. Войдите снова.');
+    }
+    final token = await storedToken;
+    try {
+      final res = await _client.delete(
+        Uri.parse('${apiBaseUrl}/me'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (res.statusCode == 204 || res.statusCode == 200) {
+        await clearSession();
+        return AuthResult(success: true);
+      }
+      return AuthResult(success: false, error: _errorMessage(res));
+    } catch (_) {
+      return AuthResult(
+        success: false,
+        error: 'Сервис временно недоступен. Проверьте подключение к серверу.',
+      );
+    }
+  }
+
   Future<AuthResult> _handleAuthResponse(http.Response res) async {
     if (res.statusCode != 200 && res.statusCode != 201) {
       return AuthResult(success: false, error: _errorMessage(res));
@@ -238,6 +357,36 @@ class AuthResult {
     this.refreshToken,
     this.error,
   });
+}
+
+class ForgotPasswordResult {
+  final bool success;
+  final String message;
+  final String? resetToken;
+  ForgotPasswordResult({
+    required this.success,
+    required this.message,
+    this.resetToken,
+  });
+}
+
+class UserProfile {
+  final String email;
+  final DateTime? createdAt;
+  final DateTime? subscriptionActiveUntil;
+
+  const UserProfile({
+    required this.email,
+    this.createdAt,
+    this.subscriptionActiveUntil,
+  });
+
+  factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
+        email: json['email'] as String? ?? '',
+        createdAt: DateTime.tryParse(json['created_at'] as String? ?? ''),
+        subscriptionActiveUntil:
+            DateTime.tryParse(json['subscription_active_until'] as String? ?? ''),
+      );
 }
 
 class SessionExpiredException implements Exception {

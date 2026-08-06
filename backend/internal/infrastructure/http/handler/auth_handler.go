@@ -9,9 +9,10 @@ import (
 
 	"streampass/backend/internal/application/auth"
 	httpx "streampass/backend/internal/infrastructure/http"
+	"streampass/backend/internal/infrastructure/http/middleware"
 )
 
-// AuthHandler exposes /register, /login, /logout, /refresh.
+// AuthHandler exposes /register, /login, /logout, /refresh, /me, password flows.
 type AuthHandler struct {
 	svc *auth.Service
 }
@@ -133,4 +134,117 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		AccessToken:     access.AccessToken,
 		AccessExpiresAt: access.AccessExpiresAt.Format(httpx.TimeFormat),
 	})
+}
+
+type profileResponse struct {
+	Email                   string  `json:"email"`
+	CreatedAt               string  `json:"created_at"`
+	SubscriptionActiveUntil *string `json:"subscription_active_until,omitempty"`
+}
+
+// GetProfile handles "GET /me" (authenticated).
+func (h *AuthHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, httpx.ErrUnauthenticated())
+		return
+	}
+	profile, err := h.svc.GetProfile.Execute(r.Context(), userID)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	resp := profileResponse{
+		Email:     profile.Email,
+		CreatedAt: profile.CreatedAt.Format(httpx.TimeFormat),
+	}
+	if profile.SubscriptionActiveUntil != nil {
+		formatted := profile.SubscriptionActiveUntil.Format(httpx.TimeFormat)
+		resp.SubscriptionActiveUntil = &formatted
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+// ChangePassword handles "PUT /me/password" (authenticated).
+func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, httpx.ErrUnauthenticated())
+		return
+	}
+	var req changePasswordRequest
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	if err := h.svc.ChangePassword.Execute(r.Context(), userID, req.CurrentPassword, req.NewPassword); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+// DeleteAccount handles "DELETE /me" (authenticated).
+func (h *AuthHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, httpx.ErrUnauthenticated())
+		return
+	}
+	if err := h.svc.DeleteAccount.Execute(r.Context(), userID); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+type forgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+type forgotPasswordResponse struct {
+	Message    string `json:"message"`
+	ResetToken string `json:"reset_token,omitempty"`
+}
+
+// ForgotPassword handles "POST /password/forgot" (public, rate-limited).
+func (h *AuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req forgotPasswordRequest
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	result, err := h.svc.ForgotPassword.Execute(r.Context(), req.Email)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, forgotPasswordResponse{
+		Message:    result.Message,
+		ResetToken: result.ResetToken,
+	})
+}
+
+type resetPasswordRequest struct {
+	Token       string `json:"token"`
+	NewPassword string `json:"new_password"`
+}
+
+// ResetPassword handles "POST /password/reset" (public, rate-limited).
+func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var req resetPasswordRequest
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	if err := h.svc.ResetPassword.Execute(r.Context(), req.Token, req.NewPassword); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusNoContent, nil)
 }

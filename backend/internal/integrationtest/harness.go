@@ -30,6 +30,7 @@ import (
 	"streampass/backend/internal/infrastructure/security"
 	"streampass/shared/idgen"
 	"streampass/shared/logger"
+	apperrors "streampass/shared/errors"
 )
 
 const (
@@ -159,6 +160,34 @@ func (s *memorySessions) RevokeAll(_ context.Context, userID user.ID) error {
 	return nil
 }
 
+// memoryResetTokens is an in-memory auth.ResetTokenStore for tests.
+type memoryResetTokens struct {
+	mu   sync.Mutex
+	data map[string]user.ID
+}
+
+func newMemoryResetTokens() *memoryResetTokens {
+	return &memoryResetTokens{data: make(map[string]user.ID)}
+}
+
+func (s *memoryResetTokens) Save(_ context.Context, token string, userID user.ID, _ time.Duration) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.data[token] = userID
+	return nil
+}
+
+func (s *memoryResetTokens) Consume(_ context.Context, token string) (user.ID, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	id, ok := s.data[token]
+	if !ok {
+		return "", apperrors.New(apperrors.CodeNotFound, "reset token not found")
+	}
+	delete(s.data, token)
+	return id, nil
+}
+
 type idGen struct{}
 
 func (idGen) NewID() user.ID { return user.ID(idgen.New()) }
@@ -218,11 +247,19 @@ func NewTestHandler(t *testing.T, db *sql.DB) (http.Handler, *fakePayments) {
 	loginUC := authsvc.NewLoginUseCase(userRepo, hasher, tokens, sessions, authsvc.SystemClock{}, log)
 	logoutUC := authsvc.NewLogoutUseCase(tokens, sessions, log)
 	refreshUC := authsvc.NewRefreshUseCase(tokens, sessions, log)
-	authService := authsvc.NewService(registerUC, loginUC, logoutUC, refreshUC)
+	resetTokens := newMemoryResetTokens()
+	authService := authsvc.NewService(
+		registerUC, loginUC, logoutUC, refreshUC,
+		authsvc.NewGetProfileUseCase(userRepo, log),
+		authsvc.NewChangePasswordUseCase(userRepo, hasher, sessions, authsvc.SystemClock{}, log),
+		authsvc.NewDeleteAccountUseCase(userRepo, sessions, log),
+		authsvc.NewForgotPasswordUseCase(userRepo, resetTokens, true, log),
+		authsvc.NewResetPasswordUseCase(userRepo, hasher, resetTokens, sessions, authsvc.SystemClock{}, log),
+	)
 
-	billingService := billingsvc.NewService(userRepo, paymentRepo, payments, billingsvc.Plan{
-		AmountRUB:  299,
-		PeriodDays: 30,
+	billingService := billingsvc.NewService(userRepo, paymentRepo, payments, []billingsvc.Plan{
+		{Code: "month", Title: "Месяц", AmountRUB: 299, PeriodDays: 30},
+		{Code: "year", Title: "Год", AmountRUB: 2990, PeriodDays: 365},
 	}, billingsvc.SystemClock{}, log)
 
 	h := router.New(router.Deps{

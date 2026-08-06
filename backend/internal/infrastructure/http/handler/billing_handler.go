@@ -10,8 +10,8 @@ import (
 	apperrors "streampass/shared/errors"
 )
 
-// BillingHandler exposes POST /payments, POST /payments/webhook,
-// GET /subscription, POST /subscription/cancel.
+// BillingHandler exposes POST /payments, GET /payments, GET /plans,
+// POST /payments/webhook, GET /subscription, POST /subscription/cancel.
 type BillingHandler struct {
 	svc           *billingsvc.Service
 	webhookSecret string
@@ -22,6 +22,10 @@ type BillingHandler struct {
 // X-StreamPass-Webhook-Secret (defense in depth — S-04).
 func NewBillingHandler(svc *billingsvc.Service, webhookSecret string) *BillingHandler {
 	return &BillingHandler{svc: svc, webhookSecret: webhookSecret}
+}
+
+type createPaymentRequest struct {
+	PlanCode string `json:"plan_code"`
 }
 
 type createPaymentResponse struct {
@@ -36,7 +40,11 @@ func (h *BillingHandler) CreatePayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url, err := h.svc.CreatePayment(r.Context(), userID)
+	var req createPaymentRequest
+	// Empty body is fine — defaults to month plan.
+	_ = httpx.DecodeJSON(r, &req)
+
+	url, err := h.svc.CreatePayment(r.Context(), userID, req.PlanCode)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
@@ -120,4 +128,59 @@ func (h *BillingHandler) CancelSubscription(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	httpx.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+type planDTO struct {
+	Code       string `json:"code"`
+	Title      string `json:"title"`
+	AmountRUB  int64  `json:"amount_rub"`
+	PeriodDays int    `json:"period_days"`
+}
+
+// ListPlans handles "GET /plans" (authenticated — tariffs for E06).
+func (h *BillingHandler) ListPlans(w http.ResponseWriter, r *http.Request) {
+	plans := h.svc.ListPlans()
+	out := make([]planDTO, 0, len(plans))
+	for _, p := range plans {
+		out = append(out, planDTO{
+			Code:       p.Code,
+			Title:      p.Title,
+			AmountRUB:  p.AmountRUB,
+			PeriodDays: p.PeriodDays,
+		})
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+type paymentDTO struct {
+	ID         string `json:"id"`
+	AmountRUB  int64  `json:"amount_rub"`
+	PeriodDays int    `json:"period_days"`
+	Status     string `json:"status"`
+	CreatedAt  string `json:"created_at"`
+}
+
+// ListPayments handles "GET /payments" (authenticated) — payment history.
+func (h *BillingHandler) ListPayments(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, httpx.ErrUnauthenticated())
+		return
+	}
+	list, err := h.svc.ListPayments(r.Context(), userID)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	out := make([]paymentDTO, 0, len(list))
+	for _, p := range list {
+		out = append(out, paymentDTO{
+			ID:         p.ID,
+			AmountRUB:  p.AmountRUB,
+			PeriodDays: p.PeriodDays,
+			Status:     string(p.Status),
+			CreatedAt:  p.CreatedAt.Format(httpx.TimeFormat),
+		})
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
 }

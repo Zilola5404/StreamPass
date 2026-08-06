@@ -105,6 +105,7 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 		cfg.DurationOr("jwt.refresh_ttl", 720*time.Hour),
 	)
 	sessions := redisclient.NewSessionStore(redis)
+	resetTokens := redisclient.NewResetTokenStore(redis)
 
 	paymentProvider := yookassa.New(yookassa.Config{
 		ShopID:    cfg.StringOr("billing.yookassa_shop_id", ""),
@@ -117,17 +118,33 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 	loginUC := authsvc.NewLoginUseCase(userRepo, hasher, tokens, sessions, authsvc.SystemClock{}, log)
 	logoutUC := authsvc.NewLogoutUseCase(tokens, sessions, log)
 	refreshUC := authsvc.NewRefreshUseCase(tokens, sessions, log)
-	authService := authsvc.NewService(registerUC, loginUC, logoutUC, refreshUC)
+	getProfileUC := authsvc.NewGetProfileUseCase(userRepo, log)
+	changePasswordUC := authsvc.NewChangePasswordUseCase(userRepo, hasher, sessions, authsvc.SystemClock{}, log)
+	deleteAccountUC := authsvc.NewDeleteAccountUseCase(userRepo, sessions, log)
+	exposeReset := cfg.BoolOr("auth.expose_reset_token", true)
+	forgotPasswordUC := authsvc.NewForgotPasswordUseCase(userRepo, resetTokens, exposeReset, log)
+	resetPasswordUC := authsvc.NewResetPasswordUseCase(userRepo, hasher, resetTokens, sessions, authsvc.SystemClock{}, log)
+	authService := authsvc.NewService(
+		registerUC, loginUC, logoutUC, refreshUC,
+		getProfileUC, changePasswordUC, deleteAccountUC,
+		forgotPasswordUC, resetPasswordUC,
+	)
 
 	ruleService := rulesvc.NewService(ruleRepo, rulesvc.SystemClock{}, log)
 	relayService := relaysvc.NewService(relayRepo, log)
 	telemetryService := telemetrysvc.NewService(telemetryRepo, telemetrysvc.SystemClock{}, log)
 	configService := configsvcpkg.NewService(appConfigRepo, configsvcpkg.SystemClock{}, log)
 	adminUserService := adminsvc.NewUserService(userRepo, adminsvc.SystemClock{}, log)
-	billingService := billingsvc.NewService(userRepo, paymentRepo, paymentProvider, billingsvc.Plan{
-		AmountRUB:  int64(cfg.IntOr("billing.plan_amount_rub", 299)),
-		PeriodDays: cfg.IntOr("billing.plan_period_days", 30),
-	}, billingsvc.SystemClock{}, log)
+
+	monthAmount := int64(cfg.IntOr("billing.plan_amount_rub", 299))
+	monthDays := cfg.IntOr("billing.plan_period_days", 30)
+	yearAmount := int64(cfg.IntOr("billing.yearly_amount_rub", int(monthAmount*10)))
+	yearDays := cfg.IntOr("billing.yearly_period_days", 365)
+	billingPlans := []billingsvc.Plan{
+		{Code: "month", Title: "Месяц", AmountRUB: monthAmount, PeriodDays: monthDays},
+		{Code: "year", Title: "Год", AmountRUB: yearAmount, PeriodDays: yearDays},
+	}
+	billingService := billingsvc.NewService(userRepo, paymentRepo, paymentProvider, billingPlans, billingsvc.SystemClock{}, log)
 	exclusionService := exclusionsvc.NewService(exclusionRepo, log)
 
 	return router.Deps{

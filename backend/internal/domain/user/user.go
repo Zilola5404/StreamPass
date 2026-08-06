@@ -64,6 +64,11 @@ type Repository interface {
 	// scale; revisit if the user table grows large enough for this to
 	// matter, per YAGNI).
 	List(ctx context.Context) ([]*User, error)
+	// UpdatePasswordHash replaces the stored Argon2id hash (password change
+	// / reset). Callers must revoke sessions separately.
+	UpdatePasswordHash(ctx context.Context, id ID, passwordHash string, now time.Time) error
+	// Delete permanently removes the user and dependent payment rows.
+	Delete(ctx context.Context, id ID) error
 }
 
 // ErrNotFound is a sentinel-style helper so infrastructure implementations

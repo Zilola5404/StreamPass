@@ -8,6 +8,9 @@
 ## [Unreleased]
 
 ### Added
+- BL-042/043: password forgot/reset, GET/PUT/DELETE `/me`, Profile + ForgotPassword screens
+- BL-048: GET `/plans`, GET `/payments`, month/year tariffs UI, soft cancel (access until `active_until`)
+- BL-053: `SlaTargets` + `scripts/MeasureDeviceSLA.ps1`
 - TCP underlay fallback (BL-017): client framed UDP-over-TCP + VPS `streampass-tcpunderlay` (TCP 8443/24443 → Hysteria UDP 443)
 - Device E2E script checks TCP underlay ports + config/download/rules (`scripts/VerifyDeviceE2E.ps1`)
 - Off-site encrypted Postgres backups to second host (BL-035)
@@ -28,9 +31,9 @@
 - (see 0.1.1 notes and git log for VPN crash / protect / sideload fixes)
 
 ### Known Issues
-- ЮKassa — not live-tested (BL-004 Skipped)
-- BL-030 auto-renewal Blocked on BL-004
-- Client T1–T4 perf not formally measured on device
+- ЮKassa — **BL-040 Blocked** (нет live keys); client resume-poll готов
+- BL-030 auto-renewal Blocked on BL-040
+- Client connect/recover SLA — manual device pass (script covers API/cold launch)
 - `connection_config` plaintext in PostgreSQL (security backlog)
 - Windows / iOS / macOS clients Open (BL-023…025)
 

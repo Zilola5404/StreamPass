@@ -84,13 +84,20 @@ func New(d Deps) http.Handler {
 	mux.Handle(v1("POST /login"), strictLimiter.Middleware()(http.HandlerFunc(d.Auth.Login)))
 	mux.Handle(v1("POST /logout"), strictLimiter.Middleware()(http.HandlerFunc(d.Auth.Logout)))
 	mux.Handle(v1("POST /refresh"), strictLimiter.Middleware()(http.HandlerFunc(d.Auth.Refresh)))
+	mux.Handle(v1("POST /password/forgot"), strictLimiter.Middleware()(http.HandlerFunc(d.Auth.ForgotPassword)))
+	mux.Handle(v1("POST /password/reset"), strictLimiter.Middleware()(http.HandlerFunc(d.Auth.ResetPassword)))
 
 	// --- Authenticated client endpoints ---
 	// GET /servers now returns each relay's ConnectionConfig (a real VPN
 	// connection secret), so — unlike the other GET endpoints above — it
 	// must never be reachable without a valid access token.
+	mux.Handle(v1("GET /me"), authMW(http.HandlerFunc(d.Auth.GetProfile)))
+	mux.Handle(v1("PUT /me/password"), authMW(http.HandlerFunc(d.Auth.ChangePassword)))
+	mux.Handle(v1("DELETE /me"), authMW(http.HandlerFunc(d.Auth.DeleteAccount)))
 	mux.Handle(v1("GET /servers"), authMW(http.HandlerFunc(d.Relay.ListAvailable)))
 	mux.Handle(v1("POST /telemetry"), authMW(http.HandlerFunc(d.Telemetry.Record)))
+	mux.Handle(v1("GET /plans"), authMW(http.HandlerFunc(d.Billing.ListPlans)))
+	mux.Handle(v1("GET /payments"), authMW(http.HandlerFunc(d.Billing.ListPayments)))
 	mux.Handle(v1("POST /payments"), authMW(http.HandlerFunc(d.Billing.CreatePayment)))
 	mux.Handle(v1("GET /subscription"), authMW(http.HandlerFunc(d.Billing.GetSubscription)))
 	mux.Handle(v1("POST /subscription/cancel"), authMW(http.HandlerFunc(d.Billing.CancelSubscription)))

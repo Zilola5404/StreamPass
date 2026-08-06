@@ -10,6 +10,7 @@ import '../main.dart' show navigateToLogin;
 import 'exclusions_screen.dart';
 import 'app_bypass_screen.dart';
 import 'diagnostics_screen.dart';
+import 'profile_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final StreamPassApi? api;
@@ -250,6 +251,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (widget.authService != null && widget.api != null) ...[
             const Divider(height: 32),
             _SectionLabel('Аккаунт'),
+            ListTile(
+              title: const Text('Профиль'),
+              subtitle: const Text('Email, смена пароля, удаление аккаунта'),
+              leading: const Icon(Icons.person_outline, color: AppColors.textSecondary),
+              trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ProfileScreen(
+                    authService: widget.authService!,
+                    api: widget.api!,
+                  ),
+                ),
+              ),
+            ),
             ListTile(
               title: const Text('Выйти'),
               subtitle: const Text('Завершить сеанс на этом устройстве'),

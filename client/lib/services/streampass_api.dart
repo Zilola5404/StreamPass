@@ -66,13 +66,27 @@ class StreamPassApi {
   /// payment. Note: backend billing has not been tested against live
   /// ЮKassa credentials yet — this call is only as reliable as that
   /// backend path (see project notes).
-  Future<String> createPayment() async {
-    final body = await _post('/payments', const {});
+  Future<String> createPayment({String planCode = 'month'}) async {
+    final body = await _post('/payments', {'plan_code': planCode});
     return (body as Map<String, dynamic>)['confirmation_url'] as String;
   }
 
   Future<void> cancelSubscription() async {
     await _post('/subscription/cancel', const {});
+  }
+
+  Future<List<PlanInfo>> fetchPlans() async {
+    final body = await _get('/plans');
+    return (body as List<dynamic>)
+        .map((e) => PlanInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<PaymentRecord>> fetchPayments() async {
+    final body = await _get('/payments');
+    return (body as List<dynamic>)
+        .map((e) => PaymentRecord.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<String>> fetchExclusions() async {
@@ -336,4 +350,49 @@ class SubscriptionInfo {
         (until != null && until.isAfter(DateTime.now()));
     return SubscriptionInfo(isActive: active, activeUntil: until);
   }
+}
+
+class PlanInfo {
+  final String code;
+  final String title;
+  final int amountRub;
+  final int periodDays;
+
+  const PlanInfo({
+    required this.code,
+    required this.title,
+    required this.amountRub,
+    required this.periodDays,
+  });
+
+  factory PlanInfo.fromJson(Map<String, dynamic> json) => PlanInfo(
+        code: json['code'] as String? ?? '',
+        title: json['title'] as String? ?? '',
+        amountRub: (json['amount_rub'] as num?)?.toInt() ?? 0,
+        periodDays: (json['period_days'] as num?)?.toInt() ?? 0,
+      );
+}
+
+class PaymentRecord {
+  final String id;
+  final int amountRub;
+  final int periodDays;
+  final String status;
+  final DateTime? createdAt;
+
+  const PaymentRecord({
+    required this.id,
+    required this.amountRub,
+    required this.periodDays,
+    required this.status,
+    this.createdAt,
+  });
+
+  factory PaymentRecord.fromJson(Map<String, dynamic> json) => PaymentRecord(
+        id: json['id'] as String? ?? '',
+        amountRub: (json['amount_rub'] as num?)?.toInt() ?? 0,
+        periodDays: (json['period_days'] as num?)?.toInt() ?? 0,
+        status: json['status'] as String? ?? '',
+        createdAt: DateTime.tryParse(json['created_at'] as String? ?? ''),
+      );
 }

@@ -71,3 +71,33 @@ func (r *PaymentRepository) MarkSucceeded(ctx context.Context, providerID string
 	}
 	return nil
 }
+
+// ListByUserID returns payments for a user, newest first.
+func (r *PaymentRepository) ListByUserID(ctx context.Context, userID string) ([]*subscription.Payment, error) {
+	const q = `
+		SELECT id, user_id, provider_id, amount_rub, period_days, status, created_at
+		FROM payments WHERE user_id = $1
+		ORDER BY created_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, q, userID)
+	if err != nil {
+		return nil, apperrors.Wrap(apperrors.CodeInternal, "failed to list payments", err)
+	}
+	defer rows.Close()
+
+	var out []*subscription.Payment
+	for rows.Next() {
+		var p subscription.Payment
+		if err := rows.Scan(&p.ID, &p.UserID, &p.ProviderID, &p.AmountRUB, &p.PeriodDays, &p.Status, &p.CreatedAt); err != nil {
+			return nil, apperrors.Wrap(apperrors.CodeInternal, "failed to scan payment row", err)
+		}
+		out = append(out, &p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.Wrap(apperrors.CodeInternal, "failed while iterating payments", err)
+	}
+	if out == nil {
+		out = []*subscription.Payment{}
+	}
+	return out, nil
+}
