@@ -52,6 +52,28 @@
 | BL-034 | App OS-bypass UI | Выбор приложений без VPN + OTA APK URL | P2 | Done | BL-005 | 2026-08-06 |
 | BL-035 | Off-site backup | Шифрованная копия дампов на второй хост + pull на PC | P3 | Done | BL-033 | 2026-08-06 |
 
+## P1 — SaaS / Functional Spec gaps (`docs/02.2_FunctionalSpecification.md`)
+
+> Источник: FS v1.0 Must/Should. Чеклист с привязкой к экранам: `docs/35_FS_ImplementationChecklist.md`.
+
+| ID | Название | Описание (из FS) | Приоритет | Статус | Зависимости | Ответственный |
+|----|----------|------------------|-----------|--------|-------------|---------------|
+| BL-040 | Live ЮKassa + возврат в app | Ранее BL-004: live/sandbox оплата, poll статуса на E06, deep-link return | P0 | Open | — | TODO |
+| BL-041 | Logout + session UX | E05/E10: «Выйти», clear tokens, Stop tunnel → E01; единые тексты сессии | P1 | Open | — | TODO |
+| BL-042 | Сброс пароля | E01 «Забыли пароль?» + backend flow | P1 | Open | — | TODO |
+| BL-043 | Профиль и удаление аккаунта | E10: просмотр email, смена пароля, удалить аккаунт (двойное подтверждение) | P1 | Open | BL-041 | TODO |
+| BL-044 | Статистика (реальные метрики) | E03: online time, avg RTT, reconnects; без URL | P1 | Open | — | TODO |
+| BL-045 | Синхрон Auto Mode ↔ Автовыбор | E02 переключатель = `autoSelectRelay` (убрать UI-only флаг) | P1 | Open | — | TODO |
+| BL-046 | Reconnect при смене сервера | E04→E02: если Connected — Connecting к новому relay | P1 | Open | — | TODO |
+| BL-047 | UX автосмены relay | При деградации — смена + toast «Переключили сервер…» | P1 | Open | BL-017 | TODO |
+| BL-048 | Тарифы и история платежей | E06: месяц/год, история; политика доступа до `active_until` после отмены | P1 | Open | BL-040 | TODO |
+| BL-049 | Устройства / лимит | E10 список устройств, revoke, лимит (**Should→P2**) | P2 | Open | BL-043 | TODO |
+| BL-050 | Admin: Premium / бан / audit | Users: выдать/забрать подписку, поиск, audit log | P2 | Open | BL-020 | TODO |
+| BL-051 | Уведомления о сбоях | E05 toggle + системные уведомления при обрыве | P2 | Open | — | TODO |
+| BL-052 | Язык / тема / О приложении | E05 Should-секции | P3 | Open | — | TODO |
+| BL-053 | Device SLA measurement | Замер cold start ≤2с, connect ≤5с, recover ≤10с (ТЗ §22) | P1 | Open | — | TODO |
+| BL-054 | Terms / Privacy на E01 | Ссылки при регистрации | P2 | Open | — | TODO |
+
 ---
 
 ## Легенда статусов

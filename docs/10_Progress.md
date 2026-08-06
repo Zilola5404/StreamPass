@@ -6,7 +6,7 @@
 
 | Дата | Что сделано | Файлы | Результат |
 |------|-------------|-------|-----------|
-| 2026-08-06 | BL-017/035 QA fixes: tests, docs +25, connect candidate log | `go_core/mobile`, `docs/*`, `scripts/VerifyOffsiteBackup.ps1` | C-01/C-02 закрыты; ADR-014 TCP fallback |
+| 2026-08-06 | FS SaaS: спецификация + сценарии + backlog BL-040…054 | `docs/02.2_*`, `34_*`, `35_*`, `04_Backlog` | Источник требований для Dev/QA |
 | 2026-08-06 | BL-017 TCP underlay + device E2E script | `go_core/hyconfig`, `scripts/VerifyDeviceE2E.ps1`, VPS bridge | UDP→TCP fallback; APK +25 |
 | 2026-08-06 | BL-035 off-site encrypted backup | `scripts/backup-offsite.sh`, cron 03:15 UTC | encrypt → `212.43.157.167` |
 | 2026-08-05 | Docs sync to product reality | `docs/*`, `prompts/00_SystemPrompt.md` | VPN/admin/CI/monitoring reflected; dates 2026-08-05 |
