@@ -62,10 +62,10 @@
 | BL-041 | Logout + session UX | E05/E10: «Выйти», clear tokens, Stop tunnel → E01; единые тексты сессии | P1 | Done | — | 2026-08-06 |
 | BL-042 | Сброс пароля | E01 «Забыли пароль?» + backend flow | P1 | Open | — | TODO |
 | BL-043 | Профиль и удаление аккаунта | E10: просмотр email, смена пароля, удалить аккаунт (двойное подтверждение) | P1 | Open | BL-041 | TODO |
-| BL-044 | Статистика (реальные метрики) | E03: online time, avg RTT, reconnects; без URL | P1 | Open | — | TODO |
+| BL-044 | Статистика (реальные метрики) | E03: online time, avg RTT, reconnects; без URL | P1 | Done | — | 2026-08-06 |
 | BL-045 | Синхрон Auto Mode ↔ Автовыбор | E02 переключатель = `autoSelectRelay` (убрать UI-only флаг) | P1 | Done | — | 2026-08-06 |
 | BL-046 | Reconnect при смене сервера | E04→E02: если Connected — Connecting к новому relay | P1 | Done | — | 2026-08-06 |
-| BL-047 | UX автосмены relay | При деградации — смена + toast «Переключили сервер…» | P1 | Open | BL-017 | TODO |
+| BL-047 | UX автосмены relay | При деградации — смена + toast «Переключили сервер…» | P1 | Done | BL-017 | 2026-08-06 |
 | BL-048 | Тарифы и история платежей | E06: месяц/год, история; политика доступа до `active_until` после отмены | P1 | Open | BL-040 | TODO |
 | BL-049 | Устройства / лимит | E10 список устройств, revoke, лимит (**Should→P2**) | P2 | Open | BL-043 | TODO |
 | BL-050 | Admin: Premium / бан / audit | Users: выдать/забрать подписку, поиск, audit log | P2 | Open | BL-020 | TODO |

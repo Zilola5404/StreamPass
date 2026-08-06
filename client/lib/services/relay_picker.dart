@@ -40,3 +40,26 @@ RelayServer? pickBestRelay(
 
   return candidates.isNotEmpty ? candidates.first : null;
 }
+
+/// Whether auto-mode should leave [current] for [best] (BL-047).
+/// Failover when current is missing from catalog or marked unhealthy.
+bool shouldFailoverRelay({
+  required RelayServer? current,
+  required List<RelayServer> servers,
+  required RelayServer? best,
+  required bool autoSelect,
+}) {
+  if (!autoSelect || best == null) return false;
+  if (current == null) return true;
+  if (current.id == best.id) return false;
+
+  RelayServer? fresh;
+  for (final s in servers) {
+    if (s.id == current.id) {
+      fresh = s;
+      break;
+    }
+  }
+  if (fresh == null || !fresh.healthy) return true;
+  return false;
+}

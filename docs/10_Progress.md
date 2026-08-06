@@ -6,7 +6,7 @@
 
 | Дата | Что сделано | Файлы | Результат |
 |------|-------------|-------|-----------|
-| 2026-08-06 | Этап FS: BL-041/045/046 (+ poll подписки) | `settings_screen`, `home_screen`, `subscription_screen` | Logout; Auto Mode sync; reconnect при смене сервера |
+| 2026-08-06 | Этап FS: BL-047 failover toast + BL-044 статистика | `session_stats`, `home_screen`, `statistics_screen` | Health poll 60с; E03 локальные метрики |
 | 2026-08-06 | BL-017 TCP underlay + device E2E script | `go_core/hyconfig`, `scripts/VerifyDeviceE2E.ps1`, VPS bridge | UDP→TCP fallback; APK +25 |
 | 2026-08-06 | BL-035 off-site encrypted backup | `scripts/backup-offsite.sh`, cron 03:15 UTC | encrypt → `212.43.157.167` |
 | 2026-08-05 | Docs sync to product reality | `docs/*`, `prompts/00_SystemPrompt.md` | VPN/admin/CI/monitoring reflected; dates 2026-08-05 |

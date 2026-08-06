@@ -68,4 +68,49 @@ void main() {
     );
     expect(picked?.id, 'nl2');
   });
+
+  test('shouldFailoverRelay when current unhealthy', () {
+    final current = _srv(id: 'nl1', region: 'nl', healthy: false);
+    final best = _srv(id: 'nl2', region: 'nl');
+    final servers = [
+      _srv(id: 'nl1', region: 'nl', healthy: false),
+      best,
+    ];
+    expect(
+      shouldFailoverRelay(
+        current: current,
+        servers: servers,
+        best: best,
+        autoSelect: true,
+      ),
+      isTrue,
+    );
+  });
+
+  test('shouldFailoverRelay false when current healthy and best same', () {
+    final current = _srv(id: 'nl1', region: 'nl');
+    expect(
+      shouldFailoverRelay(
+        current: current,
+        servers: [current],
+        best: current,
+        autoSelect: true,
+      ),
+      isFalse,
+    );
+  });
+
+  test('shouldFailoverRelay respects autoSelect off', () {
+    final current = _srv(id: 'nl1', region: 'nl', healthy: false);
+    final best = _srv(id: 'nl2', region: 'nl');
+    expect(
+      shouldFailoverRelay(
+        current: current,
+        servers: [current, best],
+        best: best,
+        autoSelect: false,
+      ),
+      isFalse,
+    );
+  });
 }

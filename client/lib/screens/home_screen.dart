@@ -19,6 +19,7 @@ import '../services/client_update.dart';
 import '../services/connection_duration.dart';
 import '../services/relay_picker.dart';
 import '../services/region_catalog.dart';
+import '../services/session_stats.dart';
 import '../theme/app_theme.dart';
 import '../widgets/connect_orb.dart';
 import 'settings_screen.dart';
@@ -53,7 +54,10 @@ class _HomeScreenState extends State<HomeScreen> {
   int _pendingRulesVersion = 0;
   DateTime? _connectedSince;
   Timer? _durationTimer;
+  Timer? _healthTimer;
   String _durationLabel = 'Smart routing';
+  final _sessionStats = SessionStatsService();
+  bool _failoverInFlight = false;
 
   @override
   void initState() {
@@ -262,11 +266,12 @@ class _HomeScreenState extends State<HomeScreen> {
         await VpnChannel.disconnect();
       } catch (_) {}
       if (mounted) {
+        _stopDurationTimer();
         setState(() {
           _state = ConnState.disconnected;
-          _stopDurationTimer();
         });
       }
+      unawaited(_sessionStats.recordReconnect());
     }
 
     setState(() => _loadingRelay = true);
@@ -322,6 +327,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _durationTimer?.cancel();
+    _healthTimer?.cancel();
     _ruleEngine.stop();
     _sub?.cancel();
     super.dispose();
@@ -336,13 +342,102 @@ class _HomeScreenState extends State<HomeScreen> {
         _durationLabel = formatConnectionDuration(DateTime.now().difference(since));
       });
     });
+    _startHealthPoll();
   }
 
   void _stopDurationTimer() {
+    final since = _connectedSince;
+    if (since != null) {
+      final sec = DateTime.now().difference(since).inSeconds;
+      if (sec > 0) {
+        unawaited(_sessionStats.addOnlineSeconds(sec));
+      }
+    }
     _durationTimer?.cancel();
     _durationTimer = null;
     _connectedSince = null;
     _durationLabel = 'Smart routing';
+    _stopHealthPoll();
+  }
+
+  void _startHealthPoll() {
+    _healthTimer?.cancel();
+    _healthTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      unawaited(_checkRelayHealth());
+    });
+  }
+
+  void _stopHealthPoll() {
+    _healthTimer?.cancel();
+    _healthTimer = null;
+  }
+
+  Future<void> _checkRelayHealth() async {
+    if (!mounted ||
+        _state != ConnState.connected ||
+        !_autoMode ||
+        _failoverInFlight) {
+      return;
+    }
+    try {
+      final settings = await SettingsService().load();
+      if (!settings.autoSelectRelay) return;
+      final servers = await widget.api.fetchServers();
+      final best = pickBestRelay(
+        servers,
+        preferredRegion: settings.preferredRegion,
+        autoSelect: true,
+      );
+      if (!shouldFailoverRelay(
+        current: _selectedRelay,
+        servers: servers,
+        best: best,
+        autoSelect: true,
+      )) {
+        return;
+      }
+      await _failoverTo(best!);
+    } catch (e) {
+      _connectLog.warn('connect', 'relay health check failed', {'error': '$e'});
+    }
+  }
+
+  Future<void> _failoverTo(RelayServer next, {String reason = 'degraded'}) async {
+    if (_failoverInFlight) return;
+    _failoverInFlight = true;
+    try {
+      _connectLog.info('connect', 'auto failover', {
+        'from': _selectedRelay?.id ?? '',
+        'to': next.id,
+        'reason': reason,
+      });
+      try {
+        await VpnChannel.disconnect();
+      } catch (_) {}
+      if (!mounted) return;
+      _stopDurationTimer();
+      setState(() {
+        _selectedRelay = next;
+        _pingMs = next.rttMs > 0 ? next.rttMs : _pingMs;
+        _state = ConnState.disconnected;
+      });
+      unawaited(_sessionStats.recordReconnect());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Переключили сервер для стабильности'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      if (mounted &&
+          _subscription?.isActive == true &&
+          _state == ConnState.disconnected) {
+        await _toggleConnection();
+      }
+    } finally {
+      _failoverInFlight = false;
+    }
   }
 
   int? _effectivePing(int? nativePing) {
@@ -377,6 +472,10 @@ class _HomeScreenState extends State<HomeScreen> {
           _durationLabel = formatConnectionDuration(Duration.zero);
           _startDurationTimer();
           _pingMs = _effectivePing(update.pingMs);
+          final ping = _pingMs;
+          if (ping != null && ping > 0) {
+            unawaited(_sessionStats.recordRtt(ping));
+          }
         case VpnEvent.disconnected:
           _state = ConnState.disconnected;
           _stopDurationTimer();
@@ -394,9 +493,32 @@ class _HomeScreenState extends State<HomeScreen> {
             navigateToLogin(context, widget.authService, widget.api);
           } else {
             _errorMessage = msg;
+            if (_autoMode) {
+              unawaited(_tryFailoverAfterError());
+            }
           }
       }
     });
+  }
+
+  Future<void> _tryFailoverAfterError() async {
+    if (_failoverInFlight || !_autoMode) return;
+    try {
+      final settings = await SettingsService().load();
+      if (!settings.autoSelectRelay) return;
+      final servers = await widget.api.fetchServers();
+      final others = servers
+          .where((s) => s.id != _selectedRelay?.id)
+          .toList();
+      final best = pickBestRelay(
+        others,
+        preferredRegion: settings.preferredRegion,
+        autoSelect: true,
+      );
+      if (best != null && best.healthy) {
+        await _failoverTo(best, reason: 'error');
+      }
+    } catch (_) {}
   }
 
   Future<void> _toggleConnection() async {
