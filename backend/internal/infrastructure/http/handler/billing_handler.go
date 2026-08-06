@@ -1,22 +1,27 @@
 package handler
 
 import (
+	"crypto/subtle"
 	"net/http"
 
 	billingsvc "streampass/backend/internal/application/billing"
 	httpx "streampass/backend/internal/infrastructure/http"
 	"streampass/backend/internal/infrastructure/http/middleware"
+	apperrors "streampass/shared/errors"
 )
 
 // BillingHandler exposes POST /payments, POST /payments/webhook,
 // GET /subscription, POST /subscription/cancel.
 type BillingHandler struct {
-	svc *billingsvc.Service
+	svc           *billingsvc.Service
+	webhookSecret string
 }
 
 // NewBillingHandler builds the Billing HTTP handler.
-func NewBillingHandler(svc *billingsvc.Service) *BillingHandler {
-	return &BillingHandler{svc: svc}
+// webhookSecret is optional; when set, callers must send header
+// X-StreamPass-Webhook-Secret (defense in depth — S-04).
+func NewBillingHandler(svc *billingsvc.Service, webhookSecret string) *BillingHandler {
+	return &BillingHandler{svc: svc, webhookSecret: webhookSecret}
 }
 
 type createPaymentResponse struct {
@@ -54,6 +59,14 @@ type webhookRequest struct {
 // body's claimed status and re-fetches it from the provider, so an
 // unauthenticated caller can at most trigger a redundant status check).
 func (h *BillingHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
+	if h.webhookSecret != "" {
+		got := r.Header.Get("X-StreamPass-Webhook-Secret")
+		if subtle.ConstantTimeCompare([]byte(got), []byte(h.webhookSecret)) != 1 {
+			httpx.WriteError(w, apperrors.New(apperrors.CodeForbidden, "invalid webhook secret"))
+			return
+		}
+	}
+
 	var req webhookRequest
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.WriteError(w, err)

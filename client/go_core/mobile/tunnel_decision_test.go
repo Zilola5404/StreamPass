@@ -14,11 +14,11 @@ func TestDecideRoute_domainDirect(t *testing.T) {
 	}
 }
 
-func TestDecideRoute_defaultRelay(t *testing.T) {
+func TestDecideRoute_defaultDirect(t *testing.T) {
 	rules := `{"version":1,"rules":[{"kind":"DOMAIN","pattern":"*.ru","mode":"DIRECT"}]}`
 	got := mobile.DecideRoute(rules, "", "google.com", "")
-	if got != "RELAY" {
-		t.Fatalf("got %q want RELAY", got)
+	if got != "DIRECT" {
+		t.Fatalf("got %q want DIRECT (decision.DefaultMode)", got)
 	}
 }
 

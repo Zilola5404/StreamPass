@@ -136,7 +136,7 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 		Relay:           handler.NewRelayHandler(relayService),
 		Telemetry:       handler.NewTelemetryHandler(telemetryService),
 		Config:          handler.NewConfigHandler(configService),
-		Billing:         handler.NewBillingHandler(billingService),
+		Billing:         handler.NewBillingHandler(billingService, cfg.StringOr("billing.webhook_secret", "")),
 		Exclusion:       handler.NewExclusionHandler(exclusionService),
 		Health:          handler.NewHealthHandler(),
 		Admin:           handler.NewAdminHandler(adminUserService),

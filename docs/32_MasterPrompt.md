@@ -10,7 +10,7 @@
 4. DIRECT vs VPN-флаг ОС — `docs/33_DirectVsVpnBypass.md`.  
 
 **Факты (не устарели):**
-- Клиент `v0.1.1+23`: Hysteria2 + TUN + Decision + split DNS + RU CIDR split-tunnel + app-bypass.  
+- Клиент `v0.1.1+25`: Hysteria2 + TUN + Decision + split DNS + RU CIDR split-tunnel + app-bypass + TCP underlay.  
 - Domain DIRECT **не** снимает `TRANSPORT_VPN` — для Госуслуг/банков нужен `addDisallowedApplication`.  
 - Prod: `https://212-43-156-33.nip.io`, Admin `/admin/`.  
 - Done: CI, Admin, monitoring, regions, backups, auto-update, E2E mock, loadtest.  

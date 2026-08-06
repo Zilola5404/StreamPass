@@ -6,6 +6,9 @@
 
 | Дата | Что сделано | Файлы | Результат |
 |------|-------------|-------|-----------|
+| 2026-08-06 | BL-017/035 QA fixes: tests, docs +25, connect candidate log | `go_core/mobile`, `docs/*`, `scripts/VerifyOffsiteBackup.ps1` | C-01/C-02 закрыты; ADR-014 TCP fallback |
+| 2026-08-06 | BL-017 TCP underlay + device E2E script | `go_core/hyconfig`, `scripts/VerifyDeviceE2E.ps1`, VPS bridge | UDP→TCP fallback; APK +25 |
+| 2026-08-06 | BL-035 off-site encrypted backup | `scripts/backup-offsite.sh`, cron 03:15 UTC | encrypt → `212.43.157.167` |
 | 2026-08-05 | Docs sync to product reality | `docs/*`, `prompts/00_SystemPrompt.md` | VPN/admin/CI/monitoring reflected; dates 2026-08-05 |
 | 2026-08-04 | BL-031/032: Flutter E2E mock + API loadtest | `client/test/e2e_flow_test.dart`, `scripts/loadtest` | E2E mock green; p99 baseline on prod |
 | 2026-08-04 | BL-033: Postgres daily backup | `scripts/Backup.ps1`, cron, restore docs | `/var/backups/streampass` 03:00 UTC |
@@ -50,7 +53,7 @@
 
 ### Backlog Done (summary, 2026-08-05)
 
-DONE: BL-001..003, 005, 006, 010-017, 020-022, 026, 027, 031, 032, 033  
+DONE: BL-001..003, 005, 006, 010-017, 020-022, 026, 027, 031, 032, 033, 035  
 SKIPPED: BL-004 YooKassa live  
 BLOCKED: BL-030 (depends BL-004)  
 OPEN intentional: BL-023 Windows, BL-024 iOS, BL-025 macOS

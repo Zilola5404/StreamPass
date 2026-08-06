@@ -1,6 +1,6 @@
 # StreamPass — План тестирования
 
-> Дата: 2026-08-05 | Версия: 1.1
+> Дата: 2026-08-06 | Версия: 1.2
 
 ---
 
@@ -19,7 +19,9 @@
 | router | `backend/.../router/router_test.go` | v1 prefix helper | ✅ |
 | metrics | `backend/.../metrics/metrics_test.go` | Prometheus helpers | ✅ |
 
-**Дополнительно (go_core):** decision, hyconfig, dnscache, protect, tunbridge, tunnel tests.
+**Дополнительно (go_core):** decision, hyconfig (incl. TCP underlay), dnscache, protect, tunbridge, mobile/tunnel tests.
+
+**Последний прогон (2026-08-06):** `go test ./...` backend PASS; `go test ./...` in `client/go_core` PASS; `flutter test` **49/49** PASS.
 
 **Команда:**
 ```bash
@@ -34,6 +36,7 @@ go vet ./...
 | `client/test/auth_service_test.dart` | Offline login error | ✅ |
 | `client/test/widget_test.dart` | Onboarding when logged out | ✅ |
 | `client/test/api_url_test.dart` | /api/v1 URL prefix | ✅ |
+| `client/test/connect_flow_log_test.dart` | VPN connect log / invalid relay | ✅ |
 | `client/test/e2e_flow_test.dart` | Login → Home → Regions (mock) | ✅ BL-031 |
 
 **Команда:**
@@ -115,7 +118,8 @@ cd client && flutter analyze
 |------|----------|--------|
 | Widget tests | Onboarding, home screens | ✅ Базовые |
 | E2E (mock API) | Login → Home → Regions picker | ✅ BL-031 `test/e2e_flow_test.dart` |
-| Integration | Full auth + connect flow | ✅ mock backend (VPN device E2E — manual recheck +17) |
+| Integration | Full auth + connect flow | ✅ mock backend; device E2E API — `VerifyDeviceE2E.ps1` (+25, 2026-08-06) |
+| Off-site backup | Cron + `.enc` on secondary | `VerifyOffsiteBackup.ps1` (needs SSH) |
 | VPN permission | Android VPN permission dialog | Manual |
 | Boot receiver | Autostart on boot | Manual |
 | Subscription gate | Block connect without subscription | Manual |
@@ -146,3 +150,54 @@ cd client && flutter analyze && flutter test
 | Security | No critical findings |
 | Load | p99 < 500ms baseline (BL-032) |
 | Mobile | Connect flow E2E on real device (recheck pending) |
+| **Traffic behavior** | `VerifyTrafficBehavior.ps1` + manual site/app matrix |
+
+---
+
+## 9. Traffic & lifecycle tests (функциональность продукта)
+
+Проверяет **как работает трафик** (сайт/приложение → DIRECT/RELAY/bypass), **запуск**, **отключение без краша**.
+
+### Автоматические (CI / локально)
+
+| Область | Файл / команда | Что проверяет |
+|---------|----------------|---------------|
+| Decision matrix | `client/go_core/internal/decision/traffic_matrix_test.go` | yandex.ru DIRECT, youtube RELAY, … |
+| DNS matrix | `client/go_core/internal/dnscache/traffic_dns_test.go` | `.ru` → Yandex, foreign → DoH |
+| gomobile API | `client/go_core/mobile/traffic_matrix_test.go` | `DecideRoute()` контракт |
+| Flutter contract | `client/test/traffic_behavior_test.dart` | rules JSON, bypass list, subscription gate |
+| VPN lifecycle | `client/test/vpn_lifecycle_test.dart` | connect→disconnect state, logging |
+| App startup | `client/test/app_startup_test.dart` | cold start без краша |
+
+```bash
+# Go traffic matrix
+cd client/go_core && go test ./... -run TrafficMatrix -count=1
+
+# Flutter
+cd client && flutter test test/traffic_behavior_test.dart test/vpn_lifecycle_test.dart
+```
+
+### Device + logcat (adb)
+
+| Скрипт | Описание |
+|--------|----------|
+| `scripts/VerifyTrafficBehavior.ps1` | Unit matrix + manual checklist + log patterns |
+| `scripts/VerifyTrafficBehavior.ps1 -AfterConnect` | Logcat: app-bypass, split-tunnel, relay connected |
+| `scripts/VerifyTrafficBehavior.ps1 -AfterTrafficRu` | VPN profile DNS 77.88.8.8 + split-tunnel (RU via OS) |
+| `scripts/VerifyTrafficBehavior.ps1 -AfterTraffic` | Go `[dns] via=doh` after opening youtube.com |
+| `scripts/VerifyTrafficBehavior.ps1 -AfterDisconnect` | Logcat: stop complete, no FATAL |
+| `scripts/CollectConnectLogs.ps1` | Сбор connect.log / logcat |
+| `scripts/traffic_expectations.json` | Матрица сайтов/приложений и ожидаемых log patterns |
+
+### Manual matrix (на телефоне)
+
+| Категория | Ожидание |
+|-----------|----------|
+| RU сайты (yandex.ru, 2ip.ru) | RU IP, DIRECT, DNS Yandex |
+| Foreign (YouTube, Instagram) | Через relay (ускорение) |
+| Госуслуги / банки (native) | Открываются без «отключите VPN» (app bypass) |
+| Chrome | RU через split DNS+CIDR; foreign через TUN |
+| Disconnect | UI «Готов к подключению», **приложение не закрывается** |
+| APK update / revoke | `onDestroy` без crash (см. `StreamPassVpnService.kt`) |
+
+См. также `docs/33_DirectVsVpnBypass.md`.

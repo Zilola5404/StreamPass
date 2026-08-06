@@ -27,7 +27,7 @@
 
 **Exit criteria:** User can connect with one button, foreign IP verified — **met** (payments live still open).
 
-**Remaining Phase 1 polish:** device recheck +17; optional ЮKassa live on request.
+**Remaining Phase 1 polish:** device manual connect +25; optional ЮKassa live on request.
 
 ---
 

@@ -71,7 +71,8 @@ class MainActivity : FlutterActivity() {
                 }
 
                 override fun onCancel(args: Any?) {
-                    StreamPassVpnService.eventSink = null
+                    // Keep eventSink so native events still reach Flutter after brief
+                    // detach (tab switch / rotation). onListen replaces sink on resume.
                 }
             })
 

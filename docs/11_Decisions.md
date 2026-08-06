@@ -136,7 +136,7 @@
 
 ---
 
-## ADR-010: On-device connect diagnostics log
+## ADR-012: On-device connect diagnostics log
 
 | | |
 |---|---|
@@ -148,7 +148,7 @@
 
 ---
 
-## ADR-011: Prepare relay before TUN on Android
+## ADR-013: Prepare relay before TUN on Android
 
 | | |
 |---|---|
@@ -157,6 +157,18 @@
 | **Решение** | Разделить `PrepareRelay()` (Hysteria connect до TUN) и `StartTunnel()` (attach fd к готовой сессии) |
 | **Причина** | Android VpnService поднимает full tunnel до старта Go core; без pre-connect relay недостижим |
 | **Последствия** | Состояние `prepared`/`active` в `mobile/tunnel.go`; RTT handshake сохраняется в `pingMs` |
+
+---
+
+## ADR-014: Fallback ports — skip TCP/443, add TCP/24443 underlay
+
+| | |
+|---|---|
+| **Дата** | 2026-08-06 |
+| **Проблема** | ТЗ §10 перечисляет TCP 443 как fallback после UDP 443→8443→24443; на prod TCP/443 занят Caddy (HTTPS termination) |
+| **Решение** | Клиент: UDP 443 → 8443 → 24443, затем **TCP underlay** на 8443 и **24443** (framed UDP-over-TCP к локальному Hysteria UDP/443 на VPS). **TCP/443 не используется** |
+| **Причина** | Прямой TCP Hysteria на 443 конфликтует с reverse proxy; underlay bridge (`streampass-tcpunderlay`) проксирует в Hysteria без изменения TLS front |
+| **Последствия** | Осознанное отклонение от буквы §10; расширение §10 вторым TCP-портом 24443; лог `[connect] hysteria ok via udp/443` / `tcp/8443` в diagnostics |
 
 ---
 

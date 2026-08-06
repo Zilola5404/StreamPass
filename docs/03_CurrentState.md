@@ -21,7 +21,7 @@
 
 `postgres`, `redis`, `backend`, `healthmonitor`, `caddy` (+ volume `./admin`), `prometheus`, `node-exporter`, `grafana`.
 
-### Android Client (Flutter) — v0.1.1+23
+### Android Client (Flutter) — v0.1.1+25
 
 | Возможность | Статус |
 |-------------|--------|
@@ -62,8 +62,8 @@
 |-----------|--------|
 | **Billing / ЮKassa** | Код есть; live-тест Skipped (BL-004); auto-renewal Blocked (BL-030) |
 | **Physical device E2E** | Код/APK готовы; ручная проверка на устройстве |
-| **TCP underlay fallback** | Done (BL-017): client UDP→TCP candidates + VPS bridge |
-| **Off-site backup** | Done (BL-035): encrypt → `157.167` + local enc mirror; cron 03:15 UTC |
+| TCP underlay fallback | ✅ Done (BL-017): UDP 443→8443→24443, TCP underlay 8443/24443 |
+| Off-site backup | ✅ Done (BL-035): encrypt → `157.167`; verify via `VerifyOffsiteBackup.ps1` |
 | **nip.io** | Работает; брендовый домен нет |
 
 ---
@@ -84,7 +84,8 @@
 | API | `https://212-43-156-33.nip.io` |
 | Admin | `https://212-43-156-33.nip.io/admin/` |
 | Relays | `nl-native-1`, `nl-amsterdam-1` (регион `nl`); DE/PL/FI — софт готов, нод нет |
-| APK | `StreamPass-v0.1.1+17-signed-arm64.apk` |
+| APK | `StreamPass-v0.1.1+25-signed-arm64.apk` |
+| OTA | `https://212-43-156-33.nip.io/downloads/StreamPass.apk` |
 
 ---
 

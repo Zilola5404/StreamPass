@@ -54,7 +54,8 @@
 | Limitation | Detail |
 |------------|--------|
 | connection_config plaintext | Relay secrets in DB without field-level encryption |
-| Webhook signature | ЮKassa path relies on provider re-fetch (live не проверен) |
+| Webhook signature | Optional shared secret header when `billing.webhook_secret` set; provider status re-fetch unchanged |
+| Client tokens | Access/refresh in `flutter_secure_storage` (migrates legacy SharedPreferences keys) |
 | Admin key static | Rotation manual |
 
 ---

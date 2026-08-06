@@ -231,7 +231,7 @@ func NewTestHandler(t *testing.T, db *sql.DB) (http.Handler, *fakePayments) {
 		Relay:           handler.NewRelayHandler(relaysvc.NewService(relayRepo, log)),
 		Telemetry:       handler.NewTelemetryHandler(telemetrysvc.NewService(telemetryRepo, telemetrysvc.SystemClock{}, log)),
 		Config:          handler.NewConfigHandler(configsvcpkg.NewService(appConfigRepo, configsvcpkg.SystemClock{}, log)),
-		Billing:         handler.NewBillingHandler(billingService),
+		Billing:         handler.NewBillingHandler(billingService, ""),
 		Exclusion:       handler.NewExclusionHandler(exclusionsvc.NewService(exclusionRepo, log)),
 		Health:          handler.NewHealthHandler(),
 		Admin:           handler.NewAdminHandler(adminsvc.NewUserService(userRepo, adminsvc.SystemClock{}, log)),

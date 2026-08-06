@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 
@@ -60,7 +61,7 @@ class ConnectionLog {
   static final ConnectionLog instance = ConnectionLog._();
 
   static const maxEntries = 200;
-  final List<ConnectionLogEntry> _entries = [];
+  final Queue<ConnectionLogEntry> _entries = Queue<ConnectionLogEntry>();
   final StreamController<ConnectionLogEntry> _controller =
       StreamController<ConnectionLogEntry>.broadcast();
 
@@ -91,7 +92,7 @@ class ConnectionLog {
     );
     _entries.add(entry);
     while (_entries.length > maxEntries) {
-      _entries.removeAt(0);
+      _entries.removeFirst();
     }
     debugPrint('[StreamPassConnect] ${entry.formatLine()}');
     if (!_controller.isClosed) {
@@ -103,7 +104,10 @@ class ConnectionLog {
 
   void importNativeLines(Iterable<String> lines, {bool replaceExisting = true}) {
     if (replaceExisting) {
-      _entries.removeWhere((e) => e.tag == 'native');
+      final kept = _entries.where((e) => e.tag != 'native').toList();
+      _entries
+        ..clear()
+        ..addAll(kept);
     }
     for (final line in lines) {
       final trimmed = line.trim();

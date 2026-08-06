@@ -4,23 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:streampass/screens/home_screen.dart';
 import 'package:streampass/services/auth_service.dart';
 import 'package:streampass/services/streampass_api.dart';
+import 'package:streampass/services/token_storage.dart';
 
 /// HomeScreen must stay alive when the backend is unreachable on startup.
 /// A crash here matches the user report "app closes on launch".
 void main() {
   testWidgets('HomeScreen survives fetchServers network failure', (tester) async {
-    SharedPreferences.setMockInitialValues({
-      'sp_access_token': 'test-access',
-      'sp_refresh_token': 'test-refresh',
-      'sp_access_expires_at':
-          DateTime.now().toUtc().add(const Duration(hours: 1)).toIso8601String(),
-    });
-
     final client = MockClient((request) async {
       if (request.url.path.endsWith('/subscription')) {
         return http.Response(
@@ -40,6 +33,12 @@ void main() {
     final authService = AuthService(
       baseUrl: 'https://example.invalid/api/v1',
       client: client,
+      tokenStorage: TokenStorage.inMemory({
+        'sp_access_token': 'test-access',
+        'sp_refresh_token': 'test-refresh',
+        'sp_access_expires_at':
+            DateTime.now().toUtc().add(const Duration(hours: 1)).toIso8601String(),
+      }),
     );
     final api = StreamPassApi(
       baseUrl: 'https://example.invalid/api/v1',
@@ -62,13 +61,6 @@ void main() {
 
   testWidgets('HomeScreen shows relay error instead of crashing when servers empty',
       (tester) async {
-    SharedPreferences.setMockInitialValues({
-      'sp_access_token': 'test-access',
-      'sp_refresh_token': 'test-refresh',
-      'sp_access_expires_at':
-          DateTime.now().toUtc().add(const Duration(hours: 1)).toIso8601String(),
-    });
-
     final client = MockClient((request) async {
       if (request.url.path.endsWith('/subscription')) {
         return http.Response(
@@ -85,6 +77,12 @@ void main() {
     final authService = AuthService(
       baseUrl: 'https://example.invalid/api/v1',
       client: client,
+      tokenStorage: TokenStorage.inMemory({
+        'sp_access_token': 'test-access',
+        'sp_refresh_token': 'test-refresh',
+        'sp_access_expires_at':
+            DateTime.now().toUtc().add(const Duration(hours: 1)).toIso8601String(),
+      }),
     );
     final api = StreamPassApi(
       baseUrl: 'https://example.invalid/api/v1',

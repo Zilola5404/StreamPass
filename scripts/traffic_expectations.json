@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "description": "Expected traffic behavior for StreamPass QA (decision + DNS + Android layers)",
+  "sites": [
+    {
+      "host": "yandex.ru",
+      "decision": "DIRECT",
+      "dns": "yandex",
+      "manual": "Browser: российский IP на 2ip.ru / yandex.ru"
+    },
+    {
+      "host": "gosuslugi.ru",
+      "decision": "DIRECT",
+      "dns": "yandex",
+      "manual": "Native app ru.rostel: не просит отключить VPN (app bypass)"
+    },
+    {
+      "host": "2ip.ru",
+      "decision": "DIRECT",
+      "dns": "yandex",
+      "manual": "Показывает RU IP, не IP relay NL/DE"
+    },
+    {
+      "host": "youtube.com",
+      "decision": "RELAY",
+      "dns": "doh",
+      "manual": "YouTube app / браузер: ускорение через relay"
+    },
+    {
+      "host": "instagram.com",
+      "decision": "RELAY",
+      "dns": "doh",
+      "manual": "Instagram через relay"
+    }
+  ],
+  "apps": [
+    {
+      "package": "ru.rostel",
+      "label": "Госуслуги",
+      "bypass": true,
+      "manual": "Открывается без «отключите VPN»"
+    },
+    {
+      "package": "com.gnivts.selfemployed",
+      "label": "Мой налог",
+      "bypass": true,
+      "manual": "Открывается без блокировки VPN"
+    },
+    {
+      "package": "ru.s7tl.app",
+      "label": "S7",
+      "bypass": true,
+      "manual": "Авиакомпания RU — bypass"
+    },
+    {
+      "package": "ru.sberbankmobile",
+      "label": "Сбербанк",
+      "bypass": true,
+      "manual": "Банк — bypass если установлен"
+    },
+    {
+      "package": "com.android.chrome",
+      "label": "Chrome",
+      "bypass": false,
+      "manual": "RU-сайты через split DNS + CIDR; foreign через TUN"
+    }
+  ],
+  "connect_log_patterns": [
+    { "pattern": "VPN app-bypass applied=", "required": true, "note": "N>=1 if gov/bank apps installed" },
+    { "pattern": "split-tunnel mode=", "required": true, "note": "exclude-ru or intl-only routes" },
+    { "pattern": "candidate=|hysteria handshake|connected|tunnel event=connected", "required": true, "note": "Relay dial succeeded" },
+    { "pattern": "\\[dns\\] bootstrap=", "required": false, "note": "DNS resolver initialized (optional at connect)" }
+  ],
+  "traffic_log_patterns_ru": [
+    { "pattern": "vpn dns=77\\.88\\.8\\.8", "required": true, "note": "Yandex DNS on VPN profile (OS resolver, not Go dnscache)" },
+    { "pattern": "split-tunnel mode=exclude-ru|split-tunnel mode=intl-only", "required": true, "note": "RU CIDR bypass active" }
+  ],
+  "traffic_log_patterns_foreign": [
+    { "pattern": "\\[dns\\] query .* via=doh|\\[dns\\] query .* via=cache|\\[dns\\] bootstrap=", "required": true, "note": "Open youtube.com or instagram.com in Chrome while connected" }
+  ],
+  "disconnect_log_patterns": [
+    { "pattern": "\\[vpn\\] stop begin", "required": true, "note": "User tapped disconnect" },
+    { "pattern": "\\[vpn\\] stop complete", "required": true, "note": "Clean teardown" },
+    { "pattern": "FATAL EXCEPTION", "required": false, "forbidden": true, "note": "App must not crash on disconnect" },
+    { "pattern": "onDestroy", "required": false, "note": "Service destroyed without stopSelf loop" }
+  ],
+  "lifecycle": [
+    { "step": "cold_start", "expect": "Onboarding or Home without crash", "auto": "flutter test app_startup_test.dart" },
+    { "step": "login", "expect": "Home with region picker", "auto": "flutter test e2e_flow_test.dart" },
+    { "step": "connect", "expect": "ConnState.connected, notification «Подключено»", "manual": true },
+    { "step": "disconnect", "expect": "ConnState.disconnected, app stays open", "manual": true },
+    { "step": "apk_update_teardown", "expect": "onDestroy without process crash", "manual": true }
+  ]
+}

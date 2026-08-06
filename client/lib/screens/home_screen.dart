@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show SocketException;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import '../main.dart' show navigateToLogin;
 import '../build_info.dart';
 import '../services/connection_log.dart';
+import '../services/auth_errors.dart';
 import '../services/auth_service.dart';
 import '../services/rule_engine_service.dart';
 import '../services/settings_service.dart';
@@ -43,6 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loadingRelay = true;
   SubscriptionInfo? _subscription;
   bool _loadingSubscription = true;
+  bool _subscriptionCheckFailed = false;
   StreamSubscription<VpnStatusUpdate>? _sub;
   final _connectLog = ConnectionLog.instance;
   late final RuleEngineService _ruleEngine = RuleEngineService(api: widget.api);
@@ -161,15 +165,27 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       navigateToLogin(context, widget.authService, widget.api);
     } catch (e) {
-      // Subscription status failing to load must not block the rest of
-      // the UI — default to "not active" (fail closed, not open) and let
-      // the person retry from the subscription screen.
       if (!mounted) return;
+      _connectLog.error('api', 'subscription fetch failed', {'error': '$e'});
       setState(() {
-        _subscription = const SubscriptionInfo(isActive: false);
+        _subscriptionCheckFailed = _isNetworkError(e);
+        _subscription = _subscriptionCheckFailed
+            ? null
+            : const SubscriptionInfo(isActive: false);
         _loadingSubscription = false;
       });
     }
+  }
+
+  bool _isNetworkError(Object e) {
+    if (e is SocketException) return true;
+    if (e is http.ClientException) return true;
+    if (e is ApiException && e.statusCode >= 500) return true;
+    final msg = e.toString().toLowerCase();
+    return msg.contains('failed host lookup') ||
+        msg.contains('connection timed out') ||
+        msg.contains('connection refused') ||
+        msg.contains('network is unreachable');
   }
 
   Future<void> _openSubscriptionScreen() async {
@@ -208,10 +224,17 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (!mounted) return;
       _connectLog.error('api', 'fetchServers failed', {'error': '$e'});
+      final network = _isNetworkError(e);
       setState(() {
         _loadingRelay = false;
-        _errorMessage = e is ApiException ? e.message : 'Не удалось загрузить список серверов';
-        _state = ConnState.error;
+        if (network) {
+          _subscriptionCheckFailed = true;
+          _errorMessage = null;
+          _state = ConnState.disconnected;
+        } else {
+          _errorMessage = e is ApiException ? e.message : 'Не удалось загрузить список серверов';
+          _state = ConnState.error;
+        }
       });
     }
   }
@@ -311,8 +334,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _state = ConnState.error;
           _stopDurationTimer();
           final msg = update.errorMessage ?? 'Ошибка подключения';
-          if (msg.toLowerCase().contains('token expired') ||
-              msg.contains('AUTH_TOKEN_EXPIRED')) {
+          if (AuthErrorCodes.isExpiredMessage(msg)) {
             _errorMessage = 'Сессия истекла. Войдите снова';
             navigateToLogin(context, widget.authService, widget.api);
           } else {
@@ -454,7 +476,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      if (!_loadingSubscription && _subscription?.isActive != true) ...[
+                      if (!_loadingSubscription && _subscriptionCheckFailed) ...[
+                        _BackendUnreachableBanner(onRetry: () {
+                          setState(() {
+                            _loadingSubscription = true;
+                            _loadingRelay = true;
+                            _subscriptionCheckFailed = false;
+                            _errorMessage = null;
+                            _state = ConnState.disconnected;
+                          });
+                          _bootstrap();
+                        }),
+                        const SizedBox(height: 14),
+                      ] else if (!_loadingSubscription && _subscription?.isActive != true) ...[
                         _SubscriptionBanner(onTap: _openSubscriptionScreen),
                         const SizedBox(height: 14),
                       ],
@@ -571,6 +605,41 @@ class _StatusChip extends StatelessWidget {
             Text(label, style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _BackendUnreachableBanner extends StatelessWidget {
+  final VoidCallback onRetry;
+  const _BackendUnreachableBanner({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.cloud_off_rounded, color: AppColors.danger),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Нет связи с сервером',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                Text(
+                  'Список серверов и подписка не загрузились. '
+                  'Проверьте интернет или отключите VPN и нажмите «Повторить».',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 10),
+                TextButton(onPressed: onRetry, child: const Text('Повторить')),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

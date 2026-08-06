@@ -1,5 +1,6 @@
 # Pull encrypted/plain StreamPass DB backups from the VPS onto this PC (off-site relative to the server).
 # Usage:
+#   $env:STREAMPASS_SSH_KEY = "C:\Users\me\.ssh\id_rsa"
 #   .\scripts\PullBackupsOffsite.ps1
 #   .\scripts\PullBackupsOffsite.ps1 -RemoteHost 212.43.156.33 -LocalDir C:\Backups\StreamPass
 
@@ -8,6 +9,7 @@ param(
     [string]$User = "root",
     [string]$RemoteDir = "/var/backups/streampass",
     [string]$LocalDir = "",
+    [string]$KeyPath = "",
     [string]$Password = ""
 )
 
@@ -21,30 +23,38 @@ if (-not (Test-Path $LocalDir)) {
 }
 
 $pscp = "C:\Program Files\PuTTY\pscp.exe"
-$plink = "C:\Program Files\PuTTY\plink.exe"
 if (-not (Test-Path $pscp)) { throw "pscp not found: $pscp" }
 
-if (-not $Password) {
-    # Prefer env to avoid embedding secrets in scripts/history when possible.
-    $Password = $env:STREAMPASS_SSH_PASSWORD
-}
-if (-not $Password) {
-    throw "Set -Password or env STREAMPASS_SSH_PASSWORD"
+if (-not $KeyPath) { $KeyPath = $env:STREAMPASS_SSH_KEY }
+if (-not $Password) { $Password = $env:STREAMPASS_SSH_PASSWORD }
+
+function Invoke-Pscp([string]$RemoteSpec, [string]$LocalPath) {
+    $args = @("-batch")
+    if ($KeyPath -and (Test-Path $KeyPath)) {
+        $args += @("-i", $KeyPath)
+    } elseif ($Password) {
+        $args += @("-pw", $Password)
+    } else {
+        throw "Set STREAMPASS_SSH_KEY or STREAMPASS_SSH_PASSWORD"
+    }
+    $args += $RemoteSpec, $LocalPath
+    & $pscp @args
+    return $LASTEXITCODE
 }
 
 Write-Host "=== Pull off-site backups ===" -ForegroundColor Cyan
 Write-Host "From ${User}@${RemoteHost}:${RemoteDir}"
 Write-Host "To   $LocalDir"
 
-& $pscp -pw $Password -batch "$User@${RemoteHost}:$RemoteDir/streampass_*.sql.gz" $LocalDir
-if ($LASTEXITCODE -ne 0) {
+$rc = Invoke-Pscp "$User@${RemoteHost}:$RemoteDir/streampass_*.sql.gz" $LocalDir
+if ($rc -ne 0) {
     Write-Host "WARN: plain .sql.gz pull failed (may be empty)" -ForegroundColor Yellow
 }
 
 # Encrypted off-site mirror on the VPS (and/or pulled from primary)
 $encRemote = "/var/backups/streampass-offsite"
-& $pscp -pw $Password -batch "$User@${RemoteHost}:${encRemote}/streampass_*.sql.gz.enc" $LocalDir
-if ($LASTEXITCODE -ne 0) {
+$rc = Invoke-Pscp "$User@${RemoteHost}:${encRemote}/streampass_*.sql.gz.enc" $LocalDir
+if ($rc -ne 0) {
     Write-Host "WARN: encrypted .enc pull failed" -ForegroundColor Yellow
 }
 

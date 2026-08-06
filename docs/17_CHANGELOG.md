@@ -1,7 +1,7 @@
 # StreamPass — Changelog
 
 > Формат: [Keep a Changelog](https://keepachangelog.com/)  
-> Дата начала документа: 2026-08-03 | Обновлено: 2026-08-05
+> Дата начала документа: 2026-08-03 | Обновлено: 2026-08-06
 
 ---
 
@@ -18,7 +18,8 @@
 - `go.sum` for reproducible builds (BL-027)
 - Flutter E2E mock flow (BL-031); API loadtest scripts (BL-032)
 - Daily Postgres backup cron (BL-033)
-- APK **v0.1.1+17** signed arm64 release path
+- APK **v0.1.1+25** signed arm64 (`connectFlow = tcp-underlay-v1`)
+- Audit remediation: secure token storage, webhook secret, ADR-012/013/014
 
 ### Changed
 - Docs aligned to product reality (2026-08-05): VPN not stub; CI/admin/monitoring present
@@ -53,7 +54,7 @@
 - Migration 0002+: `connection_config`, exclusions, auto-update, region normalize
 
 ### Changed
-- VPN connect flow: `PrepareRelay` before TUN (ADR-011)
+- VPN connect flow: `PrepareRelay` before TUN (ADR-013)
 - Relay handler: GET /servers requires Bearer JWT (returns connection_config)
 - Client version bumps through **v0.1.1+17**
 

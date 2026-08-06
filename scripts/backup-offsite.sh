@@ -35,7 +35,8 @@ fi
 
 ts="$(date -u +%Y%m%d_%H%M%S)"
 enc="/tmp/streampass_${ts}.sql.gz.enc"
-openssl enc -aes-256-cbc -pbkdf2 -salt -pass pass:"$KEY" -in "$src" -out "$enc"
+export BACKUP_ENCRYPT_KEY="$KEY"
+openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_ENCRYPT_KEY -in "$src" -out "$enc"
 log "Encrypted $(du -h "$enc" | awk '{print $1}')"
 
 if [[ -n "$OFFSITE_DIR" ]]; then

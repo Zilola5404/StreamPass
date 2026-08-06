@@ -12,7 +12,7 @@ MVP: Go backend + Flutter Android client + Hysteria2 (foreign RELAY) + DIRECT д
 
 **Repo:** `C:\01_Projects\StreamPass` | **Branch:** `main`  
 **Prod API:** `https://212-43-156-33.nip.io` | **Admin:** `/admin/`  
-**Клиент:** `v0.1.1+23` (`ru-split-dns-v1`)
+**Клиент:** `v0.1.1+25` (`tcp-underlay-v1`)
 
 ---
 
@@ -28,7 +28,7 @@ MVP: Go backend + Flutter Android client + Hysteria2 (foreign RELAY) + DIRECT д
 ## Архитектура (кратко)
 
 ```
-Flutter Android UI (v0.1.1+23)
+Flutter Android UI (v0.1.1+25)
   → auth / API / VPN channel / rule engine / region picker
   → Android VpnService
       • RU IPv4 excludeRoute / intl-only routes (split-tunnel)

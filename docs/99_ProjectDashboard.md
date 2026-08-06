@@ -1,6 +1,6 @@
 # StreamPass — Project Dashboard
 
-> Last updated: 2026-08-05
+> Last updated: 2026-08-06
 
 ---
 
@@ -26,7 +26,7 @@
 ## Active Sprint
 
 **Goal:** Stabilize Android MVP on prod; optional monetization / multi-OS only on request  
-**Focus:** Device recheck +17; YooKassa only if explicitly requested
+**Focus:** Device manual connect +25; off-site backup verify; YooKassa only if explicitly requested
 
 See: `ai/CurrentSprint.md`
 
@@ -73,7 +73,7 @@ See: `ai/CurrentSprint.md`
 |--------|-------|
 | Prod | `https://212-43-156-33.nip.io` |
 | Admin | `/admin/` |
-| APK | v0.1.1+17 |
+| APK | v0.1.1+25 |
 | Relays (prod) | NL nodes only (multi-region software ready) |
 | Open bugs (active) | 0 critical tunnel bugs |
 | Open backlog intentional | BL-023…025, BL-004 Skipped, BL-030 Blocked |

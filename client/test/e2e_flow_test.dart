@@ -8,6 +8,7 @@ import 'package:streampass/screens/onboarding_screen.dart';
 import 'package:streampass/screens/servers_screen.dart';
 import 'package:streampass/services/auth_service.dart';
 import 'package:streampass/services/streampass_api.dart';
+import 'package:streampass/services/token_storage.dart';
 
 import 'support/mock_backend.dart';
 
@@ -30,7 +31,11 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferences.getInstance();
     backend = MockStreamPassBackend();
-    auth = AuthService(baseUrl: 'https://mock.test/api/v1', client: backend.client);
+    auth = AuthService(
+      baseUrl: 'https://mock.test/api/v1',
+      client: backend.client,
+      tokenStorage: TokenStorage.inMemory(),
+    );
     api = StreamPassApi(baseUrl: 'https://mock.test/api/v1', authService: auth, client: backend.client);
   });
 
@@ -43,7 +48,7 @@ void main() {
     await tester.enterText(find.byType(TextField).at(0), 'user@example.com');
     await tester.enterText(find.byType(TextField).at(1), 'secret123');
     await tester.tap(find.text('Войти'));
-    await pumpFrames(tester, frames: 40);
+    await pumpFrames(tester, frames: 60);
 
     expect(backend.loginCalls, 1);
     expect(find.byType(HomeScreen), findsOneWidget);
@@ -65,14 +70,19 @@ void main() {
   });
 
   testWidgets('E2E: logged-in session opens Home and Servers picker', (tester) async {
-    SharedPreferences.setMockInitialValues({
-      'sp_access_token': 'access-mock',
-      'sp_refresh_token': 'refresh-mock',
-      'sp_access_expires_at': '2099-01-01T00:00:00Z',
-    });
+    auth = AuthService(
+      baseUrl: 'https://mock.test/api/v1',
+      client: backend.client,
+      tokenStorage: TokenStorage.inMemory({
+        'sp_access_token': 'access-mock',
+        'sp_refresh_token': 'refresh-mock',
+        'sp_access_expires_at': '2099-01-01T00:00:00Z',
+      }),
+    );
+    api = StreamPassApi(baseUrl: 'https://mock.test/api/v1', authService: auth, client: backend.client);
 
     await tester.pumpWidget(StreamPassApp(authService: auth, api: api));
-    await pumpFrames(tester, frames: 40);
+    await pumpFrames(tester, frames: 60);
 
     expect(find.byType(HomeScreen), findsOneWidget);
     expect(backend.serversCalls, greaterThan(0));
@@ -96,18 +106,23 @@ void main() {
     await tester.enterText(find.byType(TextField).at(0), 'new@example.com');
     await tester.enterText(find.byType(TextField).at(1), 'password');
     await tester.tap(find.text('Создать аккаунт'));
-    await pumpFrames(tester, frames: 40);
+    await pumpFrames(tester, frames: 60);
 
     expect(backend.registerCalls, 1);
     expect(find.byType(HomeScreen), findsOneWidget);
   });
 
   test('E2E API: fetchServers?region=pl filters mock catalog', () async {
-    SharedPreferences.setMockInitialValues({
-      'sp_access_token': 'access-mock',
-      'sp_refresh_token': 'refresh-mock',
-      'sp_access_expires_at': '2099-01-01T00:00:00Z',
-    });
+    auth = AuthService(
+      baseUrl: 'https://mock.test/api/v1',
+      client: backend.client,
+      tokenStorage: TokenStorage.inMemory({
+        'sp_access_token': 'access-mock',
+        'sp_refresh_token': 'refresh-mock',
+        'sp_access_expires_at': '2099-01-01T00:00:00Z',
+      }),
+    );
+    api = StreamPassApi(baseUrl: 'https://mock.test/api/v1', authService: auth, client: backend.client);
 
     final list = await api.fetchServers(region: 'pl');
     expect(list, hasLength(1));

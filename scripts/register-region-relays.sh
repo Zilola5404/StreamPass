@@ -9,8 +9,8 @@ set -euo pipefail
 API_BASE="${API_BASE:-https://212-43-156-33.nip.io/api/v1}"
 ADMIN_API_KEY="${ADMIN_API_KEY:?Set ADMIN_API_KEY}"
 HOST_IP="${HOST_IP:-212.43.156.33}"
-AUTH_PASSWORD="${AUTH_PASSWORD:-streampass-secure-auth}"
-OBFS_PASSWORD="${OBFS_PASSWORD:-streampass-relay-2024}"
+AUTH_PASSWORD="${AUTH_PASSWORD:?Set AUTH_PASSWORD}"
+OBFS_PASSWORD="${OBFS_PASSWORD:?Set OBFS_PASSWORD}"
 
 register() {
   local id="$1" region="$2" port="$3"

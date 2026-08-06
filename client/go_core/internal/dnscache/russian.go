@@ -4,6 +4,15 @@ import "strings"
 
 // IsRussianDomain reports whether a hostname should use a local RU resolver
 // (Yandex) instead of Cloudflare DoH — ТЗ: Russian resources stay local.
+// PreferredDNSRoute returns the primary resolver label before network I/O.
+// Russian TLDs use Yandex (77.88.8.8); foreign domains use Cloudflare DoH.
+func PreferredDNSRoute(name string) string {
+	if IsRussianDomain(name) {
+		return "yandex"
+	}
+	return "doh"
+}
+
 func IsRussianDomain(name string) bool {
 	host := strings.ToLower(strings.TrimSpace(name))
 	host = strings.TrimSuffix(host, ".")

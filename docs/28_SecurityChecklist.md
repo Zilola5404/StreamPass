@@ -66,7 +66,7 @@
 | Certificate pinning | ❌ | Not implemented |
 | Release signing | ✅ | BL-013: `key.properties` + JKS path; warn+debug fallback if missing |
 | VPN permission | ✅ | Standard Android VPN permission flow |
-| Connect diagnostics log | ✅ | On-device only; user-initiated copy; no URLs/payloads/secrets (ADR-010) |
+| Connect diagnostics log | ✅ | On-device only; user-initiated copy; no URLs/payloads/secrets (ADR-012) |
 | ProGuard/R8 | TODO | Not verified for release |
 
 ---

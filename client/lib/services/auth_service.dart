@@ -2,17 +2,24 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
+import 'auth_errors.dart';
 import 'connection_log.dart';
+import 'token_storage.dart';
 
 /// Wraps POST /register, POST /login, POST /logout, POST /refresh and local token storage.
 /// Endpoints per StreamPass API spec section 13.
 class AuthService {
   final String baseUrl; // e.g. https://api.streampass.com/api/v1
   final http.Client _client;
+  final TokenStorage _tokens;
 
-  AuthService({required this.baseUrl, http.Client? client}) : _client = client ?? http.Client();
+  AuthService({
+    required this.baseUrl,
+    http.Client? client,
+    TokenStorage? tokenStorage,
+  })  : _client = client ?? http.Client(),
+        _tokens = tokenStorage ?? TokenStorage.secure();
 
   static final _log = ConnectionLog.instance;
 
@@ -23,16 +30,15 @@ class AuthService {
   static const _refreshKey = 'sp_refresh_token';
   static const _accessExpiresKey = 'sp_access_expires_at';
 
-  Future<String?> get storedToken async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_tokenKey) ?? prefs.getString(_legacyTokenKey);
-  }
+  static const _sessionKeys = [_tokenKey, _legacyTokenKey, _refreshKey, _accessExpiresKey];
 
-  Future<String?> get storedRefreshToken async =>
-      (await SharedPreferences.getInstance()).getString(_refreshKey);
+  Future<String?> get storedToken async =>
+      await _tokens.read(_tokenKey) ?? await _tokens.read(_legacyTokenKey);
+
+  Future<String?> get storedRefreshToken async => _tokens.read(_refreshKey);
 
   Future<DateTime?> get storedAccessExpiresAt async {
-    final raw = (await SharedPreferences.getInstance()).getString(_accessExpiresKey);
+    final raw = await _tokens.read(_accessExpiresKey);
     return raw != null ? DateTime.tryParse(raw) : null;
   }
 
@@ -108,12 +114,11 @@ class AuthService {
         return false;
       }
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_tokenKey, token);
-      await prefs.remove(_legacyTokenKey);
+      await _tokens.write(_tokenKey, token);
+      await _tokens.remove(_legacyTokenKey);
       final expiresRaw = body?['access_expires_at'] as String?;
       if (expiresRaw != null) {
-        await prefs.setString(_accessExpiresKey, expiresRaw);
+        await _tokens.write(_accessExpiresKey, expiresRaw);
       }
       _log.info('auth', 'access token refreshed');
       return true;
@@ -125,11 +130,7 @@ class AuthService {
   }
 
   Future<void> clearSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_tokenKey);
-    await prefs.remove(_legacyTokenKey);
-    await prefs.remove(_refreshKey);
-    await prefs.remove(_accessExpiresKey);
+    await _tokens.clearKeys(_sessionKeys);
   }
 
   Future<AuthResult> login(String email, String password) async {
@@ -159,8 +160,7 @@ class AuthService {
   }
 
   Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    final refresh = prefs.getString(_refreshKey);
+    final refresh = await storedRefreshToken;
     if (refresh != null) {
       try {
         await _client.post(
@@ -192,13 +192,14 @@ class AuthService {
       return AuthResult(success: false, error: 'Некорректный ответ сервера');
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_tokenKey, token);
-    await prefs.remove(_legacyTokenKey);
-    if (refresh != null) await prefs.setString(_refreshKey, refresh);
+    await _tokens.write(_tokenKey, token);
+    await _tokens.remove(_legacyTokenKey);
+    if (refresh != null) {
+      await _tokens.write(_refreshKey, refresh);
+    }
     final expiresRaw = body['access_expires_at'] as String?;
     if (expiresRaw != null) {
-      await prefs.setString(_accessExpiresKey, expiresRaw);
+      await _tokens.write(_accessExpiresKey, expiresRaw);
     }
 
     return AuthResult(success: true, token: token, refreshToken: refresh);

@@ -44,9 +44,8 @@ class StreamPassVpnService : VpnService() {
         private const val NOTIFICATION_ID = 1
 
         fun start(context: Context, args: Map<*, *>?) {
-            ConnectLogger.clear(context)
             ConnectLogger.log(context, "VpnService.start id=${args?.get("id")} host=${args?.get("host")}")
-            context.startService(Intent(context, StreamPassVpnService::class.java).apply {
+            val intent = Intent(context, StreamPassVpnService::class.java).apply {
                 action = ACTION_CONNECT
                 putExtra("id", args?.get("id") as? String ?: "")
                 putExtra("host", args?.get("host") as? String ?: "")
@@ -56,7 +55,12 @@ class StreamPassVpnService : VpnService() {
                 putExtra("rulesJson", args?.get("rulesJson") as? String ?: "")
                 putExtra("exclusionsJson", args?.get("exclusionsJson") as? String ?: "[]")
                 putExtra("bypassPackagesJson", args?.get("bypassPackagesJson") as? String ?: "[]")
-            })
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
         }
 
         fun stop(context: Context) {
@@ -114,6 +118,7 @@ class StreamPassVpnService : VpnService() {
             return START_NOT_STICKY
         }
         if (intent?.action == ACTION_CONNECT) {
+            synchronized(teardownLock) { tornDown = false }
             relayId = intent.getStringExtra("id") ?: ""
             relayHost = intent.getStringExtra("host") ?: ""
             relayPort = intent.getIntExtra("port", 443)
@@ -216,7 +221,8 @@ class StreamPassVpnService : VpnService() {
                 .setMtu(1400)
             val routeInfo = VpnRouteConfigurator.apply(vpnBuilder, assets)
             val extraBypass = parseBypassPackages(bypassPackagesJson)
-            val bypassCount = VpnBypassApps.apply(vpnBuilder, packageManager, extraBypass)
+            val bypassCount = VpnBypassApps.apply(vpnBuilder, packageManager, packageName, extraBypass)
+            ConnectLogger.log(this, "vpn dns=77.88.8.8,77.88.8.1 (OS resolver; .ru queries bypass Go dnscache via excludeRoute)")
             ConnectLogger.log(this, "split-tunnel mode=${routeInfo.mode} routes=${routeInfo.routeCount} ruExcludes=${routeInfo.excludeCount} appBypass=$bypassCount extraUser=${extraBypass.size}")
             tunInterface = vpnBuilder.establish()
 
@@ -282,7 +288,9 @@ class StreamPassVpnService : VpnService() {
                     emit("disconnected")
                     ConnectLogger.log(this@StreamPassVpnService, "[vpn] stop complete")
                     stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
+                    // Do not stopSelf() here — on some OEMs it kills the Flutter process
+                    // when the user switched to Chrome/banking apps. Service stays idle until
+                    // next CONNECT or process exit.
                 } catch (t: Throwable) {
                     Log.e(TAG, "tearDown finalize failed", t)
                 }

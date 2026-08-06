@@ -135,13 +135,13 @@ class VpnChannel {
     String exclusionsJson = '',
     String bypassPackagesJson = '[]',
   }) async {
-    ensureListening();
     if (server.connectionConfig.isEmpty) {
       _log.error('vpn', 'connect blocked: empty connection_config', {'relayId': server.id});
       throw VpnConnectException(
         'У relay нет connection_config. Проверьте настройки сервера в backend.',
       );
     }
+    ensureListening();
     _log.beginConnectSession(relayId: server.id, host: server.host);
     _log.info('vpn', 'MethodChannel connect', {
       'relayId': server.id,

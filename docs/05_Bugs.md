@@ -63,7 +63,7 @@
 | **Описание** | Android release build использует debug signing keys |
 | **Как воспроизвести** | `flutter build apk --release` без `key.properties` |
 | **Причина** | TODO в build.gradle.kts не выполнен |
-| **Решение** | Production keystore path via `key.properties` (BL-013); APK v0.1.1+17 signed when JKS present |
+| **Решение** | Production keystore path via `key.properties` (BL-013); APK v0.1.1+25 signed when JKS present |
 | **Статус** | Fixed / Closed — 2026-08-04 |
 | **Файлы** | `client/android/app/build.gradle.kts` |
 

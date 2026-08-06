@@ -75,7 +75,7 @@ cd client
 # BL-013 Done: place key.properties + JKS (not committed)
 flutter build apk --release
 # Output: build/app/outputs/flutter-apk/app-release.apk
-# Current ship: StreamPass-v0.1.1+17-signed-arm64.apk
+# Current ship: StreamPass-v0.1.1+25-signed-arm64.apk
 ```
 
 ---

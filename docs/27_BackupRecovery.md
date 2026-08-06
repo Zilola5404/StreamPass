@@ -49,7 +49,8 @@ BACKUP_ENCRYPT_KEY=... OFFSITE_DIR=/var/backups/streampass-offsite \
   bash scripts/backup-offsite.sh
 
 # From operator PC (third copy):
-.\scripts\PullBackupsOffsite.ps1
+.\scripts\PullBackupsOffsite.ps1   # prefers STREAMPASS_SSH_KEY, else STREAMPASS_SSH_PASSWORD
+.\scripts\VerifyOffsiteBackup.ps1  # cron + offsite.log + .enc on secondary (needs SSH)
 ```
 
 Prod wiring:

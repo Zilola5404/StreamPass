@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'connection_log.dart';
+import 'auth_errors.dart';
 import 'auth_service.dart';
 import 'region_catalog.dart';
 
@@ -131,7 +132,7 @@ class StreamPassApi {
     Future<dynamic> Function() retry, {
     required bool retried,
   }) async {
-    if (res.statusCode == 401 && !retried && _isAuthExpired(res)) {
+    if (res.statusCode == 401 && !retried && AuthErrorCodes.isExpiredResponse(res)) {
       _log.warn('auth', 'access token expired, refreshing');
       final refreshed = await authService.refreshSession();
       if (refreshed) {
@@ -148,24 +149,6 @@ class StreamPassApi {
     }
 
     throw ApiException(res.statusCode, _errorMessage(res));
-  }
-
-  bool _isAuthExpired(http.Response res) {
-    try {
-      final body = jsonDecode(res.body) as Map<String, dynamic>;
-      final error = body['error'];
-      if (error is Map<String, dynamic>) {
-        final code = (error['code'] as String? ?? '').toUpperCase();
-        if (code.contains('TOKEN_EXPIRED') || code.contains('UNAUTHORIZED')) {
-          return true;
-        }
-        final message = (error['message'] as String? ?? '').toLowerCase();
-        if (message.contains('token expired') || message.contains('missing bearer')) {
-          return true;
-        }
-      }
-    } catch (_) {}
-    return res.statusCode == 401;
   }
 
   String _errorMessage(http.Response res) {

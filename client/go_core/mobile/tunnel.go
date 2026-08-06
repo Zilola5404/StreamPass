@@ -76,6 +76,7 @@ func PrepareRelay(relayHost string, relayPort int, connectionConfig string) stri
 	if err != nil {
 		return fmt.Errorf("hysteria connect: %w", err).Error()
 	}
+	logEvent(fmt.Sprintf("[connect] hysteria ok via %s pingMs=%d", result.Candidate, result.PingMs))
 
 	relayLabel := relayHost
 	if relayLabel == "" {
@@ -217,6 +218,7 @@ func runTunnel(fd int, relayHost string, relayPort int, connectionConfig string,
 			emitError(cb, fmt.Errorf("hysteria connect: %w", err))
 			return
 		}
+		logEvent(fmt.Sprintf("[connect] hysteria ok via %s pingMs=%d", result.Candidate, result.PingMs))
 		hyClient = result.Client
 		pingMs = result.PingMs
 		if result.Parsed.MTU > 0 {

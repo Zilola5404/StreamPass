@@ -92,14 +92,26 @@ object VpnBypassApps {
     fun apply(
         builder: VpnService.Builder,
         pm: PackageManager,
+        ownPackage: String,
         extraPackages: Collection<String> = emptyList(),
     ): Int {
+        var applied = 0
+        // StreamPass REST API must not hairpin through its own TUN/Hysteria loop.
+        if (ownPackage.isNotBlank()) {
+            try {
+                builder.addDisallowedApplication(ownPackage)
+                applied++
+                Log.i(TAG, "VPN app-bypass (self): $ownPackage")
+            } catch (t: Throwable) {
+                Log.w(TAG, "VPN self-bypass failed: ${t.message}")
+            }
+        }
+
         val selected = linkedSetOf<String>()
         selected.addAll(knownPackages)
         selected.addAll(extraPackages.map { it.trim() }.filter { it.isNotEmpty() })
         selected.addAll(discoverHeuristicPackages(pm))
 
-        var applied = 0
         for (pkg in selected) {
             if (!isInstalled(pm, pkg)) continue
             try {

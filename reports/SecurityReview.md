@@ -25,7 +25,7 @@
 |---|---------|----------|----------------|
 | S-03 | Admin API key — single static secret | env ADMIN_API_KEY | RBAC via Admin Panel (post-MVP) |
 | S-04 | No webhook signature verification | `billing_handler.go` | Verify ЮKassa signature |
-| S-05 | Tokens in SharedPreferences (unencrypted) | `auth_service.dart` | Use flutter_secure_storage |
+| S-05 | Tokens in SharedPreferences (unencrypted) | **Mitigated** — `flutter_secure_storage` + migration in `token_storage.dart` |
 
 ### Medium
 
@@ -81,10 +81,10 @@
 
 1. Production Android keystore (S-01)
 2. Encrypt connection_config (S-02)
-3. flutter_secure_storage for tokens (S-05)
-4. Webhook signature verification (S-04)
-5. Server hardening checklist (S-09)
-6. Security audit before beta launch
+3. ~~flutter_secure_storage for tokens (S-05)~~ — Done (secure storage + prefs migration)
+4. Webhook shared secret when configured (S-04 partial)
+5. Encrypt connection_config (S-02)
+6. Server hardening checklist (S-09)
 
 ---
 

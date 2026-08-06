@@ -13,7 +13,7 @@ import '../services/native_connect_log.dart';
 /// The connect log is stored only on the device and copied to clipboard by
 /// explicit user action. It may include relay id/host, HTTP status codes,
 /// auth error codes, and build metadata — but never browsing URLs, packet
-/// payloads, or `connection_config` secrets. See ADR-010 in `docs/11_Decisions.md`.
+/// payloads, or `connection_config` secrets. See ADR-012 in `docs/11_Decisions.md`.
 class DiagnosticsScreen extends StatefulWidget {
   const DiagnosticsScreen({super.key});
 

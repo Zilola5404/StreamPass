@@ -4,6 +4,8 @@ import 'package:streampass/services/streampass_api.dart';
 import 'package:streampass/services/vpn_channel.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   setUp(() {
     ConnectionLog.instance.clear();
   });
