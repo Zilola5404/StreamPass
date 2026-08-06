@@ -195,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadSubscription();
   }
 
-  Future<void> _loadStartupData() async {
+  Future<void> _loadStartupData({bool allowAutoConnect = true}) async {
     try {
       final settings = await SettingsService().load();
       final servers = await widget.api.fetchServers();
@@ -210,13 +210,16 @@ class _HomeScreenState extends State<HomeScreen> {
         _selectedRelay = selected;
         _pingMs = _selectedRelay?.rttMs;
         _loadingRelay = false;
+        _autoMode = settings.autoSelectRelay;
       });
       _connectLog.info('api', 'servers loaded', {
         'count': '${servers.length}',
         'selected': _selectedRelay?.id ?? 'none',
         'region': _selectedRelay?.region ?? '',
       });
-      await _maybeAutoConnect();
+      if (allowAutoConnect) {
+        await _maybeAutoConnect();
+      }
     } on SessionExpiredException {
       _connectLog.error('auth', 'fetchServers: session expired');
       if (!mounted) return;
@@ -240,6 +243,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openServersPicker() async {
+    final wasConnected = _state == ConnState.connected;
     final result = await Navigator.of(context).push<RelayPickResult>(
       MaterialPageRoute(
         builder: (_) => ServersScreen(
@@ -250,9 +254,60 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     if (!mounted) return;
-    if (result != null) {
-      setState(() => _loadingRelay = true);
-      await _loadStartupData();
+    if (result == null) return;
+
+    if (wasConnected) {
+      _connectLog.info('connect', 'reconnect after server change');
+      try {
+        await VpnChannel.disconnect();
+      } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _state = ConnState.disconnected;
+          _stopDurationTimer();
+        });
+      }
+    }
+
+    setState(() => _loadingRelay = true);
+    await _loadStartupData(allowAutoConnect: !wasConnected);
+
+    if (wasConnected &&
+        mounted &&
+        _subscription?.isActive == true &&
+        _selectedRelay != null &&
+        _state == ConnState.disconnected) {
+      await _toggleConnection();
+    }
+  }
+
+  Future<void> _setAutoMode(bool value) async {
+    setState(() => _autoMode = value);
+    await SettingsService().setAutoSelectRelay(value);
+    if (value) {
+      await SettingsService().setPreferredServerId('');
+    }
+    if (!mounted) return;
+    setState(() => _loadingRelay = true);
+    final wasConnected = _state == ConnState.connected;
+    if (wasConnected) {
+      try {
+        await VpnChannel.disconnect();
+      } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _state = ConnState.disconnected;
+          _stopDurationTimer();
+        });
+      }
+    }
+    await _loadStartupData(allowAutoConnect: !wasConnected);
+    if (wasConnected &&
+        mounted &&
+        _subscription?.isActive == true &&
+        _selectedRelay != null &&
+        _state == ConnState.disconnected) {
+      await _toggleConnection();
     }
   }
 
@@ -447,7 +502,12 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _TopBar(
                   onSettings: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => SettingsScreen(api: widget.api)),
+                    MaterialPageRoute(
+                      builder: (_) => SettingsScreen(
+                        api: widget.api,
+                        authService: widget.authService,
+                      ),
+                    ),
                   ),
                   onSubscription: _openSubscriptionScreen,
                   subscriptionActive: _subscription?.isActive ?? false,
@@ -502,8 +562,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       _RouteCard(
                         state: _state,
                         autoMode: _autoMode,
-                        onAutoModeChanged: (value) =>
-                            setState(() => _autoMode = value),
+                        onAutoModeChanged: _setAutoMode,
                       ),
                     ],
                   ),
@@ -514,7 +573,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   onTapServers: _openServersPicker,
                   onTapSettings: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => SettingsScreen(api: widget.api)),
+                    MaterialPageRoute(
+                      builder: (_) => SettingsScreen(
+                        api: widget.api,
+                        authService: widget.authService,
+                      ),
+                    ),
                   ),
                 ), 
               ],

@@ -2,17 +2,20 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../services/auth_service.dart';
 import '../services/settings_service.dart';
 import '../services/streampass_api.dart';
 import '../services/vpn_channel.dart';
+import '../main.dart' show navigateToLogin;
 import 'exclusions_screen.dart';
 import 'app_bypass_screen.dart';
 import 'diagnostics_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final StreamPassApi? api;
+  final AuthService? authService;
 
-  const SettingsScreen({super.key, this.api});
+  const SettingsScreen({super.key, this.api, this.authService});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -107,6 +110,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _updateAutoRelay(bool value) async {
     setState(() => _settings = _settings.copyWith(autoSelectRelay: value));
     await _service.setAutoSelectRelay(value);
+  }
+
+  Future<void> _confirmLogout() async {
+    final auth = widget.authService;
+    final api = widget.api;
+    if (auth == null || api == null) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Выйти из аккаунта?'),
+        content: const Text(
+          'Ускоритель будет отключён, и потребуется войти снова.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Выйти'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    try {
+      await VpnChannel.disconnect();
+    } catch (_) {}
+    await auth.logout();
+    if (!mounted) return;
+    navigateToLogin(context, auth, api);
   }
 
   @override
@@ -210,6 +247,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               MaterialPageRoute(builder: (_) => const DiagnosticsScreen()),
             ),
           ),
+          if (widget.authService != null && widget.api != null) ...[
+            const Divider(height: 32),
+            _SectionLabel('Аккаунт'),
+            ListTile(
+              title: const Text('Выйти'),
+              subtitle: const Text('Завершить сеанс на этом устройстве'),
+              leading: const Icon(Icons.logout, color: AppColors.textSecondary),
+              onTap: _confirmLogout,
+            ),
+          ],
         ],
       ),
     );

@@ -15,16 +15,35 @@ class SubscriptionScreen extends StatefulWidget {
   State<SubscriptionScreen> createState() => _SubscriptionScreenState();
 }
 
-class _SubscriptionScreenState extends State<SubscriptionScreen> {
+class _SubscriptionScreenState extends State<SubscriptionScreen>
+    with WidgetsBindingObserver {
   SubscriptionInfo? _info;
   bool _loading = true;
   bool _payLoading = false;
+  bool _awaitingPaymentReturn = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _load();
+      if (_awaitingPaymentReturn && mounted) {
+        setState(() => _awaitingPaymentReturn = false);
+      }
+    }
   }
 
   Future<void> _load() async {
@@ -58,6 +77,17 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       final uri = Uri.parse(url);
       final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!opened) throw Exception('launch failed');
+      if (mounted) {
+        setState(() => _awaitingPaymentReturn = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'После оплаты вернитесь в приложение — статус обновится автоматически.',
+            ),
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = 'Не удалось открыть страницу оплаты. Попробуйте позже');
@@ -67,12 +97,16 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   }
 
   Future<void> _cancel() async {
+    final until = _info?.activeUntil;
+    final untilText = until != null
+        ? 'Доступ сохранится до ${_fmtDate(until)}.'
+        : 'Доступ сохранится до конца оплаченного периода.';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('Отменить подписку?'),
-        content: const Text('Доступ к VPN будет остановлен немедленно.'),
+        content: Text('Отменить автопродление? $untilText'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -94,6 +128,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       if (!mounted) return;
       setState(() => _error = 'Не удалось отменить подписку');
     }
+  }
+
+  String _fmtDate(DateTime d) {
+    final local = d.toLocal();
+    final dd = local.day.toString().padLeft(2, '0');
+    final mm = local.month.toString().padLeft(2, '0');
+    return '$dd.$mm.${local.year}';
   }
 
   @override
