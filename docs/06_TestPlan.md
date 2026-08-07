@@ -188,6 +188,9 @@ cd client && flutter test test/traffic_behavior_test.dart test/vpn_lifecycle_tes
 | `scripts/VerifyTrafficBehavior.ps1 -AfterDisconnect` | Logcat: stop complete, no FATAL |
 | `scripts/CollectConnectLogs.ps1` | Сбор connect.log / logcat |
 | `scripts/traffic_expectations.json` | Матрица сайтов/приложений и ожидаемых log patterns |
+| `scripts/VerifyAppSiteSwitch.ps1` | **Пошаговый QA**: переключение сайт/приложение → проблемы по каждой цели |
+| `scripts/VerifyAppSiteSwitch.ps1 -AutoLaunch` | adb открывает URL/приложение, анализ logcat |
+| `client/test/traffic_switch_scenarios_test.dart` | Валидация switch_scenarios в JSON |
 
 ### Manual matrix (на телефоне)
 

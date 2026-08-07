@@ -14,9 +14,36 @@ import (
 var (
 	revMu   sync.RWMutex
 	revByIP = map[string]string{}
+	rttMu   sync.RWMutex
+	rttByHost = map[string]int64{} // hostname → last resolve RTT ms
 )
 
 const maxReverseEntries = 2048
+
+// RememberResolveMS stores the last DNS resolve latency for a hostname.
+func RememberResolveMS(host string, ms int64) {
+	host = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	if host == "" || ms < 0 {
+		return
+	}
+	rttMu.Lock()
+	defer rttMu.Unlock()
+	if len(rttByHost) >= maxReverseEntries {
+		for k := range rttByHost {
+			delete(rttByHost, k)
+			break
+		}
+	}
+	rttByHost[host] = ms
+}
+
+// LastResolveMS returns the last DNS RTT for host, or 0 if unknown.
+func LastResolveMS(host string) int64 {
+	host = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	rttMu.RLock()
+	defer rttMu.RUnlock()
+	return rttByHost[host]
+}
 
 // RememberIP links an IPv4/IPv6 address to a hostname (FQDN without trailing dot).
 func RememberIP(host, ip string) {

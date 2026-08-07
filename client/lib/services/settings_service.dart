@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Persists the toggles from ТЗ §20 ("Настройки"):
 /// Автозапуск / Автоподключение / Автовыбор Relay / Исключения /
-/// preferred region & server (BL-026).
+/// preferred region & server (BL-026) + network diagnostics modes.
 class AppSettings {
   final bool autostart;
   final bool autoConnect;
@@ -18,6 +18,12 @@ class AppSettings {
   final List<String> bypassPackages;
   /// Upload routing diagnostics to backend (TASK-01).
   final bool diagnosticsEnabled;
+  /// split | full_relay | direct_test | tcp_only
+  final String networkMode;
+  /// TUN/Hysteria MTU: 1280 | 1350 | 1400
+  final int mtu;
+  /// Drop UDP/443 so apps fall back to TCP (QUIC off).
+  final bool blockUdp443;
 
   const AppSettings({
     this.autostart = false,
@@ -28,6 +34,9 @@ class AppSettings {
     this.preferredServerId = '',
     this.bypassPackages = const [],
     this.diagnosticsEnabled = true,
+    this.networkMode = 'split',
+    this.mtu = 1400,
+    this.blockUdp443 = false,
   });
 
   AppSettings copyWith({
@@ -39,6 +48,9 @@ class AppSettings {
     String? preferredServerId,
     List<String>? bypassPackages,
     bool? diagnosticsEnabled,
+    String? networkMode,
+    int? mtu,
+    bool? blockUdp443,
   }) {
     return AppSettings(
       autostart: autostart ?? this.autostart,
@@ -49,8 +61,17 @@ class AppSettings {
       preferredServerId: preferredServerId ?? this.preferredServerId,
       bypassPackages: bypassPackages ?? this.bypassPackages,
       diagnosticsEnabled: diagnosticsEnabled ?? this.diagnosticsEnabled,
+      networkMode: networkMode ?? this.networkMode,
+      mtu: mtu ?? this.mtu,
+      blockUdp443: blockUdp443 ?? this.blockUdp443,
     );
   }
+
+  String get optionsJson => jsonEncode({
+        'networkMode': networkMode,
+        'mtu': mtu,
+        'blockUdp443': blockUdp443 || networkMode == 'tcp_only',
+      });
 }
 
 class SettingsService {
@@ -62,6 +83,9 @@ class SettingsService {
   static const _kPreferredServer = 'sp_preferred_server';
   static const _kBypassPackages = 'sp_bypass_packages';
   static const _kDiagnostics = 'sp_diagnostics_enabled';
+  static const _kNetworkMode = 'sp_network_mode';
+  static const _kMtu = 'sp_mtu';
+  static const _kBlockUdp443 = 'sp_block_udp443';
 
   // Mirrors autostart/autoConnect into native SharedPreferences so
   // BootReceiver (which runs outside the Flutter engine) can read them
@@ -78,6 +102,8 @@ class SettingsService {
     final bypassPackages = bypassRaw != null
         ? List<String>.from(jsonDecode(bypassRaw) as List)
         : <String>[];
+    final mode = prefs.getString(_kNetworkMode) ?? 'split';
+    final mtu = prefs.getInt(_kMtu) ?? 1400;
 
     return AppSettings(
       autostart: prefs.getBool(_kAutostart) ?? false,
@@ -88,6 +114,9 @@ class SettingsService {
       preferredServerId: prefs.getString(_kPreferredServer) ?? '',
       bypassPackages: bypassPackages,
       diagnosticsEnabled: prefs.getBool(_kDiagnostics) ?? true,
+      networkMode: mode,
+      mtu: mtu,
+      blockUdp443: prefs.getBool(_kBlockUdp443) ?? false,
     );
   }
 
@@ -134,4 +163,13 @@ class SettingsService {
 
   Future<void> setDiagnosticsEnabled(bool value) async =>
       (await SharedPreferences.getInstance()).setBool(_kDiagnostics, value);
+
+  Future<void> setNetworkMode(String mode) async =>
+      (await SharedPreferences.getInstance()).setString(_kNetworkMode, mode);
+
+  Future<void> setMtu(int mtu) async =>
+      (await SharedPreferences.getInstance()).setInt(_kMtu, mtu);
+
+  Future<void> setBlockUdp443(bool value) async =>
+      (await SharedPreferences.getInstance()).setBool(_kBlockUdp443, value);
 }

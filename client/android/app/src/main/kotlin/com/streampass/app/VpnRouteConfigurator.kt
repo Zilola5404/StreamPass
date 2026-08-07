@@ -9,6 +9,10 @@ import java.net.InetAddress
 /**
  * Split-tunnel per ТЗ: Russian IPv4 space bypasses TUN (DIRECT on OS level),
  * foreign traffic is captured by VPN for Decision Engine RELAY/DIRECT.
+ *
+ * Diagnostic modes (network diagnostics TASK):
+ * - split: normal RU exclude / intl capture
+ * - full_relay / direct_test: full tunnel (0.0.0.0/0) so all flows hit Go
  */
 object VpnRouteConfigurator {
     private const val TAG = "StreamPassVpn"
@@ -17,7 +21,18 @@ object VpnRouteConfigurator {
 
     data class Result(val mode: String, val routeCount: Int, val excludeCount: Int)
 
-    fun apply(builder: VpnService.Builder, assets: android.content.res.AssetManager): Result {
+    fun apply(
+        builder: VpnService.Builder,
+        assets: android.content.res.AssetManager,
+        networkMode: String = "split",
+    ): Result {
+        val mode = networkMode.lowercase().ifBlank { "split" }
+        if (mode == "full_relay" || mode == "direct_test") {
+            builder.addRoute("0.0.0.0", 0)
+            Log.i(TAG, "full-tunnel mode=$mode (all traffic via TUN)")
+            return Result("full-tunnel-$mode", 1, 0)
+        }
+
         val ruCidrs = loadCidrs(assets, RU_CIDRS_ASSET)
         if (ruCidrs.isEmpty()) {
             Log.w(TAG, "RU CIDR list empty — falling back to full tunnel")

@@ -90,5 +90,189 @@
     { "step": "connect", "expect": "ConnState.connected, notification «Подключено»", "manual": true },
     { "step": "disconnect", "expect": "ConnState.disconnected, app stays open", "manual": true },
     { "step": "apk_update_teardown", "expect": "onDestroy without process crash", "manual": true }
+  ],
+  "switch_scenarios": [
+    {
+      "id": "site_yandex",
+      "type": "site",
+      "label": "Yandex (RU)",
+      "url": "https://yandex.ru",
+      "decision": "DIRECT",
+      "dns": "yandex",
+      "action": "Откройте yandex.ru в Chrome, дождитесь загрузки главной",
+      "success_signs": [
+        { "pattern": "split-tunnel mode=exclude-ru|split-tunnel mode=intl-only", "note": "RU CIDR bypass активен (из connect)" }
+      ],
+      "failure_signs": [
+        { "pattern": "\\[dns\\] query yandex[^\\n]* via=doh", "issue": "DNS yandex.ru ушёл в DoH — RU split DNS сломан" },
+        { "pattern": "\\[tun\\] relay-tcp fail", "issue": "Ошибка relay на RU-трафике (не должно быть)" },
+        { "pattern": "FATAL EXCEPTION", "issue": "Крэш при открытии сайта" }
+      ],
+      "manual_checks": [
+        "Страница yandex.ru загрузилась",
+        "На 2ip.ru виден RU IP (не IP relay)"
+      ]
+    },
+    {
+      "id": "site_2ip",
+      "type": "site",
+      "label": "2ip.ru (geo check)",
+      "url": "https://2ip.ru",
+      "decision": "DIRECT",
+      "dns": "yandex",
+      "action": "Откройте 2ip.ru — проверьте страну/IP",
+      "success_signs": [],
+      "failure_signs": [
+        { "pattern": "FATAL EXCEPTION", "issue": "Крэш при geo-check" }
+      ],
+      "manual_checks": [
+        "IP показывает Россию (не NL/DE/FI relay)",
+        "Страница открылась без таймаута"
+      ]
+    },
+    {
+      "id": "site_youtube",
+      "type": "site",
+      "label": "YouTube (foreign)",
+      "url": "https://www.youtube.com",
+      "decision": "RELAY",
+      "dns": "doh",
+      "action": "Откройте youtube.com в Chrome, прокрутите ленту",
+      "success_signs": [
+        { "pattern": "\\[dns\\] query [^\\n]*youtube[^\\n]* via=doh|\\[dns\\] query [^\\n]*googlevideo[^\\n]* via=doh", "note": "Foreign DNS через DoH" },
+        { "pattern": "tunnel event=connected|hysteria handshake", "note": "Relay подключён" }
+      ],
+      "failure_signs": [
+        { "pattern": "\\[tun\\] relay-tcp fail", "issue": "Relay не пропускает TCP к YouTube/CDN" },
+        { "pattern": "\\[dns\\] query [^\\n]*youtube[^\\n]* via=fail", "issue": "DNS резолв YouTube упал" },
+        { "pattern": "FATAL EXCEPTION", "issue": "Крэш при foreign-трафике" }
+      ],
+      "manual_checks": [
+        "YouTube загрузился (не бесконечный спиннер)",
+        "Видео начинает буферизоваться/играть"
+      ]
+    },
+    {
+      "id": "site_instagram",
+      "type": "site",
+      "label": "Instagram (foreign)",
+      "url": "https://www.instagram.com",
+      "decision": "RELAY",
+      "dns": "doh",
+      "action": "Откройте instagram.com в Chrome",
+      "success_signs": [
+        { "pattern": "\\[tun\\] tcp mode=RELAY dest=.*157\\.240|\\[tun\\] tcp mode=RELAY dest=.*instagram|\\[tun\\] tcp mode=RELAY dest=.*443", "note": "Instagram TCP via RELAY", "optional": true },
+        { "pattern": "tunnel event=connected|hysteria handshake", "note": "Relay connected" }
+      ],
+      "failure_signs": [
+        { "pattern": "\\[tun\\] relay-tcp fail", "issue": "Relay ne dostigaet Instagram/CDN" },
+        { "pattern": "\\[tun\\] direct-tcp fail dest=.*cdninstagram", "issue": "Instagram CDN poshel v DIRECT i upal" },
+        { "pattern": "\\[dns\\] query [^\\n]*instagram[^\\n]* via=fail", "issue": "DNS Instagram upal" }
+      ],
+      "manual_checks": [
+        "Страница Instagram открылась",
+        "Нет ERR_CONNECTION / таймаута"
+      ]
+    },
+    {
+      "id": "site_gemini",
+      "type": "site",
+      "label": "Gemini (Google AI)",
+      "url": "https://gemini.google.com",
+      "decision": "RELAY",
+      "dns": "doh",
+      "action": "Otkroyte gemini.google.com v Chrome",
+      "success_signs": [
+        { "pattern": "\\[dns\\] query [^\\n]*(gemini|google)[^\\n]* via=doh", "note": "Gemini DNS via DoH" },
+        { "pattern": "tunnel event=connected|hysteria handshake", "note": "Relay connected" }
+      ],
+      "failure_signs": [
+        { "pattern": "\\[tun\\] relay-tcp fail", "issue": "Relay ne dostigaet Gemini/Google" },
+        { "pattern": "\\[tun\\] direct-tcp fail dest=.*google", "issue": "Google traffic poshel v DIRECT i upal" },
+        { "pattern": "\\[dns\\] query [^\\n]*gemini[^\\n]* via=fail", "issue": "DNS Gemini upal" }
+      ],
+      "manual_checks": [
+        "Gemini chat otkryvaetsya",
+        "Net beskonechnogo spinner / ERR_CONNECTION"
+      ]
+    },
+    {
+      "id": "app_gosuslugi",
+      "type": "app",
+      "label": "Госуслуги",
+      "package": "ru.rostel",
+      "bypass": true,
+      "decision": "BYPASS",
+      "action": "Откройте приложение Госуслуги (ru.rostel)",
+      "success_signs": [
+        { "pattern": "VPN app-bypass:\\s*(ru\\.rostel|ru\\.gosuslugi|ru\\.esia|com\\.esia)", "note": "Gosuslugi/ESIA v bypass-liste", "optional": true, "connect_only": true }
+      ],
+      "failure_signs": [
+        { "pattern": "FATAL EXCEPTION", "issue": "Крэш при открытии Госуслуг" }
+      ],
+      "manual_checks": [
+        "Нет диалога «отключите VPN»",
+        "Приложение открылось на главный экран"
+      ],
+      "skip_if_not_installed": true
+    },
+    {
+      "id": "app_sber",
+      "type": "app",
+      "label": "Сбербанк",
+      "package": "ru.sberbankmobile",
+      "bypass": true,
+      "decision": "BYPASS",
+      "action": "Откройте Сбербанк Онлайн",
+      "success_signs": [
+        { "pattern": "VPN app-bypass:\\s*ru\\.sberbankmobile", "note": "Сбер в bypass-листе" }
+      ],
+      "failure_signs": [
+        { "pattern": "FATAL EXCEPTION", "issue": "Крэш банковского приложения" }
+      ],
+      "manual_checks": [
+        "Нет блокировки из-за VPN",
+        "Приложение открылось"
+      ],
+      "skip_if_not_installed": true
+    },
+    {
+      "id": "app_streampass_api",
+      "type": "app",
+      "label": "StreamPass (self API)",
+      "package": "com.streampass.app",
+      "bypass": true,
+      "decision": "BYPASS",
+      "action": "Вернитесь в StreamPass — потяните вниз для обновления серверов/подписки",
+      "success_signs": [
+        { "pattern": "VPN app-bypass \\(self\\): com\\.streampass\\.app", "note": "Self-bypass: API не через hairpin" },
+        { "pattern": "servers loaded|subscription loaded", "note": "API ответил" }
+      ],
+      "failure_signs": [
+        { "pattern": "fetchServers failed|subscription fetch failed", "issue": "Backend/API недоступен или hairpin" },
+        { "pattern": "FATAL EXCEPTION", "issue": "Крэш StreamPass при возврате из Chrome" }
+      ],
+      "manual_checks": [
+        "Список серверов загрузился",
+        "Подписка показывает актуальный статус (не ложное «не активна» при сетевой ошибке)",
+        "Приложение не закрылось при переключении с Chrome"
+      ]
+    },
+    {
+      "id": "switch_chrome_back",
+      "type": "lifecycle",
+      "label": "Chrome ↔ StreamPass",
+      "action": "Chrome (любой сайт) → кнопка Home/Recent → StreamPass",
+      "success_signs": [],
+      "failure_signs": [
+        { "pattern": "FATAL EXCEPTION", "issue": "Крэш при переключении задач" },
+        { "pattern": "\\[vpn\\] stop begin", "issue": "VPN отключился сам при смене приложения" }
+      ],
+      "manual_checks": [
+        "StreamPass остаётся открытым (не вылетает из памяти)",
+        "VPN остаётся «Подключено»",
+        "UI не завис на «Подключение…»"
+      ]
+    }
   ]
 }

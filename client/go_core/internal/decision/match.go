@@ -86,8 +86,9 @@ func reasonForRule(mode Mode, pattern string) string {
 	p := strings.ToLower(pattern)
 	switch mode {
 	case ModeDirect:
-		if strings.Contains(p, ".ru") || strings.HasSuffix(p, "ru") || strings.Contains(p, "рф") {
-			return "russian_service_direct"
+		if p == "*.ru" || strings.HasSuffix(p, ".ru") || strings.Contains(p, "рф") ||
+			p == "*.su" || p == "*.xn--p1ai" {
+			return "ru_domain_bypass"
 		}
 		if strings.Contains(p, "bank") || strings.Contains(p, "gos") {
 			return "critical_ru_app_direct"

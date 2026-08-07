@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'connection_log.dart';
 import 'streampass_api.dart';
 
@@ -134,6 +135,10 @@ class VpnChannel {
     String rulesJson = '',
     String exclusionsJson = '',
     String bypassPackagesJson = '[]',
+    String networkMode = 'split',
+    int mtu = 1400,
+    bool blockUdp443 = false,
+    String optionsJson = '',
   }) async {
     if (server.connectionConfig.isEmpty) {
       _log.error('vpn', 'connect blocked: empty connection_config', {'relayId': server.id});
@@ -142,12 +147,21 @@ class VpnChannel {
       );
     }
     ensureListening();
+    final opts = optionsJson.isNotEmpty
+        ? optionsJson
+        : jsonEncode({
+            'networkMode': networkMode,
+            'mtu': mtu,
+            'blockUdp443': blockUdp443 || networkMode == 'tcp_only',
+          });
     _log.beginConnectSession(relayId: server.id, host: server.host);
     _log.info('vpn', 'MethodChannel connect', {
       'relayId': server.id,
       'host': server.host,
       'port': '${server.port}',
       'configScheme': server.connectionConfig.split(':').first,
+      'networkMode': networkMode,
+      'mtu': '$mtu',
     });
     try {
       final ok = await _method.invokeMethod<bool>('connect', {
@@ -159,6 +173,10 @@ class VpnChannel {
         'rulesJson': rulesJson,
         'exclusionsJson': exclusionsJson,
         'bypassPackagesJson': bypassPackagesJson,
+        'networkMode': networkMode,
+        'mtu': mtu,
+        'blockUdp443': blockUdp443 || networkMode == 'tcp_only',
+        'optionsJson': opts,
       });
       _log.info('vpn', 'MethodChannel connect accepted', {'ok': '${ok ?? false}'});
       return ok ?? false;

@@ -16,9 +16,24 @@ func TestDecideRoute_domainDirect(t *testing.T) {
 
 func TestDecideRoute_defaultDirect(t *testing.T) {
 	rules := `{"version":1,"rules":[{"kind":"DOMAIN","pattern":"*.ru","mode":"DIRECT"}]}`
-	got := mobile.DecideRoute(rules, "", "google.com", "")
+	got := mobile.DecideRoute(rules, "", "cloudflare.com", "")
 	if got != "DIRECT" {
-		t.Fatalf("got %q want DIRECT (decision.DefaultMode)", got)
+		t.Fatalf("got %q want DIRECT (DefaultMode FS §6)", got)
+	}
+}
+
+func TestDecideRoute_ipOnlyTelegramDC(t *testing.T) {
+	got := mobile.DecideRoute(`{"version":1,"rules":[]}`, "", "", "149.154.167.50")
+	if got != "RELAY" {
+		t.Fatalf("got %q want RELAY (Telegram DC CIDR)", got)
+	}
+}
+
+func TestDecideRoute_builtinRelayFallback(t *testing.T) {
+	rules := `{"version":1,"rules":[]}`
+	got := mobile.DecideRoute(rules, "", "gemini.google.com", "")
+	if got != "RELAY" {
+		t.Fatalf("got %q want RELAY (DefaultRelayRules)", got)
 	}
 }
 

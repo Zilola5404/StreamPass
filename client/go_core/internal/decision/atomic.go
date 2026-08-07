@@ -4,9 +4,10 @@ import "sync"
 
 // AtomicEngine wraps Engine for hot-reload from the Rule Engine (BL-006).
 type AtomicEngine struct {
-	mu      sync.RWMutex
-	engine  *Engine
-	version int
+	mu        sync.RWMutex
+	engine    *Engine
+	version   int
+	forceMode Mode // empty = normal; DIRECT/RELAY for network-mode tests
 }
 
 // NewAtomicEngine builds a hot-swappable engine.
@@ -25,8 +26,26 @@ func (a *AtomicEngine) Decide(t Target) Mode {
 // DecideDetailed evaluates mode + rule/reason for diagnostics.
 func (a *AtomicEngine) DecideDetailed(t Target) Decision {
 	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.engine.DecideDetailed(t)
+	force := a.forceMode
+	eng := a.engine
+	a.mu.RUnlock()
+	if force != "" {
+		return Decision{
+			Mode:   force,
+			Rule:   "network_mode",
+			Source: "force",
+			Reason: "network_mode_" + string(force),
+		}
+	}
+	return eng.DecideDetailed(t)
+}
+
+// SetForceMode overrides all decisions (direct_test / full_relay diagnostics).
+// Empty string clears the override.
+func (a *AtomicEngine) SetForceMode(mode Mode) {
+	a.mu.Lock()
+	a.forceMode = mode
+	a.mu.Unlock()
 }
 
 // Version returns the loaded rule set version (0 if unknown).

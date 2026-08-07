@@ -17,6 +17,10 @@ void main() {
           RouteRule(kind: 'DOMAIN', pattern: '*.youtube.com', mode: 'RELAY'),
           RouteRule(kind: 'DOMAIN', pattern: 'instagram.com', mode: 'RELAY'),
           RouteRule(kind: 'DOMAIN', pattern: '*.instagram.com', mode: 'RELAY'),
+          RouteRule(kind: 'DOMAIN', pattern: 'cdninstagram.com', mode: 'RELAY'),
+          RouteRule(kind: 'DOMAIN', pattern: '*.cdninstagram.com', mode: 'RELAY'),
+          RouteRule(kind: 'DOMAIN', pattern: 'gemini.google.com', mode: 'RELAY'),
+          RouteRule(kind: 'DOMAIN', pattern: '*.google.com', mode: 'RELAY'),
         ],
       );
 
@@ -27,7 +31,9 @@ void main() {
       (host: '2ip.ru', mode: 'DIRECT', note: 'Geo IP must show RU on device'),
       (host: 'www.youtube.com', mode: 'RELAY', note: 'Accelerated foreign'),
       (host: 'instagram.com', mode: 'RELAY', note: 'Accelerated foreign'),
-      (host: 'google.com', mode: 'DIRECT', note: 'Default DIRECT unless user excludes'),
+      (host: 'cdninstagram.com', mode: 'RELAY', note: 'Instagram CDN via relay'),
+      (host: 'gemini.google.com', mode: 'RELAY', note: 'Google AI via relay'),
+      (host: 'google.com', mode: 'RELAY', note: 'Built-in accelerator fallback'),
     ];
 
     for (final tc in cases) {
@@ -51,9 +57,14 @@ void main() {
           expect(matchesRelayRule, isTrue,
               reason: '${tc.host} should match a RELAY rule in prod-like set');
         } else {
-          // DIRECT sites rely on client DefaultDirectRules (*.ru) in Go — not in this JSON slice.
-          expect(tc.host.endsWith('.ru') || tc.host == 'google.com', isTrue,
-              reason: 'DIRECT cases in this matrix are RU TLD or default-direct foreign');
+          // DIRECT sites rely on client DefaultDirectRules (*.ru) in Go.
+          // Foreign RELAY cases are covered by prod-like + built-in DefaultRelayRules.
+          expect(
+            tc.host.endsWith('.ru') ||
+                tc.mode == 'RELAY',
+            isTrue,
+            reason: 'DIRECT = RU TLD; foreign accelerator hosts = RELAY',
+          );
         }
       });
     }

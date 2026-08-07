@@ -583,18 +583,28 @@ class _HomeScreenState extends State<HomeScreen> {
       var rulesJson = '';
       var exclusionsJson = '[]';
       var bypassPackagesJson = '[]';
+      var networkMode = 'split';
+      var mtu = 1400;
+      var blockUdp443 = false;
+      var optionsJson = '';
       try {
         final ruleSet = await widget.api.fetchRules();
         rulesJson = jsonEncode(ruleSet.toJson());
         final settings = await SettingsService().load();
         exclusionsJson = jsonEncode(settings.exclusions);
         bypassPackagesJson = jsonEncode(settings.bypassPackages);
+        networkMode = settings.networkMode;
+        mtu = settings.mtu;
+        blockUdp443 = settings.blockUdp443;
+        optionsJson = settings.optionsJson;
         _pendingRulesVersion = ruleSet.version;
         _connectLog.info('decision', 'rules loaded', {
           'version': '${ruleSet.version}',
           'count': '${ruleSet.rules.length}',
           'exclusions': '${settings.exclusions.length}',
           'bypassApps': '${settings.bypassPackages.length}',
+          'networkMode': networkMode,
+          'mtu': '$mtu',
         });
       } catch (e) {
         _connectLog.warn('decision', 'rules load failed, using defaults', {'error': '$e'});
@@ -604,6 +614,10 @@ class _HomeScreenState extends State<HomeScreen> {
         rulesJson: rulesJson,
         exclusionsJson: exclusionsJson,
         bypassPackagesJson: bypassPackagesJson,
+        networkMode: networkMode,
+        mtu: mtu,
+        blockUdp443: blockUdp443,
+        optionsJson: optionsJson,
       );
       if (!accepted && mounted) {
         setState(() => _state = ConnState.disconnected);

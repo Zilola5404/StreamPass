@@ -51,3 +51,5 @@ client/android/local.properties
 
 # Office temp lock files
 ~$*.docx
+
+private/

@@ -1,6 +1,6 @@
 # StreamPass — Архитектура
 
-> Дата: 2026-08-05 | Версия: 1.1
+> Дата: 2026-08-07 | Версия: 1.2
 
 ---
 
@@ -260,10 +260,21 @@ Client → GET /api/v1/subscription → active_until
 
 ---
 
-## 8. Ключевые файлы
+## 8. Клиентская маршрутизация (Routing Policy)
+
+**Источник истины:** [`docs/07.4_RoutingPolicy.md`](07.4_RoutingPolicy.md).
+
+Порядок слоёв: DNS Resolver → Rule Engine → Decision Engine → Route Manager → Transport.  
+Transport / VpnService **не** принимают продуктовые решения (запрет `UDP/443→DIRECT` как политики).  
+DIRECT / RELAY / FALLBACK — см. 07.4; app-bypass vs domain DIRECT — см. [`docs/33_DirectVsVpnBypass.md`](33_DirectVsVpnBypass.md).
+
+---
+
+## 9. Ключевые файлы
 
 | Файл | Назначение |
 |------|------------|
+| `docs/07.4_RoutingPolicy.md` | Политика DIRECT / RELAY / FALLBACK |
 | `backend/cmd/server/main.go` | Composition root |
 | `backend/internal/infrastructure/http/router/router.go` | All routes |
 | `backend/internal/infrastructure/postgres/migrations/` | DB schema |

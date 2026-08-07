@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/apernet/hysteria/core/v2/client"
@@ -92,9 +93,20 @@ func TunIPv4Host() string {
 	return TunIPv4Prefix().Addr().String()
 }
 
+// Options configures diagnostic network behaviour on the TUN bridge.
+type Options struct {
+	// BlockUDP443 drops UDP/443 so apps fall back to TCP/443 (QUIC off).
+	BlockUDP443 bool
+}
+
 // Start brings up the TUN stack and routes each flow via the Decision Engine.
 // relayID is an operator label (host/id) attached to RELAY diag events.
 func Start(ctx context.Context, fd int, hyClient client.Client, mtu uint32, engine *decision.AtomicEngine, relayID string) (*Session, error) {
+	return StartWithOptions(ctx, fd, hyClient, mtu, engine, relayID, Options{})
+}
+
+// StartWithOptions is Start plus diagnostic toggles (UDP/443 block, …).
+func StartWithOptions(ctx context.Context, fd int, hyClient client.Client, mtu uint32, engine *decision.AtomicEngine, relayID string, opts Options) (*Session, error) {
 	if mtu == 0 {
 		mtu = 1400
 	}
@@ -115,7 +127,15 @@ func Start(ctx context.Context, fd int, hyClient client.Client, mtu uint32, engi
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)
-	handler := &routingHandler{client: hyClient, engine: engine, relayID: relayID}
+	handler := &routingHandler{
+		client:      hyClient,
+		engine:      engine,
+		relayID:     relayID,
+		blockUDP443: opts.BlockUDP443,
+	}
+	if opts.BlockUDP443 {
+		logLine("[vpn] udp443=blocked (force TCP/443 fallback)")
+	}
 	stack, err := tun.NewStack("system", tun.StackOptions{
 		Context:    runCtx,
 		Tun:        tunDev,
@@ -150,9 +170,10 @@ func Start(ctx context.Context, fd int, hyClient client.Client, mtu uint32, engi
 }
 
 type routingHandler struct {
-	client  client.Client
-	engine  *decision.AtomicEngine
-	relayID string
+	client      client.Client
+	engine      *decision.AtomicEngine
+	relayID     string
+	blockUDP443 bool
 }
 
 func (h *routingHandler) PrepareConnection(
@@ -172,6 +193,11 @@ func (h *routingHandler) targetFrom(destination M.Socksaddr) decision.Target {
 	}
 	if destination.Addr.IsValid() {
 		t.IP = destination.Addr
+		if t.Host == "" {
+			// OS often delivers IP-only flows after system DNS; recover hostname
+			// so *.ru / domain rules still match (TASK network diagnostics).
+			t.Host = dnscache.HostForIP(destination.Addr.String())
+		}
 	}
 	return t
 }
@@ -200,20 +226,26 @@ func (h *routingHandler) NewConnectionEx(
 	logLine(fmt.Sprintf("[decision] host=%s ip=%s rule=%s action=%s reason=%s", host, destIP, dec.Rule, mode, dec.Reason))
 	switch mode {
 	case decision.ModeDirect:
-		h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, true)
+		h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, true, false)
 	case decision.ModeFallback:
-		if !h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, false) {
-			h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, true)
+		// Decision policy: RELAY-first + allow_direct_fallback (docs/07.4 §6).
+		if !h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, false, true) {
+			dec.Reason = "fallback_after_relay_fail"
+			logLine(fmt.Sprintf("[tun] FALLBACK after relay fail dest=%s", destination.String()))
+			h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, true, false)
 		}
 	default:
-		if !h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, false) {
-			logLine(fmt.Sprintf("[tun] relay-tcp dropped dest=%s (RELAY fail, no direct fallback)", destination.String()))
+		// Must-relay: no silent DIRECT (docs/07.4 §6.2).
+		if !h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, false, true) {
+			logLine(fmt.Sprintf("[tun] must-relay fail dest=%s (no DIRECT fallback)", destination.String()))
 		}
 	}
 }
 
 // pipeTCP dials (direct or relay), emits [diag] with dial RTT + decision reason,
 // then copies until close (emitting throughput when enough bytes moved).
+// detectBlackhole: for RELAY path, dial-ok without first_byte within 3s is a fail
+// (docs/07.4 §6) so Decision can apply FALLBACK — transport itself never switches Mode.
 func (h *routingHandler) pipeTCP(
 	ctx context.Context,
 	conn net.Conn,
@@ -222,6 +254,7 @@ func (h *routingHandler) pipeTCP(
 	destPort int,
 	dec decision.Decision,
 	direct bool,
+	detectBlackhole bool,
 ) bool {
 	modeLabel := string(dec.Mode)
 	if !direct && dec.Mode == decision.ModeFallback {
@@ -242,6 +275,7 @@ func (h *routingHandler) pipeTCP(
 		if err != nil {
 			logLine(fmt.Sprintf("[tun] direct-tcp fail dest=%s err=%v", destination.String(), err))
 			emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), err.Error(), 0)
+			emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, dec.Reason, dnscache.LastResolveMS(host), time.Since(start), 0, 0, err.Error())
 			return false
 		}
 	} else {
@@ -249,42 +283,94 @@ func (h *routingHandler) pipeTCP(
 		if err != nil {
 			logLine(fmt.Sprintf("[tun] relay-tcp fail dest=%s err=%v", destination.String(), err))
 			emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), err.Error(), 0)
+			emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, dec.Reason, dnscache.LastResolveMS(host), time.Since(start), 0, 0, err.Error())
 			return false
 		}
 	}
 	dialDur := time.Since(start)
 	emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, true, dialDur, "", 0)
 
-	var bytes int64
-	counted := &countingConn{Conn: remote, n: &bytes}
+	var bytes atomic.Int64
+	var firstByte atomic.Int64 // nanoseconds; 0 = none yet
 	xferStart := time.Now()
-	_ = bufio.CopyConn(ctx, conn, counted)
-	_ = remote.Close()
+	counted := &countingConn{
+		Conn: remote,
+		onByte: func(n int, fromRemote bool) {
+			if n <= 0 {
+				return
+			}
+			bytes.Add(int64(n))
+			if fromRemote && firstByte.Load() == 0 {
+				firstByte.Store(time.Since(xferStart).Nanoseconds())
+			}
+		},
+	}
+
+	if detectBlackhole && !direct {
+		xferCtx, cancel := context.WithCancel(ctx)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			_ = bufio.CopyConn(xferCtx, conn, counted)
+		}()
+		deadline := time.NewTimer(3 * time.Second)
+		defer deadline.Stop()
+		select {
+		case <-done:
+			_ = remote.Close()
+		case <-deadline.C:
+			if firstByte.Load() == 0 {
+				cancel()
+				_ = remote.Close()
+				<-done
+				logLine(fmt.Sprintf("[tun] relay blackhole (no first_byte in 3s) dest=%s", destination.String()))
+				emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "relay_blackhole", h.relayID, false, 3*time.Second, "relay_blackhole", 0)
+				emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, "relay_blackhole", dnscache.LastResolveMS(host), dialDur, 0, 0, "relay_blackhole")
+				return false
+			}
+			<-done
+			_ = remote.Close()
+		case <-ctx.Done():
+			cancel()
+			_ = remote.Close()
+			<-done
+			return false
+		}
+	} else {
+		_ = bufio.CopyConn(ctx, conn, counted)
+		_ = remote.Close()
+	}
+
 	xferDur := time.Since(xferStart)
-	if bytes >= 32*1024 && xferDur > 500*time.Millisecond {
-		kbps := int(float64(bytes*8/1024) / xferDur.Seconds())
+	total := bytes.Load()
+	fb := time.Duration(firstByte.Load())
+	kbps := 0
+	if total >= 32*1024 && xferDur > 500*time.Millisecond {
+		kbps = int(float64(total*8/1024) / xferDur.Seconds())
 		emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "transfer_done", h.relayID, true, xferDur, "", kbps)
 	}
+	dnsMS := dnscache.LastResolveMS(host)
+	emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, dec.Reason, dnsMS, dialDur, fb, kbps, "")
 	return true
 }
 
 type countingConn struct {
 	net.Conn
-	n *int64
+	onByte func(n int, fromRemote bool)
 }
 
 func (c *countingConn) Read(p []byte) (int, error) {
 	n, err := c.Conn.Read(p)
-	if n > 0 && c.n != nil {
-		*c.n += int64(n)
+	if n > 0 && c.onByte != nil {
+		c.onByte(n, true)
 	}
 	return n, err
 }
 
 func (c *countingConn) Write(p []byte) (int, error) {
 	n, err := c.Conn.Write(p)
-	if n > 0 && c.n != nil {
-		*c.n += int64(n)
+	if n > 0 && c.onByte != nil {
+		c.onByte(n, false)
 	}
 	return n, err
 }
@@ -312,19 +398,32 @@ func (h *routingHandler) NewPacketConnectionEx(
 		return
 	}
 
+	// Diagnostic: force TCP/443 by dropping QUIC (UDP/443).
+	if h.blockUDP443 && destination.Port == 443 {
+		host, destIP, destPort := splitDest(destination)
+		logLine(fmt.Sprintf("[vpn] drop udp/443 host=%s ip=%s (tcp_only)", host, destIP))
+		emitDiag("udp", host, destIP, destPort, "DROP", "udp443", "udp443_blocked", h.relayID, false, 0, "udp443_blocked", 0)
+		return
+	}
+
 	dec := h.engine.DecideDetailed(h.targetFrom(destination))
 	mode := dec.Mode
 	host, destIP, destPort := splitDest(destination)
 	logLine(fmt.Sprintf("[decision] host=%s ip=%s rule=%s action=%s reason=%s proto=udp", host, destIP, dec.Rule, mode, dec.Reason))
+
 	switch mode {
 	case decision.ModeDirect:
 		h.relayUDP(ctx, conn, destination, true, host, destIP, destPort, dec)
 	case decision.ModeFallback:
 		if !h.relayUDP(ctx, conn, destination, false, host, destIP, destPort, dec) {
+			dec.Reason = "fallback_after_relay_fail"
 			h.relayUDP(ctx, conn, destination, true, host, destIP, destPort, dec)
 		}
 	default:
-		h.relayUDP(ctx, conn, destination, false, host, destIP, destPort, dec)
+		// Must-relay UDP: no silent DIRECT / no quic_direct_bypass (docs/07.4 §2).
+		if !h.relayUDP(ctx, conn, destination, false, host, destIP, destPort, dec) {
+			logLine(fmt.Sprintf("[tun] must-relay-udp fail dest=%s (no DIRECT fallback)", destination.String()))
+		}
 	}
 }
 
@@ -663,6 +762,18 @@ func emitDiag(proto, host, destIP string, destPort int, mode, rule, decisionReas
 	logLine(fmt.Sprintf(
 		"[route] %s ip=%s:%d via=%s rule=%s → %s (%dms, %dkbps) %s",
 		siteOrDash(site), destIP, destPort, via, rule, result, d.Milliseconds(), speedKbps, reason,
+	))
+}
+
+// emitConnLog writes the human-readable connection sample requested for network diagnostics.
+func emitConnLog(host, destIP, protocol string, port int, route, rule, reason string, dnsMS int64, connect, firstByte time.Duration, speedKbps int, errMsg string) {
+	result := "success"
+	if errMsg != "" {
+		result = "fail"
+	}
+	logLine(fmt.Sprintf(
+		"[conn] app=- host=%s ip=%s protocol=%s port=%d route=%s rule=%s reason=%s dns=%dms connect=%dms tls=- first_byte=%dms speed=%dkbps result=%s error=%s",
+		host, destIP, protocol, port, route, rule, reason, dnsMS, connect.Milliseconds(), firstByte.Milliseconds(), speedKbps, result, sanitizeErr(errMsg),
 	))
 }
 

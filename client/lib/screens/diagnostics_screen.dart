@@ -7,13 +7,11 @@ import '../theme/app_theme.dart';
 import '../services/vpn_channel.dart';
 import '../services/connection_log.dart';
 import '../services/native_connect_log.dart';
+import '../services/settings_service.dart';
 
-/// Connection diagnostics: live VPN status + on-device connect log.
+/// Connection diagnostics: live VPN status + on-device connect log (E09).
 ///
-/// The connect log is stored only on the device and copied to clipboard by
-/// explicit user action. It may include relay id/host, HTTP status codes,
-/// auth error codes, and build metadata — but never browsing URLs, packet
-/// payloads, or `connection_config` secrets. See ADR-012 in `docs/11_Decisions.md`.
+/// Network Mode / MTU live here (debug), not on E05 Settings — docs/07.4 §9.
 class DiagnosticsScreen extends StatefulWidget {
   const DiagnosticsScreen({super.key});
 
@@ -25,6 +23,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   VpnStatusUpdate? _last;
   DateTime? _connectedSince;
   final _log = ConnectionLog.instance;
+  final _settingsService = SettingsService();
+  AppSettings _settings = const AppSettings();
   StreamSubscription<ConnectionLogEntry>? _logSub;
 
   StreamSubscription<VpnStatusUpdate>? _statusSub;
@@ -33,6 +33,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   void initState() {
     super.initState();
     _refreshLogs();
+    unawaited(_loadSettings());
     _last = VpnChannel.lastStatus;
     if (_last?.event == VpnEvent.connected) {
       _connectedSince ??= DateTime.now();
@@ -53,6 +54,28 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       });
     });
     unawaited(_syncNativeStatus());
+  }
+
+  Future<void> _loadSettings() async {
+    final s = await _settingsService.load();
+    if (!mounted) return;
+    setState(() => _settings = s);
+  }
+
+  Future<void> _updateNetworkMode(String mode) async {
+    await _settingsService.setNetworkMode(mode);
+    setState(() => _settings = _settings.copyWith(networkMode: mode));
+    _needReconnectHint();
+  }
+
+  void _needReconnectHint() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Переподключите VPN, чтобы применить Network Mode / MTU'),
+        duration: Duration(seconds: 3),
+      ),
+    );
   }
 
   Future<void> _syncNativeStatus() async {
@@ -152,6 +175,75 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                   style: const TextStyle(
                       color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
             ),
+          const Divider(height: 32),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Network Mode (debug / E09)',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          RadioListTile<String>(
+            title: const Text('Split Tunnel'),
+            subtitle: const Text('Product default'),
+            value: 'split',
+            groupValue: _settings.networkMode,
+            activeColor: AppColors.cyan,
+            onChanged: (v) => _updateNetworkMode(v!),
+          ),
+          RadioListTile<String>(
+            title: const Text('Full Relay'),
+            subtitle: const Text('Force RELAY — isolate relay path'),
+            value: 'full_relay',
+            groupValue: _settings.networkMode,
+            activeColor: AppColors.cyan,
+            onChanged: (v) => _updateNetworkMode(v!),
+          ),
+          RadioListTile<String>(
+            title: const Text('Direct Test'),
+            subtitle: const Text('Force DIRECT — isolate ISP path'),
+            value: 'direct_test',
+            groupValue: _settings.networkMode,
+            activeColor: AppColors.cyan,
+            onChanged: (v) => _updateNetworkMode(v!),
+          ),
+          RadioListTile<String>(
+            title: const Text('TCP only'),
+            subtitle: const Text('Drop UDP/443 (QUIC off)'),
+            value: 'tcp_only',
+            groupValue: _settings.networkMode,
+            activeColor: AppColors.cyan,
+            onChanged: (v) => _updateNetworkMode(v!),
+          ),
+          SwitchListTile(
+            title: const Text('UDP 443 blocked'),
+            subtitle: const Text('Extra QUIC drop even in Split'),
+            value: _settings.blockUdp443,
+            activeColor: AppColors.cyan,
+            onChanged: (v) async {
+              await _settingsService.setBlockUdp443(v);
+              setState(() => _settings = _settings.copyWith(blockUdp443: v));
+              _needReconnectHint();
+            },
+          ),
+          ListTile(
+            title: const Text('MTU'),
+            subtitle: Text('Сейчас ${_settings.mtu}'),
+            trailing: DropdownButton<int>(
+              value: _settings.mtu,
+              items: const [
+                DropdownMenuItem(value: 1280, child: Text('1280')),
+                DropdownMenuItem(value: 1350, child: Text('1350')),
+                DropdownMenuItem(value: 1400, child: Text('1400')),
+              ],
+              onChanged: (v) async {
+                if (v == null) return;
+                await _settingsService.setMtu(v);
+                setState(() => _settings = _settings.copyWith(mtu: v));
+                _needReconnectHint();
+              },
+            ),
+          ),
           const Divider(height: 32),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),

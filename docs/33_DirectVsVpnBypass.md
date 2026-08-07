@@ -48,6 +48,7 @@
 |---|---|
 | Correct package ids + эвристика без слепого skip system | `VpnBypassApps.kt` |
 | Split DNS: `.ru/.su/.рф` → Yandex `77.88.8.8`, foreign → DoH | `dnscache/doh.go`, `russian.go` |
+| Built-in RELAY fallbacks (Instagram CDN, Gemini, Google AI) | `decision/defaults.go` `DefaultRelayRules` |
 | VPN DNS servers → Yandex | `StreamPassVpnService.kt` |
 | Лог `[tun] direct-tcp fail` / `relay-tcp fail` | `tunbridge/bridge.go` |
 | Документация | этот файл + `18_KnownLimitations.md` |

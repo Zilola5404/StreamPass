@@ -138,6 +138,7 @@ func (r *Resolver) HandleQuery(ctx context.Context, query []byte) (resp []byte, 
 		logLine(r.logf, fmt.Sprintf("[dns] query %s via=cache", trimDot(name)))
 		IndexAnswers(name, raw)
 		emitDNSDiag(trimDot(name), "cache", 0, "")
+		emitDNSRoute(trimDot(name))
 		return rewriteID(raw, header.ID)
 	}
 
@@ -172,9 +173,29 @@ func (r *Resolver) HandleQuery(ctx context.Context, query []byte) (resp []byte, 
 	r.cache.PutRaw(qtype, name, raw, ttl)
 	IndexAnswers(name, raw)
 	rtt := time.Since(start).Milliseconds()
+	RememberResolveMS(trimDot(name), rtt)
 	logLine(r.logf, fmt.Sprintf("[dns] query %s via=%s rtt=%dms", trimDot(name), via, rtt))
 	emitDNSDiag(trimDot(name), via, rtt, "")
+	emitDNSRoute(trimDot(name))
 	return rewriteID(raw, header.ID)
+}
+
+func emitDNSRoute(host string) {
+	if host == "" {
+		return
+	}
+	rule := "foreign"
+	route := "RELAY"
+	reason := "foreign_dns"
+	if IsRussianDomain(host) {
+		rule = "*.ru"
+		route = "DIRECT"
+		reason = "ru_domain_bypass"
+	}
+	logLine(nil, fmt.Sprintf(
+		"[dns-route] host=%s rule=%s route=%s reason=%s",
+		host, rule, route, reason,
+	))
 }
 
 func emitDNSDiag(host, via string, rttMS int64, errMsg string) {

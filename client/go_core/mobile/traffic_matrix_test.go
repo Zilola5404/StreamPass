@@ -22,7 +22,9 @@ func TestTrafficMatrix_publicAPI(t *testing.T) {
 		{"gosuslugi.ru", "DIRECT"},
 		{"www.youtube.com", "RELAY"},
 		{"instagram.com", "RELAY"},
-		{"google.com", "DIRECT"},
+		{"google.com", "RELAY"},
+		{"gemini.google.com", "RELAY"},
+		{"cdninstagram.com", "RELAY"},
 	}
 
 	for _, tc := range cases {

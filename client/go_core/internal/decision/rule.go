@@ -30,7 +30,5 @@ type RuleSet struct {
 	Rules   []Rule
 }
 
-// DefaultMode applies when nothing matches.
-// StreamPass is a traffic accelerator (split tunnel), not a full-tunnel VPN:
-// unknown destinations stay DIRECT unless explicitly forced to RELAY/FALLBACK.
+// DefaultMode applies when nothing matches (FS §6 / docs/07.4_RoutingPolicy.md).
 const DefaultMode = ModeDirect

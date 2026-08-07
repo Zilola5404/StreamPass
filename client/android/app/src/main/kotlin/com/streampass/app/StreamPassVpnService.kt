@@ -55,6 +55,10 @@ class StreamPassVpnService : VpnService() {
                 putExtra("rulesJson", args?.get("rulesJson") as? String ?: "")
                 putExtra("exclusionsJson", args?.get("exclusionsJson") as? String ?: "[]")
                 putExtra("bypassPackagesJson", args?.get("bypassPackagesJson") as? String ?: "[]")
+                putExtra("networkMode", args?.get("networkMode") as? String ?: "split")
+                putExtra("mtu", (args?.get("mtu") as? Int) ?: 1400)
+                putExtra("blockUdp443", (args?.get("blockUdp443") as? Boolean) ?: false)
+                putExtra("optionsJson", args?.get("optionsJson") as? String ?: "")
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -105,6 +109,10 @@ class StreamPassVpnService : VpnService() {
     private var rulesJson: String = ""
     private var exclusionsJson: String = "[]"
     private var bypassPackagesJson: String = "[]"
+    private var networkMode: String = "split"
+    private var mtu: Int = 1400
+    private var blockUdp443: Boolean = false
+    private var optionsJson: String = ""
 
     override fun onCreate() {
         super.onCreate()
@@ -127,9 +135,22 @@ class StreamPassVpnService : VpnService() {
             rulesJson = intent.getStringExtra("rulesJson") ?: ""
             exclusionsJson = intent.getStringExtra("exclusionsJson") ?: "[]"
             bypassPackagesJson = intent.getStringExtra("bypassPackagesJson") ?: "[]"
+            networkMode = intent.getStringExtra("networkMode") ?: "split"
+            mtu = intent.getIntExtra("mtu", 1400).coerceIn(1200, 1500)
+            blockUdp443 = intent.getBooleanExtra("blockUdp443", false)
+            optionsJson = intent.getStringExtra("optionsJson") ?: ""
+            if (optionsJson.isBlank()) {
+                // Build options for Go StartTunnel (networkMode / mtu / blockUdp443).
+                val block = blockUdp443 || networkMode == "tcp_only"
+                optionsJson =
+                    """{"networkMode":"$networkMode","mtu":$mtu,"blockUdp443":$block}"""
+            }
 
             Log.i(TAG, "connect relayId=$relayId host=$relayHost port=$relayPort configLen=${connectionConfig.length}")
-            ConnectLogger.log(this, "onStartCommand relayId=$relayId host=$relayHost port=$relayPort configLen=${connectionConfig.length} rulesLen=${rulesJson.length}")
+            ConnectLogger.log(
+                this,
+                "onStartCommand relayId=$relayId host=$relayHost port=$relayPort configLen=${connectionConfig.length} rulesLen=${rulesJson.length} networkMode=$networkMode mtu=$mtu blockUdp443=$blockUdp443",
+            )
             startForeground(NOTIFICATION_ID, buildNotification("Подключение…"))
             emit("connecting")
             scope.launch { establishTunnel() }
@@ -168,7 +189,7 @@ class StreamPassVpnService : VpnService() {
             if (relayHost.isEmpty()) {
                 throw IllegalStateException("No relay host provided — was GET /servers called first?")
             }
-            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+15 audit003")
+            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+33 routing-policy-v1")
             ConnectLogger.log(this, "establishTunnel: validating connection_config")
             if (connectionConfig.isBlank()) {
                 throw IllegalStateException("connection_config is empty — relay misconfigured in backend")
@@ -210,25 +231,24 @@ class StreamPassVpnService : VpnService() {
                 return
             }
 
-            // 10.10.0.1/30 — first host so sing-tun Next()=10.10.0.2 (unicast), not broadcast.
-            // Yandex DNS first so .ru geo-DNS stays local when queries leave TUN
-            // via excludeRoute. Cloudflare remains as foreign fallback inside DoH.
+            // DNS MUST be the TUN address so queries hit Go dnscache (*.ru DIRECT,
+            // reverse IP→host). Yandex 77.88.8.8 is in RU exclude ranges — OS DNS
+            // never entered TUN and left host= empty (all foreign → RELAY).
             val vpnBuilder = Builder()
                 .setSession("StreamPass")
                 .addAddress("10.10.0.1", 30)
-                .addDnsServer("77.88.8.8")
-                .addDnsServer("77.88.8.1")
-                .setMtu(1400)
-            val routeInfo = VpnRouteConfigurator.apply(vpnBuilder, assets)
+                .addDnsServer("10.10.0.1")
+                .setMtu(mtu)
+            val routeInfo = VpnRouteConfigurator.apply(vpnBuilder, assets, networkMode)
             val extraBypass = parseBypassPackages(bypassPackagesJson)
             val bypassCount = VpnBypassApps.apply(vpnBuilder, packageManager, packageName, extraBypass)
-            ConnectLogger.log(this, "vpn dns=77.88.8.8,77.88.8.1 (OS resolver; .ru queries bypass Go dnscache via excludeRoute)")
+            ConnectLogger.log(this, "vpn dns=10.10.0.1 (Go dnscache) networkMode=$networkMode mtu=$mtu")
             ConnectLogger.log(this, "split-tunnel mode=${routeInfo.mode} routes=${routeInfo.routeCount} ruExcludes=${routeInfo.excludeCount} appBypass=$bypassCount extraUser=${extraBypass.size}")
             tunInterface = vpnBuilder.establish()
 
             val fd = tunInterface?.fd
                 ?: throw IllegalStateException("VPN interface could not be established")
-            ConnectLogger.log(this, "TUN established fd=$fd mtu=1400 addr=10.10.0.1/30")
+            ConnectLogger.log(this, "TUN established fd=$fd mtu=$mtu addr=10.10.0.1/30 options=$optionsJson")
             if (tornDown) {
                 tunInterface?.close()
                 tunInterface = null
@@ -236,7 +256,7 @@ class StreamPassVpnService : VpnService() {
                 return
             }
 
-            bridge.startTunnel(fd, relayHost, relayPort, connectionConfig, rulesJson, exclusionsJson)
+            bridge.startTunnel(fd, relayHost, relayPort, connectionConfig, rulesJson, exclusionsJson, optionsJson)
         } catch (e: Exception) {
             if (tornDown) return
             Log.e(TAG, "establishTunnel failed", e)

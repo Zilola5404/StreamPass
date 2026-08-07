@@ -18,8 +18,14 @@ func TestDefaultDirectRules_mergedWithBackend(t *testing.T) {
 	if got := e.Decide(decision.Target{Host: "www.youtube.com"}); got != decision.ModeRelay {
 		t.Fatalf("youtube = %s, want RELAY", got)
 	}
-	if got := e.Decide(decision.Target{Host: "google.com"}); got != decision.ModeDirect {
-		t.Fatalf("google.com default = %s, want DIRECT", got)
+	if got := e.Decide(decision.Target{Host: "google.com"}); got != decision.ModeRelay {
+		t.Fatalf("google.com default = %s, want RELAY (built-in accelerator fallback)", got)
+	}
+	if got := e.Decide(decision.Target{Host: "cdninstagram.com"}); got != decision.ModeRelay {
+		t.Fatalf("cdninstagram.com = %s, want RELAY", got)
+	}
+	if got := e.Decide(decision.Target{Host: "gemini.google.com"}); got != decision.ModeRelay {
+		t.Fatalf("gemini.google.com = %s, want RELAY", got)
 	}
 }
 

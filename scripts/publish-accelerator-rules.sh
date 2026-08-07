@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Publish accelerator rule set (ТЗ §6): all Russian TLDs DIRECT, foreign media RELAY.
-# Usage: ADMIN_API_KEY=... bash scripts/publish-accelerator-rules.sh
+# Publish accelerator rule set (ТЗ §6 / docs/07.4): RU DIRECT, foreign media RELAY.
+# Domain-first; no Cloudflare /12. Usage: ADMIN_API_KEY=... bash scripts/publish-accelerator-rules.sh
 
 set -euo pipefail
 
@@ -34,8 +34,42 @@ cat >/tmp/accelerator_rules.json <<'JSON'
     {"kind":"DOMAIN","pattern":"*.ytimg.com","mode":"RELAY"},
     {"kind":"DOMAIN","pattern":"googlevideo.com","mode":"RELAY"},
     {"kind":"DOMAIN","pattern":"*.googlevideo.com","mode":"RELAY"},
+
+    {"kind":"DOMAIN","pattern":"gemini.google.com","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"*.gemini.google.com","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"ai.google.dev","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"aistudio.google.com","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"generativelanguage.googleapis.com","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"*.googleapis.com","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"google.com","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"*.google.com","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"chatgpt.com","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"*.chatgpt.com","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"openai.com","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"*.openai.com","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"claude.ai","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"*.claude.ai","mode":"RELAY"},
+
+    {"kind":"DOMAIN","pattern":"telegram.org","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"*.telegram.org","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"t.me","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"*.t.me","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"linkedin.com","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"*.linkedin.com","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"licdn.com","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"*.licdn.com","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"upwork.com","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"*.upwork.com","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"indeed.com","mode":"RELAY"},
+    {"kind":"DOMAIN","pattern":"*.indeed.com","mode":"RELAY"},
+
     {"kind":"DOMAIN","pattern":"github.com","mode":"RELAY"},
-    {"kind":"DOMAIN","pattern":"*.github.com","mode":"RELAY"}
+    {"kind":"DOMAIN","pattern":"*.github.com","mode":"RELAY"},
+
+    {"kind":"CIDR","pattern":"91.108.4.0/22","mode":"RELAY"},
+    {"kind":"CIDR","pattern":"91.108.8.0/22","mode":"RELAY"},
+    {"kind":"CIDR","pattern":"91.108.56.0/22","mode":"RELAY"},
+    {"kind":"CIDR","pattern":"149.154.160.0/20","mode":"RELAY"}
   ]
 }
 JSON

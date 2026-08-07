@@ -172,6 +172,18 @@
 
 ---
 
+## ADR-015: Routing Policy — слои; запрет product-решений в Transport
+
+| | |
+|---|---|
+| **Дата** | 2026-08-07 |
+| **Проблема** | WIP предлагал `QUIC(UDP/443)→DIRECT` и silent TCP RELAY→DIRECT в tunbridge; Transport начинал решать продукт |
+| **Решение** | Утверждён `docs/07.4_RoutingPolicy.md`: DNS → Rule Engine → Decision Engine → Route Manager → Transport. Mode только из Rule/Decision. Fallback только при `FALLBACK` / `allow_direct_fallback`. `DefaultMode=DIRECT`. QUIC→DIRECT запрещён в product `split` (только diagnostic). |
+| **Причина** | ТЗ §5–6; FS §6; разделение ответственности; предотвращение накопления transport-исключений |
+| **Последствия** | WIP TASK-02 — обязательный REWORK; Hysteria data-plane чинится отдельно; diagnostic modes только E09/debug |
+
+---
+
 ## Шаблон для новых ADR
 
 ```

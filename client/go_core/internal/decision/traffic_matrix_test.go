@@ -42,7 +42,7 @@ func TestTrafficMatrix(t *testing.T) {
 		{"gosuslugi", "gosuslugi.ru", decision.ModeDirect, "RU gov portal"},
 		{"sberbank", "online.sberbank.ru", decision.ModeDirect, "RU bank web"},
 		{"2ip", "2ip.ru", decision.ModeDirect, "geo IP check should show RU IP on device"},
-		{"vk", "vk.com", decision.ModeDirect, "default DIRECT when no relay rule"},
+		{"vk", "vk.com", decision.ModeDirect, "built-in RU social DIRECT"},
 		{"mail_ru", "mail.ru", decision.ModeDirect, "RU mail"},
 		{"mos_ru", "www.mos.ru", decision.ModeDirect, "built-in *.mos.ru DIRECT"},
 
@@ -50,9 +50,13 @@ func TestTrafficMatrix(t *testing.T) {
 		{"youtube", "www.youtube.com", decision.ModeRelay, "accelerated via Hysteria"},
 		{"youtube_root", "youtube.com", decision.ModeRelay, "explicit relay rule"},
 		{"instagram", "instagram.com", decision.ModeRelay, "accelerated via relay"},
-		{"instagram_cdn", "cdninstagram.com", decision.ModeDirect, "no rule → default DIRECT"},
-		{"google", "google.com", decision.ModeDirect, "default DIRECT unless excluded"},
-		{"cloudflare", "cloudflare.com", decision.ModeDirect, "default DIRECT"},
+		{"instagram_cdn", "cdninstagram.com", decision.ModeRelay, "built-in CDN relay fallback"},
+		{"instagram_fbcdn", "scontent.cdninstagram.com", decision.ModeRelay, "Instagram media CDN"},
+		{"gemini", "gemini.google.com", decision.ModeRelay, "Google AI via relay"},
+		{"google", "google.com", decision.ModeRelay, "built-in relay fallback"},
+		{"cloudflare", "cloudflare.com", decision.ModeDirect, "DefaultMode=DIRECT (FS §6 / 07.4)"},
+		{"linkedin", "www.linkedin.com", decision.ModeRelay, "built-in jobs relay"},
+		{"telegram", "web.telegram.org", decision.ModeRelay, "built-in messenger relay"},
 	}
 
 	for _, tc := range cases {

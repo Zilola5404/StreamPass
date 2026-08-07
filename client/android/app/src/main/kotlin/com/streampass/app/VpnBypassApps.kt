@@ -20,12 +20,16 @@ object VpnBypassApps {
 
     /** Verified Play Store / RuStore package ids (keep even if heuristics miss). */
     private val knownPackages: List<String> = listOf(
-        // Госуслуги (official Play id=ru.rostel)
+        // Госуслуги / ESIA (Play + RuStore variants)
         "ru.rostel",
         "ru.gosuslugi.gosuslugi",
+        "ru.gosuslugi.mobile",
         "ru.gosuslugi.pos",
         "ru.gosuslugi.culture",
         "ru.gosuslugi.house",
+        "ru.esia.mobile",
+        "com.esia.mobile",
+        "ru.minsvyaz.gosuslugi",
         // ФНС / налоги
         "ru.fns.lkfl",
         "ru.nalog.lkfl",
@@ -66,6 +70,8 @@ object VpnBypassApps {
     private val heuristics: List<String> = listOf(
         "gosuslugi",
         "rostel",
+        "esia",
+        "minsvyaz",
         "nalog",
         "fns",
         "gnivts",

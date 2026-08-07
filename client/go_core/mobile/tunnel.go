@@ -2,6 +2,7 @@ package mobile
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/netip"
 	"sync"
@@ -102,16 +103,32 @@ func takePreparedSession() *tunnelRuntime {
 	return s
 }
 
+// TunnelOptionsJSON configures diagnostic network modes (TASK network fix).
+// Example: {"networkMode":"split","mtu":1280,"blockUdp443":true}
+type tunnelOptions struct {
+	NetworkMode  string `json:"networkMode"`  // split | full_relay | direct_test | tcp_only
+	MTU          int    `json:"mtu"`          // 1280 | 1350 | 1400
+	BlockUDP443  bool   `json:"blockUdp443"`
+}
+
+func parseTunnelOptions(raw string) tunnelOptions {
+	var o tunnelOptions
+	if raw == "" {
+		return o
+	}
+	_ = json.Unmarshal([]byte(raw), &o)
+	return o
+}
+
 // StartTunnel attaches the Android TUN fd to an active session. Call
 // PrepareRelay first on Android so the relay handshake completes before
 // VpnService routes all traffic into TUN.
-// rulesJSON / exclusionsJSON are optional payloads from GET /api/v1/rules
-// and local user exclusions (BL-005 Decision Engine).
-func StartTunnel(fd int, relayHost string, relayPort int, connectionConfig string, rulesJSON string, exclusionsJSON string, cb StatusCallback) {
+// optionsJSON is optional diagnostic config (networkMode/mtu/blockUdp443).
+func StartTunnel(fd int, relayHost string, relayPort int, connectionConfig string, rulesJSON string, exclusionsJSON string, optionsJSON string, cb StatusCallback) {
 	runTunnelWg.Add(1)
 	go func() {
 		defer runTunnelWg.Done()
-		runTunnel(fd, relayHost, relayPort, connectionConfig, rulesJSON, exclusionsJSON, cb)
+		runTunnel(fd, relayHost, relayPort, connectionConfig, rulesJSON, exclusionsJSON, optionsJSON, cb)
 	}()
 }
 
@@ -189,12 +206,15 @@ func stopTunnelSessions() {
 	}
 }
 
-func runTunnel(fd int, relayHost string, relayPort int, connectionConfig string, rulesJSON, exclusionsJSON string, cb StatusCallback) {
+func runTunnel(fd int, relayHost string, relayPort int, connectionConfig string, rulesJSON, exclusionsJSON, optionsJSON string, cb StatusCallback) {
 	defer func() {
 		if r := recover(); r != nil {
 			emitError(cb, fmt.Errorf("tunnel panic: %v", r))
 		}
 	}()
+
+	opts := parseTunnelOptions(optionsJSON)
+	logEvent(fmt.Sprintf("[vpn] options mode=%s mtu=%d blockUdp443=%v", opts.NetworkMode, opts.MTU, opts.BlockUDP443))
 
 	relaySession := takePreparedSession()
 
@@ -229,6 +249,9 @@ func runTunnel(fd int, relayHost string, relayPort int, connectionConfig string,
 			relayLabel = result.Parsed.ServerHost
 		}
 	}
+	if opts.MTU >= 1200 && opts.MTU <= 1500 {
+		mtu = uint32(opts.MTU)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	engine, err := decision.NewAtomicEngineFromJSON(rulesJSON, exclusionsJSON)
@@ -238,7 +261,18 @@ func runTunnel(fd int, relayHost string, relayPort int, connectionConfig string,
 		emitError(cb, fmt.Errorf("decision engine: %w", err))
 		return
 	}
-	bridge, err := tunbridge.Start(ctx, fd, hyClient, mtu, engine, relayLabel)
+	switch opts.NetworkMode {
+	case "full_relay":
+		engine.SetForceMode(decision.ModeRelay)
+	case "direct_test":
+		engine.SetForceMode(decision.ModeDirect)
+	default:
+		engine.SetForceMode("")
+	}
+	blockUDP443 := opts.BlockUDP443 || opts.NetworkMode == "tcp_only"
+	bridge, err := tunbridge.StartWithOptions(ctx, fd, hyClient, mtu, engine, relayLabel, tunbridge.Options{
+		BlockUDP443: blockUDP443,
+	})
 	if err != nil {
 		cancel()
 		_ = hyClient.Close()

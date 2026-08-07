@@ -145,6 +145,7 @@ class TunnelBridge(
         connectionConfig: String,
         rulesJson: String,
         exclusionsJson: String,
+        optionsJson: String = "",
     ) {
         try {
             val coreClass = coreClass()
@@ -170,9 +171,20 @@ class TunnelBridge(
             }
 
             val startMethod = findStartTunnelMethod(coreClass, callbackClass)
-            Log.i(TAG, "StartTunnel fd=$fd host=$relayHost port=$relayPort configLen=${connectionConfig.length} rulesLen=${rulesJson.length}")
-            ConnectLogger.log(context, "StartTunnel fd=$fd host=$relayHost port=$relayPort rulesLen=${rulesJson.length}")
+            Log.i(TAG, "StartTunnel fd=$fd host=$relayHost port=$relayPort configLen=${connectionConfig.length} rulesLen=${rulesJson.length} optionsLen=${optionsJson.length}")
+            ConnectLogger.log(context, "StartTunnel fd=$fd host=$relayHost port=$relayPort rulesLen=${rulesJson.length} options=$optionsJson")
             when (startMethod.parameterCount) {
+                8 -> startMethod.invoke(
+                    null,
+                    fd.toLong(),
+                    relayHost,
+                    relayPort.toLong(),
+                    connectionConfig,
+                    rulesJson,
+                    exclusionsJson,
+                    optionsJson,
+                    callback,
+                )
                 7 -> startMethod.invoke(
                     null,
                     fd.toLong(),
@@ -218,17 +230,31 @@ class TunnelBridge(
                 String::class.java,
                 String::class.java,
                 String::class.java,
+                String::class.java,
                 callbackClass,
             )
         } catch (_: NoSuchMethodException) {
-            coreClass.getMethod(
-                "startTunnel",
-                Long::class.javaPrimitiveType,
-                String::class.java,
-                Long::class.javaPrimitiveType,
-                String::class.java,
-                callbackClass,
-            )
+            try {
+                coreClass.getMethod(
+                    "startTunnel",
+                    Long::class.javaPrimitiveType,
+                    String::class.java,
+                    Long::class.javaPrimitiveType,
+                    String::class.java,
+                    String::class.java,
+                    String::class.java,
+                    callbackClass,
+                )
+            } catch (_: NoSuchMethodException) {
+                coreClass.getMethod(
+                    "startTunnel",
+                    Long::class.javaPrimitiveType,
+                    String::class.java,
+                    Long::class.javaPrimitiveType,
+                    String::class.java,
+                    callbackClass,
+                )
+            }
         }
     }
 

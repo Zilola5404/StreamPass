@@ -21,7 +21,7 @@ func TestDomainMatch_wildcardRu(t *testing.T) {
 		{"yandex.ru", decision.ModeDirect},
 		{"sub.mail.ru", decision.ModeDirect},
 		{"www.youtube.com", decision.ModeRelay},
-		{"google.com", decision.ModeDirect},
+		{"google.com", decision.ModeDirect}, // DefaultMode=DIRECT when no rule
 	}
 	for _, tc := range cases {
 		got := e.Decide(decision.Target{Host: tc.host})
@@ -47,7 +47,11 @@ func TestCIDRMatch_directRussianRange(t *testing.T) {
 	outside := netip.MustParseAddr("8.8.8.8")
 	got = e.Decide(decision.Target{IP: outside, Host: "dns.google"})
 	if got != decision.ModeDirect {
-		t.Fatalf("default for 8.8.8.8 = %s, want DIRECT", got)
+		t.Fatalf("unmatched 8.8.8.8 = %s, want DIRECT (DefaultMode)", got)
+	}
+	got = e.Decide(decision.Target{Host: "google.com"})
+	if got != decision.ModeRelay {
+		t.Fatalf("google.com = %s, want RELAY", got)
 	}
 }
 
@@ -109,10 +113,24 @@ func TestIPTargetWithoutHost(t *testing.T) {
 	rules := []decision.Rule{
 		{Kind: decision.KindCIDR, Pattern: "142.250.0.0/15", Mode: decision.ModeRelay},
 	}
-	e := decision.NewEngine(rules, nil, decision.ModeDirect)
+	e := decision.NewEngine(rules, nil, decision.DefaultMode)
 
 	ip := netip.MustParseAddr("142.250.1.2")
 	if got := e.Decide(decision.Target{IP: ip}); got != decision.ModeRelay {
 		t.Fatalf("got %s, want RELAY", got)
+	}
+
+	meta := netip.MustParseAddr("157.240.1.2")
+	e2, err := decision.NewEngineFromJSON(`{"version":1,"rules":[]}`, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Wide Meta CIDRs removed (07.4 domain-first); unknown IP → DefaultMode DIRECT.
+	if got := e2.Decide(decision.Target{IP: meta}); got != decision.ModeDirect {
+		t.Fatalf("unknown Meta IP got %s, want DIRECT (DefaultMode)", got)
+	}
+	tg := netip.MustParseAddr("149.154.167.50")
+	if got := e2.Decide(decision.Target{IP: tg}); got != decision.ModeRelay {
+		t.Fatalf("Telegram DC IP got %s, want RELAY", got)
 	}
 }
