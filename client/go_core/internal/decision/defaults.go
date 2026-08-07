@@ -79,8 +79,20 @@ var DefaultRelayRules = []Rule{
 	{Kind: KindDomain, Pattern: "github.com", Mode: ModeRelay},
 	{Kind: KindDomain, Pattern: "*.github.com", Mode: ModeRelay},
 
-	// Telegram DC ranges only (narrow). No Cloudflare /12 or Google/Meta /15-/16 —
-	// domain rules + DNS HostForIP are the product path (docs/07.4 §5, §11).
+	// IP-only safety net when HostForIP miss (Chrome/QUIC caches). Domain rules remain
+	// primary. No Cloudflare /12 (docs/07.4 §11). Google/Meta ranges = known accelerator CDNs.
+	{Kind: KindCIDR, Pattern: "142.250.0.0/15", Mode: ModeRelay},
+	{Kind: KindCIDR, Pattern: "172.217.0.0/16", Mode: ModeRelay},
+	{Kind: KindCIDR, Pattern: "216.58.0.0/15", Mode: ModeRelay},
+	{Kind: KindCIDR, Pattern: "74.125.0.0/16", Mode: ModeRelay},
+	{Kind: KindCIDR, Pattern: "108.177.0.0/16", Mode: ModeRelay},
+	{Kind: KindCIDR, Pattern: "142.251.0.0/16", Mode: ModeRelay},
+	{Kind: KindCIDR, Pattern: "157.240.0.0/16", Mode: ModeRelay},
+	{Kind: KindCIDR, Pattern: "31.13.64.0/18", Mode: ModeRelay},
+	{Kind: KindCIDR, Pattern: "185.60.216.0/22", Mode: ModeRelay},
+	{Kind: KindCIDR, Pattern: "57.144.0.0/16", Mode: ModeRelay},
+
+	// Telegram DC ranges (narrow)
 	{Kind: KindCIDR, Pattern: "91.108.4.0/22", Mode: ModeRelay},
 	{Kind: KindCIDR, Pattern: "91.108.8.0/22", Mode: ModeRelay},
 	{Kind: KindCIDR, Pattern: "91.108.56.0/22", Mode: ModeRelay},

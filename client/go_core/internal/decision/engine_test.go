@@ -125,9 +125,9 @@ func TestIPTargetWithoutHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Wide Meta CIDRs removed (07.4 domain-first); unknown IP → DefaultMode DIRECT.
-	if got := e2.Decide(decision.Target{IP: meta}); got != decision.ModeDirect {
-		t.Fatalf("unknown Meta IP got %s, want DIRECT (DefaultMode)", got)
+	// Meta CDN IP → builtin CIDR safety net RELAY (HostForIP miss path).
+	if got := e2.Decide(decision.Target{IP: meta}); got != decision.ModeRelay {
+		t.Fatalf("Meta CDN IP got %s, want RELAY", got)
 	}
 	tg := netip.MustParseAddr("149.154.167.50")
 	if got := e2.Decide(decision.Target{IP: tg}); got != decision.ModeRelay {

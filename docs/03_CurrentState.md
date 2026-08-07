@@ -1,6 +1,6 @@
 # StreamPass — Текущее состояние
 
-> Дата: 2026-08-06 | Источник: код + `docs/04_Backlog.md` + prod
+> Дата: 2026-08-07 | Источник: код + `docs/04_Backlog.md` + prod
 
 ---
 
@@ -21,12 +21,13 @@
 
 `postgres`, `redis`, `backend`, `healthmonitor`, `caddy` (+ volume `./admin`), `prometheus`, `node-exporter`, `grafana`.
 
-### Android Client (Flutter) — v0.1.1+25
+### Android Client (Flutter) — v0.1.1+34
 
 | Возможность | Статус |
 |-------------|--------|
 | Ускоритель (Hysteria2 + TUN + protect) | ✅ |
-| Decision Engine + Rule polling (default DIRECT) | ✅ |
+| Decision Engine + Rule polling (`DefaultMode=DIRECT`, routing-policy-v1) | ✅ |
+| DNS-in-TUN `10.10.0.1` + HostForIP + Google/Meta CIDR safety net | ✅ |
 | OS split-tunnel RU CIDR / intl routes | ✅ |
 | App bypass (Госуслуги/ФНС/банки, эвристика) | ✅ |
 | Split DNS (.ru → Yandex, foreign → DoH) | ✅ |
@@ -36,7 +37,7 @@
 | Soft/hard update prompt | ✅ |
 | APK release signing (key.properties) | ✅ когда JKS на месте |
 
-Диагностика DIRECT vs VPN: `docs/33_DirectVsVpnBypass.md`.
+Диагностика DIRECT vs VPN: `docs/33_DirectVsVpnBypass.md`. Политика: `docs/07.4_RoutingPolicy.md`.
 
 ### Админка / ops
 
@@ -84,7 +85,7 @@
 | API | `https://212-43-156-33.nip.io` |
 | Admin | `https://212-43-156-33.nip.io/admin/` |
 | Relays | `nl-native-1`, `nl-amsterdam-1` (регион `nl`); DE/PL/FI — софт готов, нод нет |
-| APK | `StreamPass-v0.1.1+25-signed-arm64.apk` |
+| APK | `StreamPass-v0.1.1+34-signed-arm64.apk` (`routing-policy-v1`) |
 | OTA | `https://212-43-156-33.nip.io/downloads/StreamPass.apk` |
 
 ---

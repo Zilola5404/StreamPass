@@ -53,3 +53,8 @@ client/android/local.properties
 ~$*.docx
 
 private/
+
+# Local/OTA APK binaries (served from VPS downloads/)
+downloads/*.apk
+downloads/StreamPass.apk
+
