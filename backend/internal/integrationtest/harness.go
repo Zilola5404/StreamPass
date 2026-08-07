@@ -19,6 +19,7 @@ import (
 	authsvc "streampass/backend/internal/application/auth"
 	billingsvc "streampass/backend/internal/application/billing"
 	configsvcpkg "streampass/backend/internal/application/configsvc"
+	diagsvc "streampass/backend/internal/application/diag"
 	exclusionsvc "streampass/backend/internal/application/exclusion"
 	relaysvc "streampass/backend/internal/application/relay"
 	rulesvc "streampass/backend/internal/application/rule"
@@ -239,6 +240,7 @@ func NewTestHandler(t *testing.T, db *sql.DB) (http.Handler, *fakePayments) {
 	appConfigRepo := postgres.NewAppConfigRepository(db)
 	paymentRepo := postgres.NewPaymentRepository(db)
 	exclusionRepo := postgres.NewExclusionRepository(db)
+	diagRepo := postgres.NewDiagRepository(db)
 
 	hasher := security.NewArgon2Hasher()
 	tokens := security.NewJWTTokenIssuer(testJWTSecret, 15*time.Minute, 720*time.Hour)
@@ -272,6 +274,7 @@ func NewTestHandler(t *testing.T, db *sql.DB) (http.Handler, *fakePayments) {
 		Exclusion:       handler.NewExclusionHandler(exclusionsvc.NewService(exclusionRepo, log)),
 		Health:          handler.NewHealthHandler(),
 		Admin:           handler.NewAdminHandler(adminsvc.NewUserService(userRepo, adminsvc.SystemClock{}, log)),
+		Diag:            handler.NewDiagHandler(diagsvc.NewService(diagRepo, diagsvc.SystemClock{}, log)),
 		TokenVerifier:   tokens,
 		AdminKey:        testAdminKey,
 		Log:             log,

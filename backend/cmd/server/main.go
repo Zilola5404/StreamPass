@@ -20,6 +20,7 @@ import (
 	adminsvc "streampass/backend/internal/application/admin"
 	billingsvc "streampass/backend/internal/application/billing"
 	configsvcpkg "streampass/backend/internal/application/configsvc"
+	diagsvc "streampass/backend/internal/application/diag"
 	exclusionsvc "streampass/backend/internal/application/exclusion"
 	relaysvc "streampass/backend/internal/application/relay"
 	rulesvc "streampass/backend/internal/application/rule"
@@ -97,6 +98,7 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 	appConfigRepo := postgres.NewAppConfigRepository(db)
 	paymentRepo := postgres.NewPaymentRepository(db)
 	exclusionRepo := postgres.NewExclusionRepository(db)
+	diagRepo := postgres.NewDiagRepository(db)
 
 	hasher := security.NewArgon2Hasher()
 	tokens := security.NewJWTTokenIssuer(
@@ -146,6 +148,7 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 	}
 	billingService := billingsvc.NewService(userRepo, paymentRepo, paymentProvider, billingPlans, billingsvc.SystemClock{}, log)
 	exclusionService := exclusionsvc.NewService(exclusionRepo, log)
+	diagService := diagsvc.NewService(diagRepo, diagsvc.SystemClock{}, log)
 
 	return router.Deps{
 		Auth:            handler.NewAuthHandler(authService),
@@ -157,6 +160,7 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 		Exclusion:       handler.NewExclusionHandler(exclusionService),
 		Health:          handler.NewHealthHandler(),
 		Admin:           handler.NewAdminHandler(adminUserService),
+		Diag:            handler.NewDiagHandler(diagService),
 		TokenVerifier:   tokens,
 		AdminKey:        cfg.StringOr("admin.api_key", ""),
 		Log:             log,

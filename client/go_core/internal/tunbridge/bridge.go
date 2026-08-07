@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"strings"
 	"sync"
 	"time"
 
@@ -191,44 +192,56 @@ func (h *routingHandler) NewConnectionEx(
 	}
 
 	mode := h.engine.Decide(h.targetFrom(destination))
+	host, destIP, destPort := splitDest(destination)
+	logLine(fmt.Sprintf("[tun] tcp mode=%s dest=%s", mode, destination.String()))
 	switch mode {
 	case decision.ModeDirect:
-		h.dialDirectTCP(ctx, conn, destination)
+		h.pipeTCP(ctx, conn, destination, host, destIP, destPort, string(mode), true)
 	case decision.ModeFallback:
-		if !h.dialRelayTCP(ctx, conn, destination) {
-			h.dialDirectTCP(ctx, conn, destination)
+		if !h.pipeTCP(ctx, conn, destination, host, destIP, destPort, "FALLBACK", false) {
+			h.pipeTCP(ctx, conn, destination, host, destIP, destPort, "FALLBACK", true)
 		}
 	default:
-		// RELAY with silent failure left apps hanging — fall back to protected direct.
-		if !h.dialRelayTCP(ctx, conn, destination) {
-			h.dialDirectTCP(ctx, conn, destination)
+		if !h.pipeTCP(ctx, conn, destination, host, destIP, destPort, "RELAY", false) {
+			logLine(fmt.Sprintf("[tun] relay-tcp dropped dest=%s (RELAY fail, no direct fallback)", destination.String()))
 		}
 	}
 }
 
-func (h *routingHandler) dialRelayTCP(ctx context.Context, conn net.Conn, destination M.Socksaddr) bool {
-	remote, err := h.client.TCP(destination.String())
-	if err != nil {
-		logLine(fmt.Sprintf("[tun] relay-tcp fail dest=%s err=%v", destination.String(), err))
-		return false
+// pipeTCP dials (direct or relay), emits [diag] with dial RTT, then copies until close.
+// Returns true if dial succeeded.
+func (h *routingHandler) pipeTCP(
+	ctx context.Context,
+	conn net.Conn,
+	destination M.Socksaddr,
+	host, destIP string,
+	destPort int,
+	modeLabel string,
+	direct bool,
+) bool {
+	start := time.Now()
+	var remote net.Conn
+	var err error
+	if direct {
+		dialer := net.Dialer{Timeout: 15 * time.Second, Control: protect.Control}
+		remote, err = dialer.DialContext(ctx, "tcp", destination.String())
+		if err != nil {
+			logLine(fmt.Sprintf("[tun] direct-tcp fail dest=%s err=%v", destination.String(), err))
+			emitDiag("tcp", host, destIP, destPort, modeLabel, false, time.Since(start), err.Error())
+			return false
+		}
+	} else {
+		remote, err = h.client.TCP(destination.String())
+		if err != nil {
+			logLine(fmt.Sprintf("[tun] relay-tcp fail dest=%s err=%v", destination.String(), err))
+			emitDiag("tcp", host, destIP, destPort, modeLabel, false, time.Since(start), err.Error())
+			return false
+		}
 	}
+	emitDiag("tcp", host, destIP, destPort, modeLabel, true, time.Since(start), "")
 	defer remote.Close()
 	_ = bufio.CopyConn(ctx, conn, remote)
 	return true
-}
-
-func (h *routingHandler) dialDirectTCP(ctx context.Context, conn net.Conn, destination M.Socksaddr) {
-	dialer := net.Dialer{
-		Timeout: 15 * time.Second,
-		Control: protect.Control,
-	}
-	remote, err := dialer.DialContext(ctx, "tcp", destination.String())
-	if err != nil {
-		logLine(fmt.Sprintf("[tun] direct-tcp fail dest=%s err=%v", destination.String(), err))
-		return
-	}
-	defer remote.Close()
-	_ = bufio.CopyConn(ctx, conn, remote)
 }
 
 func (h *routingHandler) NewPacketConnectionEx(
@@ -255,15 +268,16 @@ func (h *routingHandler) NewPacketConnectionEx(
 	}
 
 	mode := h.engine.Decide(h.targetFrom(destination))
+	host, destIP, destPort := splitDest(destination)
 	switch mode {
 	case decision.ModeDirect:
-		h.relayUDP(ctx, conn, destination, true)
+		h.relayUDP(ctx, conn, destination, true, host, destIP, destPort, string(mode))
 	case decision.ModeFallback:
-		if !h.relayUDP(ctx, conn, destination, false) {
-			h.relayUDP(ctx, conn, destination, true)
+		if !h.relayUDP(ctx, conn, destination, false, host, destIP, destPort, "FALLBACK") {
+			h.relayUDP(ctx, conn, destination, true, host, destIP, destPort, "FALLBACK")
 		}
 	default:
-		h.relayUDP(ctx, conn, destination, false)
+		h.relayUDP(ctx, conn, destination, false, host, destIP, destPort, "RELAY")
 	}
 }
 
@@ -299,34 +313,49 @@ func (h *routingHandler) handleDNS(ctx context.Context, conn N.PacketConn, desti
 	}
 }
 
-func (h *routingHandler) relayUDP(ctx context.Context, conn N.PacketConn, destination M.Socksaddr, direct bool) bool {
+func (h *routingHandler) relayUDP(
+	ctx context.Context,
+	conn N.PacketConn,
+	destination M.Socksaddr,
+	direct bool,
+	host, destIP string,
+	destPort int,
+	modeLabel string,
+) bool {
 	destAddr := destination.String()
+	start := time.Now()
 
 	if direct {
 		var lc net.ListenConfig
 		lc.Control = protect.Control
 		packetConn, err := lc.ListenPacket(ctx, "udp", "")
 		if err != nil {
+			emitDiag("udp", host, destIP, destPort, modeLabel, false, time.Since(start), err.Error())
 			return false
 		}
 		defer packetConn.Close()
 		udpRemote, ok := packetConn.(*net.UDPConn)
 		if !ok {
+			emitDiag("udp", host, destIP, destPort, modeLabel, false, time.Since(start), "not_udp")
 			return false
 		}
 		raddr, err := net.ResolveUDPAddr("udp", destAddr)
 		if err != nil {
+			emitDiag("udp", host, destIP, destPort, modeLabel, false, time.Since(start), err.Error())
 			return false
 		}
+		emitDiag("udp", host, destIP, destPort, modeLabel, true, time.Since(start), "")
 		h.copyUDPToAddr(ctx, conn, udpRemote, destination, raddr)
 		return true
 	}
 
 	hyUDP, err := h.client.UDP()
 	if err != nil {
+		emitDiag("udp", host, destIP, destPort, modeLabel, false, time.Since(start), err.Error())
 		return false
 	}
 	defer hyUDP.Close()
+	emitDiag("udp", host, destIP, destPort, modeLabel, true, time.Since(start), "")
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -507,4 +536,54 @@ func sameUDPEndpoint(a, b string) bool {
 		return false
 	}
 	return aa.IP.Equal(bb.IP)
+}
+
+func splitDest(destination M.Socksaddr) (host, destIP string, destPort int) {
+	destPort = int(destination.Port)
+	if destination.IsFqdn() {
+		host = strings.ToLower(strings.TrimSuffix(destination.Fqdn, "."))
+	}
+	if destination.Addr.IsValid() {
+		destIP = destination.Addr.String()
+	}
+	return host, destIP, destPort
+}
+
+// okDiagThrottle limits successful [diag] lines per host+mode (failures always emit).
+var okDiagThrottle sync.Map // key -> time.Time
+
+const okDiagMinInterval = 30 * time.Second
+
+func emitDiag(proto, host, destIP string, destPort int, mode string, ok bool, d time.Duration, errMsg string) {
+	result := "ok"
+	if !ok {
+		result = "fail"
+		if strings.Contains(strings.ToLower(errMsg), "timeout") {
+			result = "timeout"
+		}
+	} else {
+		key := proto + "|" + mode + "|" + host + "|" + destIP + "|" + fmt.Sprintf("%d", destPort)
+		if prev, loaded := okDiagThrottle.Load(key); loaded {
+			if t, okT := prev.(time.Time); okT && time.Since(t) < okDiagMinInterval {
+				return
+			}
+		}
+		okDiagThrottle.Store(key, time.Now())
+	}
+	errCode := sanitizeErr(errMsg)
+	logLine(fmt.Sprintf(
+		"[diag] proto=%s host=%s dest_ip=%s dest_port=%d mode=%s result=%s latency_ms=%d error=%s",
+		proto, host, destIP, destPort, mode, result, d.Milliseconds(), errCode,
+	))
+}
+
+func sanitizeErr(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.ReplaceAll(s, " ", "_")
+	s = strings.ReplaceAll(s, "\n", "")
+	s = strings.ReplaceAll(s, "\r", "")
+	if len(s) > 64 {
+		s = s[:64]
+	}
+	return s
 }

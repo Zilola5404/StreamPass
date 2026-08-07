@@ -16,6 +16,7 @@ import '../services/settings_service.dart';
 import '../services/streampass_api.dart';
 import '../services/vpn_channel.dart';
 import '../services/client_update.dart';
+import '../services/diag_uploader.dart';
 import '../services/connection_duration.dart';
 import '../services/relay_picker.dart';
 import '../services/region_catalog.dart';
@@ -58,11 +59,13 @@ class _HomeScreenState extends State<HomeScreen> {
   String _durationLabel = 'Smart routing';
   final _sessionStats = SessionStatsService();
   bool _failoverInFlight = false;
+  DiagUploader? _diagUploader;
 
   @override
   void initState() {
     super.initState();
     _sub = VpnChannel.statusStream.listen(_onStatus);
+    _diagUploader = DiagUploader(api: widget.api)..start();
     _bootstrap();
   }
 
@@ -326,6 +329,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _diagUploader?.stop();
     _durationTimer?.cancel();
     _healthTimer?.cancel();
     _ruleEngine.stop();

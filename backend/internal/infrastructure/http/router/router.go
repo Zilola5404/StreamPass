@@ -45,6 +45,7 @@ type Deps struct {
 	Exclusion *handler.ExclusionHandler
 	Health    *handler.HealthHandler
 	Admin     *handler.AdminHandler
+	Diag      *handler.DiagHandler
 
 	TokenVerifier middleware.TokenVerifier
 	AdminKey      string
@@ -103,6 +104,7 @@ func New(d Deps) http.Handler {
 	mux.Handle(v1("POST /subscription/cancel"), authMW(http.HandlerFunc(d.Billing.CancelSubscription)))
 	mux.Handle(v1("GET /exclusions"), authMW(http.HandlerFunc(d.Exclusion.List)))
 	mux.Handle(v1("PUT /exclusions"), authMW(http.HandlerFunc(d.Exclusion.Replace)))
+	mux.Handle(v1("POST /diag"), authMW(http.HandlerFunc(d.Diag.RecordBatch)))
 
 	// --- Admin / operator-only endpoints ---
 	mux.Handle(v1("POST /rules"), adminMW(http.HandlerFunc(d.Rule.Publish)))
@@ -112,6 +114,7 @@ func New(d Deps) http.Handler {
 	mux.Handle(v1("DELETE /servers/{id}"), adminMW(http.HandlerFunc(d.Relay.Delete)))
 	mux.Handle(v1("POST /servers/health"), adminMW(http.HandlerFunc(d.Relay.RecordHealthCheck)))
 	mux.Handle(v1("GET /users"), adminMW(http.HandlerFunc(d.Admin.ListUsers)))
+	mux.Handle(v1("GET /admin/diag"), adminMW(http.HandlerFunc(d.Diag.ListAdmin)))
 
 	return middleware.Chain(
 		metrics.Middleware,

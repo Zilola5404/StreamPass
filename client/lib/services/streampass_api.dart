@@ -57,6 +57,14 @@ class StreamPassApi {
     await _post('/telemetry', payload.toJson());
   }
 
+  /// Operator routing diagnostics (hostname/IP/mode/latency — no full URLs).
+  Future<void> uploadDiag(List<DiagEvent> events) async {
+    if (events.isEmpty) return;
+    await _post('/diag', {
+      'events': events.map((e) => e.toJson()).toList(),
+    });
+  }
+
   Future<SubscriptionInfo> fetchSubscription() async {
     final body = await _get('/subscription');
     return SubscriptionInfo.fromJson(body as Map<String, dynamic>);
@@ -395,4 +403,66 @@ class PaymentRecord {
         status: json['status'] as String? ?? '',
         createdAt: DateTime.tryParse(json['created_at'] as String? ?? ''),
       );
+}
+
+/// One routing diagnostic sample uploaded to POST /diag.
+class DiagEvent {
+  final String proto;
+  final String host;
+  final String destIp;
+  final int destPort;
+  final String mode;
+  final String result;
+  final int latencyMs;
+  final String errorCode;
+  final String relayId;
+  final String clientVersion;
+  final DateTime? recordedAt;
+
+  const DiagEvent({
+    required this.proto,
+    required this.host,
+    required this.destIp,
+    required this.destPort,
+    required this.mode,
+    required this.result,
+    required this.latencyMs,
+    this.errorCode = '',
+    this.relayId = '',
+    this.clientVersion = '',
+    this.recordedAt,
+  });
+
+  DiagEvent copyWith({
+    String? clientVersion,
+    DateTime? recordedAt,
+    String? relayId,
+  }) =>
+      DiagEvent(
+        proto: proto,
+        host: host,
+        destIp: destIp,
+        destPort: destPort,
+        mode: mode,
+        result: result,
+        latencyMs: latencyMs,
+        errorCode: errorCode,
+        relayId: relayId ?? this.relayId,
+        clientVersion: clientVersion ?? this.clientVersion,
+        recordedAt: recordedAt ?? this.recordedAt,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'proto': proto,
+        'host': host,
+        'dest_ip': destIp,
+        'dest_port': destPort,
+        'mode': mode,
+        'result': result,
+        'latency_ms': latencyMs,
+        'error_code': errorCode,
+        'relay_id': relayId,
+        'client_version': clientVersion,
+        if (recordedAt != null) 'recorded_at': recordedAt!.toUtc().toIso8601String(),
+      };
 }
