@@ -12,6 +12,22 @@
 
 ---
 
+## [0.1.1+35] — 2026-08-08
+
+### Added
+- `[vpn] traffic_ready` after first user-plane TCP/UDP byte (handshake ≠ traffic; Issue #1 / BL-001)
+- Live integration: `TestIntegrationHysteriaUDPEcho` (DNS over Hysteria UDP)
+- Architect Issue #1 stage progress: `reports/Architecture/ISSUE-1-stage-progress.md`
+
+### Fixed
+- IPv6 blackhole on IPv4-only VPN: `allowFamily(AF_INET6)` bypass
+- D1: connection_config URI prefix no longer logged on bad scheme
+
+### APK
+- `StreamPass-v0.1.1+35-signed-arm64.apk` (`routing-policy-v1`)
+
+---
+
 ## [0.1.1+34] — 2026-08-07
 
 ### Added

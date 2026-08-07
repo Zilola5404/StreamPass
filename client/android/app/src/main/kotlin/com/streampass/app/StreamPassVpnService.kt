@@ -189,13 +189,15 @@ class StreamPassVpnService : VpnService() {
             if (relayHost.isEmpty()) {
                 throw IllegalStateException("No relay host provided — was GET /servers called first?")
             }
-            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+34 routing-policy-v1")
+            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+35 routing-policy-v1")
             ConnectLogger.log(this, "establishTunnel: validating connection_config")
             if (connectionConfig.isBlank()) {
                 throw IllegalStateException("connection_config is empty — relay misconfigured in backend")
             }
             if (!connectionConfig.startsWith("hysteria2://") && !connectionConfig.startsWith("hy2://")) {
-                throw IllegalStateException("connection_config must be hysteria2:// URI, got: ${connectionConfig.take(32)}…")
+                // Do not log URI prefix — may contain user:password@ before host.
+                val scheme = connectionConfig.substringBefore(':', missingDelimiterValue = "none")
+                throw IllegalStateException("connection_config must be hysteria2:// or hy2:// URI (got scheme=$scheme)")
             }
 
             val bridge = TunnelBridge(this) { event, relay, pingMs, error ->
@@ -239,6 +241,15 @@ class StreamPassVpnService : VpnService() {
                 .addAddress("10.10.0.1", 30)
                 .addDnsServer("10.10.0.1")
                 .setMtu(mtu)
+            // MVP VPN is IPv4-only (sing-tun Inet4Address). Let IPv6 bypass TUN so
+            // dual-stack sites (ya.ru / 2ip) are not blackholed on AF_INET6.
+            // Documented product choice: IPv6 outside accelerator until IPv6 TUN lands.
+            try {
+                vpnBuilder.allowFamily(android.system.OsConstants.AF_INET6)
+                ConnectLogger.log(this, "ipv6=bypass (AF_INET6 outside TUN; VPN IPv4-only)")
+            } catch (t: Throwable) {
+                ConnectLogger.log(this, "ipv6 allowFamily skipped: ${t.message}")
+            }
             val routeInfo = VpnRouteConfigurator.apply(vpnBuilder, assets, networkMode)
             val extraBypass = parseBypassPackages(bypassPackagesJson)
             val bypassCount = VpnBypassApps.apply(vpnBuilder, packageManager, packageName, extraBypass)

@@ -26,9 +26,23 @@ import (
 type LogFunc func(message string)
 
 var (
-	logMu sync.RWMutex
-	logf  LogFunc
+	logMu        sync.RWMutex
+	logf         LogFunc
+	trafficReady atomic.Bool
 )
+
+// resetTrafficReady clears the session traffic-ready latch (handshake ≠ data path).
+func resetTrafficReady() {
+	trafficReady.Store(false)
+}
+
+// markTrafficReady emits a one-shot [vpn] traffic_ready when the first user-plane
+// byte/packet returns via DIRECT or RELAY (Architect Issue #1 / BL-001).
+func markTrafficReady(via string) {
+	if trafficReady.CompareAndSwap(false, true) {
+		logLine(fmt.Sprintf("[vpn] traffic_ready via=%s", via))
+	}
+}
 
 // SetLogger installs an optional diagnostic logger for dial failures.
 func SetLogger(fn LogFunc) {
@@ -107,6 +121,7 @@ func Start(ctx context.Context, fd int, hyClient client.Client, mtu uint32, engi
 
 // StartWithOptions is Start plus diagnostic toggles (UDP/443 block, …).
 func StartWithOptions(ctx context.Context, fd int, hyClient client.Client, mtu uint32, engine *decision.AtomicEngine, relayID string, opts Options) (*Session, error) {
+	resetTrafficReady()
 	if mtu == 0 {
 		mtu = 1400
 	}
@@ -302,6 +317,7 @@ func (h *routingHandler) pipeTCP(
 			bytes.Add(int64(n))
 			if fromRemote && firstByte.Load() == 0 {
 				firstByte.Store(time.Since(xferStart).Nanoseconds())
+				markTrafficReady(modeLabel)
 			}
 		},
 	}
@@ -557,6 +573,7 @@ func (h *routingHandler) relayUDP(
 				return
 			}
 			writeBuffer.Release()
+			markTrafficReady(modeLabel)
 		}
 	}()
 
@@ -609,6 +626,7 @@ func (h *routingHandler) copyUDPToAddr(ctx context.Context, conn N.PacketConn, u
 				return
 			}
 			writeBuffer.Release()
+			markTrafficReady("DIRECT")
 		}
 	}()
 

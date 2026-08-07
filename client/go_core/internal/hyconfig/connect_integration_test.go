@@ -131,6 +131,67 @@ func TestIntegrationHysteriaForeignIP(t *testing.T) {
 	}
 }
 
+// TestIntegrationHysteriaUDPEcho sends a DNS query over Hysteria UDP and expects a response.
+// Proves UDP data path (Architect Issue #1 Stage 3 / BL-001), not just handshake.
+func TestIntegrationHysteriaUDPEcho(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test skipped in short mode")
+	}
+	if os.Getenv("STREAMPASS_RELAY_TEST") == "0" {
+		t.Skip("STREAMPASS_RELAY_TEST=0")
+	}
+
+	cfg, _, err := BuildClientConfig(integrationConnectionConfig(t), "", 0)
+	if err != nil {
+		t.Fatalf("build config: %v", err)
+	}
+	hy, _, err := client.NewClient(cfg)
+	if err != nil {
+		t.Fatalf("hysteria connect: %v", err)
+	}
+	defer hy.Close()
+
+	udp, err := hy.UDP()
+	if err != nil {
+		t.Fatalf("hy.UDP: %v", err)
+	}
+	defer udp.Close()
+
+	// Minimal DNS query for example.com A (ID=0x1234).
+	query := []byte{
+		0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x07, 'e', 'x', 'a', 'm', 'p', 'l', 'e', 0x03, 'c', 'o', 'm', 0x00,
+		0x00, 0x01, 0x00, 0x01,
+	}
+	if err := udp.Send(query, "1.1.1.1:53"); err != nil {
+		t.Fatalf("udp send: %v", err)
+	}
+
+	deadline := time.After(15 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("no UDP DNS response via hysteria within 15s")
+		default:
+		}
+		data, addr, err := udp.Receive()
+		if err != nil {
+			t.Fatalf("udp receive: %v", err)
+		}
+		if !strings.Contains(addr, "1.1.1.1") {
+			continue
+		}
+		if len(data) < 12 {
+			t.Fatalf("udp response too short: %d", len(data))
+		}
+		if data[0] != 0x12 || data[1] != 0x34 {
+			t.Fatalf("dns id mismatch: %x%x", data[0], data[1])
+		}
+		t.Logf("UDP DNS via relay OK bytes=%d from=%s", len(data), addr)
+		return
+	}
+}
+
 // TestIntegrationHysteriaHTTPHead is a lighter check using HTTP through TCP tunnel.
 func TestIntegrationHysteriaHTTPHead(t *testing.T) {
 	if testing.Short() {

@@ -5,10 +5,12 @@
 #   .\scripts\DiagnoseTrafficBlock.ps1 -LiveProbe
 #   .\scripts\DiagnoseTrafficBlock.ps1 -ReportPath reports\QA\traffic-block-diagnosis.md
 #   .\scripts\DiagnoseTrafficBlock.ps1 -WithUnit
+#   .\scripts\DiagnoseTrafficBlock.ps1 -AllowNoVpn   # skip VPN gate (infra checks only)
 #
 param(
     [switch]$LiveProbe,
     [switch]$WithUnit,
+    [switch]$AllowNoVpn,
     [int]$ProbeWaitSeconds = 15,
     [string]$BaseUrl = "https://212-43-156-33.nip.io",
     [string]$ReportPath = ""
@@ -21,6 +23,7 @@ try {
 } catch {}
 
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+. (Join-Path $Root "scripts\StreamPassDeviceLogs.ps1")
 $findings = @()
 $blockers = @()
 $warns = @()
@@ -70,19 +73,7 @@ function Invoke-AdbQuiet {
 }
 
 function Get-DeviceLogs {
-    $prev = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    try {
-        $logcat = adb logcat -d -s StreamPassConnect StreamPassVpn StreamPassTunnel 2>&1
-        $appLog = adb exec-out run-as com.streampass.app cat files/connect.log 2>&1
-    } finally {
-        $ErrorActionPreference = $prev
-    }
-    $text = @($logcat) -join "`n"
-    if ($LASTEXITCODE -eq 0 -and $appLog -and ($appLog -notmatch "run-as")) {
-        $text += "`n" + ($appLog -join "`n")
-    }
-    return $text
+    return Get-StreamPassDeviceLogs
 }
 
 function Count-Pattern([string]$Text, [string]$Pattern) {
@@ -152,13 +143,18 @@ if ($devOut -match "`tunauthorized") {
 }
 
 $logs = ""
-$hasDevice = ($findings | Where-Object { $_.Layer -eq "device" -and $_.Status -eq "PASS" }).Count -gt 0
+$hasDevice = @($findings | Where-Object { $_.Layer -eq "device" -and $_.Status -eq "PASS" }).Count -gt 0
 if ($hasDevice) {
+    Initialize-StreamPassLogCapture
+    Write-StreamPassLogSourceNote
     $logs = Get-DeviceLogs
     if ([string]::IsNullOrWhiteSpace($logs)) {
         Add-Finding -Layer "device" -Check "connect logs" -Status "WARN" -Detail "empty - connect VPN in app first"
     } else {
         Add-Finding -Layer "device" -Check "connect logs" -Status "PASS" -Detail "$($logs.Length) chars"
+    }
+    if (-not $AllowNoVpn -and -not (Test-StreamPassVpnConnected $logs)) {
+        Add-Finding -Layer "vpn" -Check "pre-check" -Status "FAIL" -Detail "VPN not connected - connect in StreamPass first" -IsBlocker
     }
 }
 
@@ -255,13 +251,18 @@ if ($logs) {
 
 if ($LiveProbe -and $hasDevice) {
     Write-Host "--- Layer 4: Live probe ---" -ForegroundColor Cyan
-    Invoke-AdbQuiet @('logcat', '-c')
+    $probeMarker = "DIAGPROBE-$(Get-Date -Format 'HHmmss')"
+    Invoke-AdbQuiet @('shell', 'log', '-t', $probeMarker, 'marker')
     foreach ($url in @('https://www.youtube.com', 'https://gemini.google.com')) {
         Invoke-AdbQuiet @('shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', $url)
         Start-Sleep -Seconds ([math]::Max(5, $ProbeWaitSeconds / 2))
     }
     Start-Sleep -Seconds 3
-    $probe = Get-DeviceLogs
+    $probe = Get-StreamPassDeviceLogs -SinceMarker $probeMarker
+    if ([string]::IsNullOrWhiteSpace($probe)) {
+        $probe = Get-DeviceLogs
+    }
+    $probe = "$logs`n$probe"
 
     $probeRelay = Count-Pattern $probe '\[decision\][^\n]*action=RELAY'
     $probeMustFail = Count-Pattern $probe '\[tun\] must-relay fail'
@@ -320,5 +321,14 @@ if ($blockers.Count -gt 0) {
     Write-Host "VERDICT: TRAFFIC BLOCKED ($($blockers.Count) blocker(s))" -ForegroundColor Red
     exit 1
 }
-Write-Host "VERDICT: no critical blockers in logs (use -LiveProbe while VPN connected)" -ForegroundColor Green
+$vpnConnected = Test-StreamPassVpnConnected $logs
+if (-not $vpnConnected) {
+    Write-Host "VERDICT: INCONCLUSIVE - VPN not connected or connect lines missing from logcat (not a traffic PASS)" -ForegroundColor Yellow
+    exit 2
+}
+if ($LiveProbe -and ($findings | Where-Object { $_.Layer -eq "probe" -and $_.Status -eq "WARN" }).Count -gt 0) {
+    Write-Host "VERDICT: VPN up, no hard blockers, but live traffic proof incomplete (check foreign sites manually)" -ForegroundColor Yellow
+    exit 2
+}
+Write-Host "VERDICT: no critical blockers in captured logs" -ForegroundColor Green
 exit 0

@@ -6,13 +6,15 @@
 #   .\scripts\VerifyAppSiteSwitch.ps1                    # all scenarios, interactive
 #   .\scripts\VerifyAppSiteSwitch.ps1 -AutoLaunch        # adb opens URL/app, 12s wait each
 #   .\scripts\VerifyAppSiteSwitch.ps1 -Scenario site_youtube
-#   .\scripts\VerifyAppSiteSwitch.ps1 -SkipManual          # log analysis only, no y/n prompts
+#   .\scripts\VerifyAppSiteSwitch.ps1 -SkipManual          # log-only (manual scenarios -> INCONCLUSIVE, not PASS)
+#   .\scripts\VerifyAppSiteSwitch.ps1 -AllowNoVpn          # infra-only; skips VPN gate (not a traffic proof)
 #   .\scripts\VerifyAppSiteSwitch.ps1 -ReportPath reports\QA\traffic-switch-latest.md
 #
 param(
     [string[]]$Scenario = @(),
     [switch]$AutoLaunch,
     [switch]$SkipManual,
+    [switch]$AllowNoVpn,
     [switch]$WithUnit,
     [int]$WaitSeconds = 12,
     [string]$ReportPath = ""
@@ -26,9 +28,11 @@ try {
 
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $ExpectationsFile = Join-Path $Root "scripts\traffic_expectations.json"
+. (Join-Path $Root "scripts\StreamPassDeviceLogs.ps1")
 $results = @()
 $failCount = 0
 $warnCount = 0
+$inconclusiveCount = 0
 
 function Write-Step([string]$level, [string]$msg, [string]$detail = "") {
     switch ($level) {
@@ -64,28 +68,6 @@ function Test-PackageInstalled([string]$pkg) {
     return ($out -match "package:")
 }
 
-function Get-FreshLogs {
-    param([string]$SinceMarker)
-    $prevEap = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    try {
-        $logcat = adb logcat -d -s StreamPassConnect StreamPassVpn StreamPassTunnel 2>&1
-        $appLog = adb exec-out run-as com.streampass.app cat files/connect.log 2>&1
-    } finally {
-        $ErrorActionPreference = $prevEap
-    }
-    $combined = @($logcat)
-    if ($LASTEXITCODE -eq 0 -and $appLog -and ($appLog -notmatch "run-as")) {
-        $combined += $appLog
-    }
-    $text = $combined -join "`n"
-    if ($SinceMarker -and $text -match [regex]::Escape($SinceMarker)) {
-        $idx = $text.LastIndexOf($SinceMarker)
-        if ($idx -ge 0) { return $text.Substring($idx) }
-    }
-    return $text
-}
-
 function Invoke-ScenarioLaunch {
     param($sc)
     if ($sc.type -eq "site" -and $sc.url) {
@@ -117,11 +99,14 @@ function Analyze-Scenario {
         $sc,
         [string]$ConnectLogs,
         [string]$StepLogs,
-        [hashtable]$ManualAnswers
+        [hashtable]$ManualAnswers,
+        [switch]$SkipManualChecks
     )
     $issues = @()
     $notes = @()
     $status = "PASS"
+    $requiredSuccess = @($sc.success_signs | Where-Object { $_ -and -not $_.optional })
+    $manualChecks = @($sc.manual_checks | Where-Object { $_ })
 
     foreach ($sign in @($sc.success_signs)) {
         if (-not $sign.pattern) { continue }
@@ -148,7 +133,7 @@ function Analyze-Scenario {
         }
     }
 
-    foreach ($check in @($sc.manual_checks)) {
+    foreach ($check in $manualChecks) {
         if ($ManualAnswers.ContainsKey($check)) {
             if (-not $ManualAnswers[$check]) {
                 $issues += "FAIL (manual): $check"
@@ -156,6 +141,22 @@ function Analyze-Scenario {
             } else {
                 $notes += "OK (manual): $check"
             }
+        }
+    }
+
+    if ($SkipManualChecks -and $manualChecks.Count -gt 0) {
+        $matchedRequired = $false
+        foreach ($sign in $requiredSuccess) {
+            if (-not $sign.pattern) { continue }
+            $rx = [regex]$sign.pattern
+            if ($rx.IsMatch($StepLogs) -or $rx.IsMatch($ConnectLogs)) {
+                $matchedRequired = $true
+                break
+            }
+        }
+        if ($requiredSuccess.Count -eq 0 -or -not $matchedRequired) {
+            if ($status -ne "FAIL") { $status = "INCONCLUSIVE" }
+            $issues += "INCONCLUSIVE: manual checks skipped (-SkipManual); log proof insufficient"
         }
     }
 
@@ -223,11 +224,14 @@ if (-not $devLine) {
 }
 Write-Step "PASS" "adb device: $($devLine.Line.Trim())"
 
-$connectLogs = Get-FreshLogs -SinceMarker ""
-if ($connectLogs -notmatch "tunnel event=connected|connected") {
-    Write-Step "WARN" "VPN may not be connected - connect in StreamPass first"
+Initialize-StreamPassLogCapture
+Write-StreamPassLogSourceNote
+
+$connectLogs = Get-StreamPassDeviceLogs
+if (Assert-StreamPassVpnConnected -Logs $connectLogs -AllowNoVpn:$AllowNoVpn) {
+    Write-Step "PASS" "VPN connected (tunnel event=connected in logs)"
 } else {
-    Write-Step "PASS" "VPN connected (found in logs)"
+    Write-Step "WARN" "VPN not connected (-AllowNoVpn: continuing, results not valid for traffic QA)"
 }
 
 $scenarios = @($expectations.switch_scenarios)
@@ -268,7 +272,7 @@ foreach ($sc in $scenarios) {
     }
 
     $marker = "SWITCHQA-$($sc.id)-$(Get-Date -Format 'HHmmss')"
-    Invoke-AdbQuiet @('logcat', '-c')
+    # Do not logcat -c: it drops tunnel event=connected and connect-time signs on release builds.
     Invoke-AdbQuiet @('shell', 'log', '-t', $marker, 'marker')
 
     $launchInfo = ""
@@ -286,9 +290,9 @@ foreach ($sc in $scenarios) {
         }
     }
 
-    $stepLogs = Get-FreshLogs -SinceMarker $marker
+    $stepLogs = Get-StreamPassDeviceLogs -SinceMarker $marker
     if ([string]::IsNullOrWhiteSpace($stepLogs)) {
-        $stepLogs = Get-FreshLogs -SinceMarker ""
+        $stepLogs = Get-StreamPassDeviceLogs
     }
 
     $manualAnswers = @{}
@@ -307,19 +311,29 @@ foreach ($sc in $scenarios) {
         }
     }
 
-    $analysis = Analyze-Scenario -sc $sc -ConnectLogs $connectLogs -StepLogs $stepLogs -ManualAnswers $manualAnswers
+    $analysis = Analyze-Scenario -sc $sc -ConnectLogs $connectLogs -StepLogs $stepLogs -ManualAnswers $manualAnswers -SkipManualChecks:$SkipManual
 
     foreach ($n in $analysis.Notes) { Write-Step "PASS" $n }
-    foreach ($i in $analysis.Issues) {
-        if ($i -like "WARN:*") { Write-Step "WARN" ($i -replace "^WARN:\s*", ""); $warnCount++ }
-        else { Write-Step "FAIL" ($i -replace "^FAIL.*?:\s*", ""); $failCount++ }
+    foreach ($i in @($analysis.Issues)) {
+        if ($i -like "INCONCLUSIVE:*") {
+            Write-Step "SKIP" ($i -replace "^INCONCLUSIVE:\s*", "")
+            $inconclusiveCount++
+        } elseif ($i -like "WARN:*") {
+            Write-Step "WARN" ($i -replace "^WARN:\s*", "")
+            $warnCount++
+        } else {
+            Write-Step "FAIL" ($i -replace "^FAIL.*?:\s*", "")
+            $failCount++
+        }
     }
 
-    if ($analysis.Issues.Count -eq 0) {
-        Write-Step "PASS" "$($sc.id) - no problems detected"
+    if ($analysis.Status -eq "PASS" -and @($analysis.Issues).Count -eq 0) {
+        Write-Step "PASS" "$($sc.id) - verified (logs and/or manual)"
+    } elseif ($analysis.Status -eq "INCONCLUSIVE") {
+        Write-Step "SKIP" "$($sc.id) - inconclusive (needs manual checks or better logs)"
     }
 
-    $problemText = ($analysis.Issues -join "; ")
+    $problemText = (@($analysis.Issues) -join "; ")
     if (-not $problemText) { $problemText = "-" }
 
     $results += [pscustomobject]@{
@@ -341,24 +355,35 @@ $passed = ($results | Where-Object { $_.Status -eq "PASS" }).Count
 $failed = ($results | Where-Object { $_.Status -eq "FAIL" }).Count
 $warned = ($results | Where-Object { $_.Status -eq "WARN" }).Count
 $skipped = ($results | Where-Object { $_.Status -eq "SKIP" }).Count
-Write-Host "  PASS: $passed | WARN: $warned | FAIL: $failed | SKIP: $skipped" -ForegroundColor $(if ($failed -gt 0) { "Red" } elseif ($warned -gt 0) { "Yellow" } else { "Green" })
+$inconclusive = ($results | Where-Object { $_.Status -eq "INCONCLUSIVE" }).Count
+Write-Host "  PASS: $passed | WARN: $warned | FAIL: $failed | INCONCLUSIVE: $inconclusive | SKIP: $skipped" -ForegroundColor $(if ($failed -gt 0) { "Red" } elseif ($inconclusive -gt 0 -or $warned -gt 0) { "Yellow" } else { "Green" })
+if (-not $AllowNoVpn -and -not (Test-StreamPassVpnConnected $connectLogs)) {
+    Write-Host "  NOTE: run aborted early if VPN gate fails; use -AllowNoVpn only for adb smoke." -ForegroundColor DarkYellow
+}
+if ($SkipManual) {
+    Write-Host "  NOTE: -SkipManual disables manual_checks; scenarios without log proof -> INCONCLUSIVE." -ForegroundColor DarkYellow
+}
 
 if ($ReportPath) {
     $dir = Split-Path -Parent (Join-Path $Root $ReportPath)
     if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
     $fullPath = Join-Path $Root $ReportPath
     $ts = Get-Date -Format "yyyy-MM-dd HH:mm"
+    $persistNote = if ($script:StreamPassPersistLogAvailable) { "logcat + connect.log" } else { "logcat only (release APK)" }
+    $vpnNote = if (Test-StreamPassVpnConnected $connectLogs) { "connected" } else { "NOT connected" }
     $md = @(
         "# Traffic switch QA report",
         "",
         "Generated: $ts",
         "",
+        "Log source: $persistNote | VPN at start: $vpnNote | SkipManual: $SkipManual",
+        "",
         "| ID | Label | Type | Expected | Status | Problems |",
         "|----|-------|------|----------|--------|----------|"
     )
     foreach ($r in $results) {
-        $prob = $r.Problems -replace [char]0x007C, '/'
-        $prob = $prob -replace "`n", " "
+        $prob = ([string]$r.Problems) -replace '\|', '/'
+        $prob = $prob -replace "`r?`n", " "
         $md += "| $($r.Id) | $($r.Label) | $($r.Type) | $($r.Decision) | $($r.Status) | $prob |"
     }
     $md += ""
@@ -371,4 +396,5 @@ if ($ReportPath) {
 }
 
 if ($failed -gt 0 -or $failCount -gt 0) { exit 1 }
+if ($inconclusive -gt 0 -or $inconclusiveCount -gt 0) { exit 2 }
 exit 0

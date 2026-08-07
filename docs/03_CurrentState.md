@@ -21,13 +21,15 @@
 
 `postgres`, `redis`, `backend`, `healthmonitor`, `caddy` (+ volume `./admin`), `prometheus`, `node-exporter`, `grafana`.
 
-### Android Client (Flutter) — v0.1.1+34
+### Android Client (Flutter) — v0.1.1+35
 
 | Возможность | Статус |
 |-------------|--------|
 | Ускоритель (Hysteria2 + TUN + protect) | ✅ |
 | Decision Engine + Rule polling (`DefaultMode=DIRECT`, routing-policy-v1) | ✅ |
 | DNS-in-TUN `10.10.0.1` + HostForIP + Google/Meta CIDR safety net | ✅ |
+| IPv6 bypass (`allowFamily(AF_INET6)` — VPN IPv4-only) | ✅ +35 |
+| `[vpn] traffic_ready` after first user-plane byte | ✅ +35 |
 | OS split-tunnel RU CIDR / intl routes | ✅ |
 | App bypass (Госуслуги/ФНС/банки, эвристика) | ✅ |
 | Split DNS (.ru → Yandex, foreign → DoH) | ✅ |
@@ -85,14 +87,14 @@
 | API | `https://212-43-156-33.nip.io` |
 | Admin | `https://212-43-156-33.nip.io/admin/` |
 | Relays | `nl-native-1`, `nl-amsterdam-1` (регион `nl`); DE/PL/FI — софт готов, нод нет |
-| APK | `StreamPass-v0.1.1+34-signed-arm64.apk` (`routing-policy-v1`) |
+| APK | `StreamPass-v0.1.1+35-signed-arm64.apk` (`routing-policy-v1`) |
 | OTA | `https://212-43-156-33.nip.io/downloads/StreamPass.apk` |
 
 ---
 
 ## Следующие шаги (приоритет)
 
-1. Device QA retest OTA **+34** (BUG-001/002) — `docs/18_KnownIssues.md`
+1. Device QA retest OTA **+35** (Issue #1 Stage 0 matrix + BUG-001/002) — `docs/18_KnownIssues.md`
 2. Брендовый домен — только после покупки DNS
 3. ЮKassa live — только по явному запросу → затем BL-030
 4. Desktop/mobile другие ОС — только по явному запросу
