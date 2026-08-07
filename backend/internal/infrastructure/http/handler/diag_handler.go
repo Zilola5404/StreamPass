@@ -22,21 +22,24 @@ func NewDiagHandler(svc *diagsvc.Service) *DiagHandler {
 }
 
 type diagEventDTO struct {
-	UserID        string `json:"user_id,omitempty"`
-	Proto         string `json:"proto"`
-	Site          string `json:"site"`
-	Host          string `json:"host"`
-	DestIP        string `json:"dest_ip"`
-	DestPort      int    `json:"dest_port"`
-	Mode          string `json:"mode"`
-	Result        string `json:"result"`
-	LatencyMS     int    `json:"latency_ms"`
-	Slow          bool   `json:"slow"`
-	Reason        string `json:"reason"`
-	ErrorCode     string `json:"error_code"`
-	RelayID       string `json:"relay_id"`
-	ClientVersion string `json:"client_version"`
-	RecordedAt    string `json:"recorded_at,omitempty"`
+	UserID         string `json:"user_id,omitempty"`
+	Proto          string `json:"proto"`
+	Site           string `json:"site"`
+	Host           string `json:"host"`
+	DestIP         string `json:"dest_ip"`
+	DestPort       int    `json:"dest_port"`
+	Mode           string `json:"mode"`
+	Result         string `json:"result"`
+	LatencyMS      int    `json:"latency_ms"`
+	Slow           bool   `json:"slow"`
+	SpeedKbps      int    `json:"speed_kbps"`
+	Reason         string `json:"reason"`
+	Rule           string `json:"rule"`
+	DecisionReason string `json:"decision_reason"`
+	ErrorCode      string `json:"error_code"`
+	RelayID        string `json:"relay_id"`
+	ClientVersion  string `json:"client_version"`
+	RecordedAt     string `json:"recorded_at,omitempty"`
 }
 
 type diagBatchRequest struct {
@@ -58,19 +61,22 @@ func (h *DiagHandler) RecordBatch(w http.ResponseWriter, r *http.Request) {
 	events := make([]diag.Event, 0, len(req.Events))
 	for _, d := range req.Events {
 		e := diag.Event{
-			Proto:         d.Proto,
-			Site:          d.Site,
-			Host:          d.Host,
-			DestIP:        d.DestIP,
-			DestPort:      d.DestPort,
-			Mode:          d.Mode,
-			Result:        d.Result,
-			LatencyMS:     d.LatencyMS,
-			Slow:          d.Slow,
-			Reason:        d.Reason,
-			ErrorCode:     d.ErrorCode,
-			RelayID:       d.RelayID,
-			ClientVersion: d.ClientVersion,
+			Proto:          d.Proto,
+			Site:           d.Site,
+			Host:           d.Host,
+			DestIP:         d.DestIP,
+			DestPort:       d.DestPort,
+			Mode:           d.Mode,
+			Result:         d.Result,
+			LatencyMS:      d.LatencyMS,
+			Slow:           d.Slow,
+			SpeedKbps:      d.SpeedKbps,
+			Reason:         d.Reason,
+			Rule:           d.Rule,
+			DecisionReason: d.DecisionReason,
+			ErrorCode:      d.ErrorCode,
+			RelayID:        d.RelayID,
+			ClientVersion:  d.ClientVersion,
 		}
 		if d.RecordedAt != "" {
 			if t, err := time.Parse(time.RFC3339, d.RecordedAt); err == nil {
@@ -103,21 +109,24 @@ func (h *DiagHandler) ListAdmin(w http.ResponseWriter, r *http.Request) {
 	out := make([]diagEventDTO, 0, len(list))
 	for _, e := range list {
 		out = append(out, diagEventDTO{
-			UserID:        e.UserID,
-			Proto:         e.Proto,
-			Site:          e.Site,
-			Host:          e.Host,
-			DestIP:        e.DestIP,
-			DestPort:      e.DestPort,
-			Mode:          e.Mode,
-			Result:        e.Result,
-			LatencyMS:     e.LatencyMS,
-			Slow:          e.Slow,
-			Reason:        e.Reason,
-			ErrorCode:     e.ErrorCode,
-			RelayID:       e.RelayID,
-			ClientVersion: e.ClientVersion,
-			RecordedAt:    e.RecordedAt.Format(httpx.TimeFormat),
+			UserID:         e.UserID,
+			Proto:          e.Proto,
+			Site:           e.Site,
+			Host:           e.Host,
+			DestIP:         e.DestIP,
+			DestPort:       e.DestPort,
+			Mode:           e.Mode,
+			Result:         e.Result,
+			LatencyMS:      e.LatencyMS,
+			Slow:           e.Slow,
+			SpeedKbps:      e.SpeedKbps,
+			Reason:         e.Reason,
+			Rule:           e.Rule,
+			DecisionReason: e.DecisionReason,
+			ErrorCode:      e.ErrorCode,
+			RelayID:        e.RelayID,
+			ClientVersion:  e.ClientVersion,
+			RecordedAt:     e.RecordedAt.Format(httpx.TimeFormat),
 		})
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)

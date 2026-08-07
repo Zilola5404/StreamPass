@@ -93,7 +93,8 @@ func TunIPv4Host() string {
 }
 
 // Start brings up the TUN stack and routes each flow via the Decision Engine.
-func Start(ctx context.Context, fd int, hyClient client.Client, mtu uint32, engine *decision.AtomicEngine) (*Session, error) {
+// relayID is an operator label (host/id) attached to RELAY diag events.
+func Start(ctx context.Context, fd int, hyClient client.Client, mtu uint32, engine *decision.AtomicEngine, relayID string) (*Session, error) {
 	if mtu == 0 {
 		mtu = 1400
 	}
@@ -114,7 +115,7 @@ func Start(ctx context.Context, fd int, hyClient client.Client, mtu uint32, engi
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)
-	handler := &routingHandler{client: hyClient, engine: engine}
+	handler := &routingHandler{client: hyClient, engine: engine, relayID: relayID}
 	stack, err := tun.NewStack("system", tun.StackOptions{
 		Context:    runCtx,
 		Tun:        tunDev,
@@ -149,8 +150,9 @@ func Start(ctx context.Context, fd int, hyClient client.Client, mtu uint32, engi
 }
 
 type routingHandler struct {
-	client client.Client
-	engine *decision.AtomicEngine
+	client  client.Client
+	engine  *decision.AtomicEngine
+	relayID string
 }
 
 func (h *routingHandler) PrepareConnection(
@@ -191,34 +193,46 @@ func (h *routingHandler) NewConnectionEx(
 		defer onClose(nil)
 	}
 
-	mode := h.engine.Decide(h.targetFrom(destination))
+	dec := h.engine.DecideDetailed(h.targetFrom(destination))
+	mode := dec.Mode
 	host, destIP, destPort := splitDest(destination)
-	logLine(fmt.Sprintf("[tun] tcp mode=%s dest=%s", mode, destination.String()))
+	logLine(fmt.Sprintf("[tun] tcp mode=%s rule=%s reason=%s dest=%s", mode, dec.Rule, dec.Reason, destination.String()))
+	logLine(fmt.Sprintf("[decision] host=%s ip=%s rule=%s action=%s reason=%s", host, destIP, dec.Rule, mode, dec.Reason))
 	switch mode {
 	case decision.ModeDirect:
-		h.pipeTCP(ctx, conn, destination, host, destIP, destPort, string(mode), true)
+		h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, true)
 	case decision.ModeFallback:
-		if !h.pipeTCP(ctx, conn, destination, host, destIP, destPort, "FALLBACK", false) {
-			h.pipeTCP(ctx, conn, destination, host, destIP, destPort, "FALLBACK", true)
+		if !h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, false) {
+			h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, true)
 		}
 	default:
-		if !h.pipeTCP(ctx, conn, destination, host, destIP, destPort, "RELAY", false) {
+		if !h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, false) {
 			logLine(fmt.Sprintf("[tun] relay-tcp dropped dest=%s (RELAY fail, no direct fallback)", destination.String()))
 		}
 	}
 }
 
-// pipeTCP dials (direct or relay), emits [diag] with dial RTT, then copies until close.
-// Returns true if dial succeeded.
+// pipeTCP dials (direct or relay), emits [diag] with dial RTT + decision reason,
+// then copies until close (emitting throughput when enough bytes moved).
 func (h *routingHandler) pipeTCP(
 	ctx context.Context,
 	conn net.Conn,
 	destination M.Socksaddr,
 	host, destIP string,
 	destPort int,
-	modeLabel string,
+	dec decision.Decision,
 	direct bool,
 ) bool {
+	modeLabel := string(dec.Mode)
+	if !direct && dec.Mode == decision.ModeFallback {
+		modeLabel = "FALLBACK"
+	} else if direct && dec.Mode == decision.ModeFallback {
+		modeLabel = "FALLBACK"
+	} else if direct {
+		modeLabel = "DIRECT"
+	} else {
+		modeLabel = "RELAY"
+	}
 	start := time.Now()
 	var remote net.Conn
 	var err error
@@ -227,21 +241,52 @@ func (h *routingHandler) pipeTCP(
 		remote, err = dialer.DialContext(ctx, "tcp", destination.String())
 		if err != nil {
 			logLine(fmt.Sprintf("[tun] direct-tcp fail dest=%s err=%v", destination.String(), err))
-			emitDiag("tcp", host, destIP, destPort, modeLabel, false, time.Since(start), err.Error())
+			emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), err.Error(), 0)
 			return false
 		}
 	} else {
 		remote, err = h.client.TCP(destination.String())
 		if err != nil {
 			logLine(fmt.Sprintf("[tun] relay-tcp fail dest=%s err=%v", destination.String(), err))
-			emitDiag("tcp", host, destIP, destPort, modeLabel, false, time.Since(start), err.Error())
+			emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), err.Error(), 0)
 			return false
 		}
 	}
-	emitDiag("tcp", host, destIP, destPort, modeLabel, true, time.Since(start), "")
-	defer remote.Close()
-	_ = bufio.CopyConn(ctx, conn, remote)
+	dialDur := time.Since(start)
+	emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, true, dialDur, "", 0)
+
+	var bytes int64
+	counted := &countingConn{Conn: remote, n: &bytes}
+	xferStart := time.Now()
+	_ = bufio.CopyConn(ctx, conn, counted)
+	_ = remote.Close()
+	xferDur := time.Since(xferStart)
+	if bytes >= 32*1024 && xferDur > 500*time.Millisecond {
+		kbps := int(float64(bytes*8/1024) / xferDur.Seconds())
+		emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "transfer_done", h.relayID, true, xferDur, "", kbps)
+	}
 	return true
+}
+
+type countingConn struct {
+	net.Conn
+	n *int64
+}
+
+func (c *countingConn) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	if n > 0 && c.n != nil {
+		*c.n += int64(n)
+	}
+	return n, err
+}
+
+func (c *countingConn) Write(p []byte) (int, error) {
+	n, err := c.Conn.Write(p)
+	if n > 0 && c.n != nil {
+		*c.n += int64(n)
+	}
+	return n, err
 }
 
 func (h *routingHandler) NewPacketConnectionEx(
@@ -267,17 +312,19 @@ func (h *routingHandler) NewPacketConnectionEx(
 		return
 	}
 
-	mode := h.engine.Decide(h.targetFrom(destination))
+	dec := h.engine.DecideDetailed(h.targetFrom(destination))
+	mode := dec.Mode
 	host, destIP, destPort := splitDest(destination)
+	logLine(fmt.Sprintf("[decision] host=%s ip=%s rule=%s action=%s reason=%s proto=udp", host, destIP, dec.Rule, mode, dec.Reason))
 	switch mode {
 	case decision.ModeDirect:
-		h.relayUDP(ctx, conn, destination, true, host, destIP, destPort, string(mode))
+		h.relayUDP(ctx, conn, destination, true, host, destIP, destPort, dec)
 	case decision.ModeFallback:
-		if !h.relayUDP(ctx, conn, destination, false, host, destIP, destPort, "FALLBACK") {
-			h.relayUDP(ctx, conn, destination, true, host, destIP, destPort, "FALLBACK")
+		if !h.relayUDP(ctx, conn, destination, false, host, destIP, destPort, dec) {
+			h.relayUDP(ctx, conn, destination, true, host, destIP, destPort, dec)
 		}
 	default:
-		h.relayUDP(ctx, conn, destination, false, host, destIP, destPort, "RELAY")
+		h.relayUDP(ctx, conn, destination, false, host, destIP, destPort, dec)
 	}
 }
 
@@ -320,42 +367,48 @@ func (h *routingHandler) relayUDP(
 	direct bool,
 	host, destIP string,
 	destPort int,
-	modeLabel string,
+	dec decision.Decision,
 ) bool {
 	destAddr := destination.String()
 	start := time.Now()
+	modeLabel := "RELAY"
+	if direct {
+		modeLabel = "DIRECT"
+	} else if dec.Mode == decision.ModeFallback {
+		modeLabel = "FALLBACK"
+	}
 
 	if direct {
 		var lc net.ListenConfig
 		lc.Control = protect.Control
 		packetConn, err := lc.ListenPacket(ctx, "udp", "")
 		if err != nil {
-			emitDiag("udp", host, destIP, destPort, modeLabel, false, time.Since(start), err.Error())
+			emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), err.Error(), 0)
 			return false
 		}
 		defer packetConn.Close()
 		udpRemote, ok := packetConn.(*net.UDPConn)
 		if !ok {
-			emitDiag("udp", host, destIP, destPort, modeLabel, false, time.Since(start), "not_udp")
+			emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), "not_udp", 0)
 			return false
 		}
 		raddr, err := net.ResolveUDPAddr("udp", destAddr)
 		if err != nil {
-			emitDiag("udp", host, destIP, destPort, modeLabel, false, time.Since(start), err.Error())
+			emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), err.Error(), 0)
 			return false
 		}
-		emitDiag("udp", host, destIP, destPort, modeLabel, true, time.Since(start), "")
+		emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, true, time.Since(start), "", 0)
 		h.copyUDPToAddr(ctx, conn, udpRemote, destination, raddr)
 		return true
 	}
 
 	hyUDP, err := h.client.UDP()
 	if err != nil {
-		emitDiag("udp", host, destIP, destPort, modeLabel, false, time.Since(start), err.Error())
+		emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), err.Error(), 0)
 		return false
 	}
 	defer hyUDP.Close()
-	emitDiag("udp", host, destIP, destPort, modeLabel, true, time.Since(start), "")
+	emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, true, time.Since(start), "", 0)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -560,23 +613,34 @@ const (
 	slowDialThreshold  = 1500 * time.Millisecond
 )
 
-func emitDiag(proto, host, destIP string, destPort int, mode string, ok bool, d time.Duration, errMsg string) {
+func emitDiag(proto, host, destIP string, destPort int, mode, rule, decisionReason, relayID string, ok bool, d time.Duration, errMsg string, speedKbps int) {
 	if host == "" && destIP != "" {
 		host = dnscache.HostForIP(destIP)
 	}
 	site := siteLabel(host, destIP)
 	via := strings.ToUpper(mode)
 	result := "ok"
-	reason := reasonOK(via)
+	reason := decisionReason
+	if reason == "" {
+		reason = reasonOK(via)
+	}
 	slow := 0
-	if !ok {
+	if speedKbps > 0 && decisionReason == "transfer_done" {
+		result = "xfer"
+		reason = "transfer_done"
+	} else if !ok {
 		result, reason = classifyFail(via, errMsg)
 	} else if d >= slowDialThreshold {
 		result = "slow"
 		slow = 1
-		reason = "slow_dial_" + strings.ToLower(via)
-	} else {
-		key := proto + "|" + via + "|" + host + "|" + destIP + "|" + fmt.Sprintf("%d", destPort)
+		if reason == "" || strings.HasPrefix(reason, "ok_") || strings.HasPrefix(reason, "rule_") ||
+			strings.HasPrefix(reason, "russian_") || strings.HasPrefix(reason, "global_") ||
+			strings.HasPrefix(reason, "international_") || strings.HasPrefix(reason, "default_") ||
+			strings.HasPrefix(reason, "user_") || strings.HasPrefix(reason, "critical_") {
+			reason = "slow_dial_" + strings.ToLower(via)
+		}
+	} else if speedKbps == 0 {
+		key := proto + "|" + via + "|" + host + "|" + destIP + "|" + fmt.Sprintf("%d", destPort) + "|" + rule
 		if prev, loaded := okDiagThrottle.Load(key); loaded {
 			if t, okT := prev.(time.Time); okT && time.Since(t) < okDiagMinInterval {
 				return
@@ -585,15 +649,20 @@ func emitDiag(proto, host, destIP string, destPort int, mode string, ok bool, d 
 		okDiagThrottle.Store(key, time.Now())
 	}
 	errCode := sanitizeErr(errMsg)
-	// Machine-readable line (uploaded to backend).
+	rule = sanitizeErr(rule)
+	decisionReason = sanitizeErr(decisionReason)
+	relayID = sanitizeErr(relayID)
+	if reason == "" {
+		reason = decisionReason
+	}
+	reason = sanitizeErr(reason)
 	logLine(fmt.Sprintf(
-		"[diag] proto=%s site=%s host=%s dest_ip=%s dest_port=%d mode=%s via=%s result=%s latency_ms=%d slow=%d reason=%s error=%s",
-		proto, site, host, destIP, destPort, via, via, result, d.Milliseconds(), slow, reason, errCode,
+		"[diag] proto=%s site=%s host=%s dest_ip=%s dest_port=%d mode=%s via=%s rule=%s decision=%s relay_id=%s result=%s latency_ms=%d slow=%d speed_kbps=%d reason=%s error=%s",
+		proto, site, host, destIP, destPort, via, via, rule, decisionReason, relayID, result, d.Milliseconds(), slow, speedKbps, reason, errCode,
 	))
-	// Human-readable route summary for on-device diagnostics screen.
 	logLine(fmt.Sprintf(
-		"[route] %s ip=%s:%d via=%s → %s (%dms) %s",
-		siteOrDash(site), destIP, destPort, via, result, d.Milliseconds(), reason,
+		"[route] %s ip=%s:%d via=%s rule=%s → %s (%dms, %dkbps) %s",
+		siteOrDash(site), destIP, destPort, via, rule, result, d.Milliseconds(), speedKbps, reason,
 	))
 }
 

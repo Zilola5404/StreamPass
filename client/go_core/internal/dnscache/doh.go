@@ -192,8 +192,8 @@ func emitDNSDiag(host, via string, rttMS int64, errMsg string) {
 		site = "https://" + host
 	}
 	logLine(nil, fmt.Sprintf(
-		"[diag] proto=dns site=%s host=%s dest_ip= dest_port=53 mode=DNS via=%s result=%s latency_ms=%d slow=0 reason=%s error=%s",
-		site, host, strings.ToUpper(via), result, rttMS, reason, sanitizeDNSErr(errMsg),
+		"[diag] proto=dns site=%s host=%s dest_ip= dest_port=53 mode=DNS via=%s rule=dns decision=%s relay_id= result=%s latency_ms=%d slow=0 speed_kbps=0 reason=%s error=%s",
+		site, host, strings.ToUpper(via), reason, result, rttMS, reason, sanitizeDNSErr(errMsg),
 	))
 }
 

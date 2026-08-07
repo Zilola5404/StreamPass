@@ -19,9 +19,14 @@ func NewAtomicEngine(engine *Engine, version int) *AtomicEngine {
 
 // Decide evaluates the current rule set.
 func (a *AtomicEngine) Decide(t Target) Mode {
+	return a.DecideDetailed(t).Mode
+}
+
+// DecideDetailed evaluates mode + rule/reason for diagnostics.
+func (a *AtomicEngine) DecideDetailed(t Target) Decision {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	return a.engine.Decide(t)
+	return a.engine.DecideDetailed(t)
 }
 
 // Version returns the loaded rule set version (0 if unknown).

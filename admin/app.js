@@ -32,6 +32,12 @@
     configError: document.getElementById("config-error"),
     configRefresh: document.getElementById("config-refresh"),
     configOut: document.getElementById("config-out"),
+    diagRefresh: document.getElementById("diag-refresh"),
+    diagError: document.getElementById("diag-error"),
+    diagLimit: document.getElementById("diag-limit"),
+    diagFails: document.getElementById("diag-fails"),
+    diagProblems: document.getElementById("diag-problems"),
+    diagBody: document.getElementById("diag-body"),
   };
 
   function defaultApiBase() {
@@ -146,6 +152,59 @@
     if (name === "relays") loadRelays();
     if (name === "rules") loadRules();
     if (name === "config") loadConfig();
+    if (name === "diagnostics") loadDiagnostics();
+  }
+
+  async function loadDiagnostics() {
+    if (!el.diagBody) return;
+    el.diagError.hidden = true;
+    el.diagBody.innerHTML = `<tr><td colspan="9">Загрузка…</td></tr>`;
+    el.diagProblems.textContent = "…";
+    try {
+      const limit = Number(el.diagLimit?.value || 100);
+      let events = await api(`/admin/diag?limit=${encodeURIComponent(limit)}`);
+      if (!Array.isArray(events)) events = [];
+      if (el.diagFails?.checked) {
+        events = events.filter((e) => e.result && e.result !== "ok" && e.result !== "xfer");
+      }
+      const problemMap = new Map();
+      for (const e of events) {
+        if (!e.result || e.result === "ok" || e.result === "xfer") continue;
+        const key = `${e.site || e.host || e.dest_ip || "?"} | ${e.reason || e.result}`;
+        problemMap.set(key, (problemMap.get(key) || 0) + 1);
+      }
+      const top = [...problemMap.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 15)
+        .map(([k, n]) => `${n}×  ${k}`);
+      el.diagProblems.textContent = top.length ? top.join("\n") : "Проблем в выборке нет";
+      el.diagBody.innerHTML = events
+        .map((e) => {
+          const site = esc(e.site || e.host || "");
+          const ip = esc(`${e.dest_ip || ""}:${e.dest_port || ""}`);
+          const rule = esc([e.rule, e.decision_reason].filter(Boolean).join(" / "));
+          return `<tr>
+            <td class="mono">${esc(e.recorded_at || "")}</td>
+            <td>${site}</td>
+            <td class="mono">${ip}</td>
+            <td>${esc(e.mode || "")}</td>
+            <td>${esc(e.result || "")}${e.slow ? " 🐢" : ""}</td>
+            <td class="mono">${esc(e.latency_ms ?? "")}</td>
+            <td class="mono">${esc(e.speed_kbps ?? "")}</td>
+            <td class="mono">${rule}</td>
+            <td>${esc(e.reason || e.error_code || "")}</td>
+          </tr>`;
+        })
+        .join("");
+      if (!events.length) {
+        el.diagBody.innerHTML = `<tr><td colspan="9">Нет событий</td></tr>`;
+      }
+    } catch (err) {
+      el.diagError.hidden = false;
+      el.diagError.textContent = String(err.message || err);
+      el.diagBody.innerHTML = "";
+      el.diagProblems.textContent = "";
+    }
   }
 
   async function runHealthCheck() {
@@ -374,6 +433,8 @@
   el.rulesPublish.addEventListener("click", () => publishRules());
   el.configRefresh.addEventListener("click", () => loadConfig());
   el.configForm.addEventListener("submit", publishConfig);
+  el.diagRefresh?.addEventListener("click", () => loadDiagnostics());
+  el.diagFails?.addEventListener("change", () => loadDiagnostics());
 
   el.relaysBody.addEventListener("click", async (ev) => {
     const btn = ev.target.closest("[data-delete-relay]");

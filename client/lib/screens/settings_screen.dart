@@ -185,6 +185,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             activeColor: AppColors.cyan,
             onChanged: _updateAutoRelay,
           ),
+          SwitchListTile(
+            title: const Text('Диагностика трафика'),
+            subtitle: const Text('Отправлять маршруты/задержки на сервер (без URL страниц)'),
+            value: _settings.diagnosticsEnabled,
+            activeColor: AppColors.cyan,
+            onChanged: (v) async {
+              await _service.setDiagnosticsEnabled(v);
+              setState(() => _settings = _settings.copyWith(diagnosticsEnabled: v));
+            },
+          ),
           const Divider(height: 32),
           _SectionLabel('Маршрутизация'),
           ListTile(

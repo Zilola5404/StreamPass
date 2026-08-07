@@ -49,7 +49,7 @@ Write-Host "Fetched $count event(s)"
 
 if ($count -gt 0) {
     $events |
-        Select-Object recorded_at, site, host, dest_ip, dest_port, mode, result, slow, latency_ms, reason, error_code, client_version |
+            Select-Object recorded_at, site, host, dest_ip, dest_port, mode, result, slow, latency_ms, speed_kbps, rule, decision_reason, reason, error_code, relay_id, client_version |
         Format-Table -AutoSize |
         Out-Host
 }

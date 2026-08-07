@@ -42,31 +42,94 @@ func NewEngine(rules []Rule, exclusions []Rule, defaultMode Mode) *Engine {
 
 // Decide returns the routing mode for a connection target.
 func (e *Engine) Decide(t Target) Mode {
+	return e.DecideDetailed(t).Mode
+}
+
+// Decision is a routing choice plus why it was made (TASK-01 diagnostics).
+type Decision struct {
+	Mode   Mode
+	Rule   string // matched pattern (or "default")
+	Source string // exclusion | rule | default
+	Reason string // stable machine reason code
+}
+
+// DecideDetailed returns mode and the matching rule/reason for diagnostics.
+func (e *Engine) DecideDetailed(t Target) Decision {
 	host := normalizeHost(t.Host)
 
-	if mode, ok := e.matchRules(e.exclusions, host, t.IP); ok {
-		return normalizeMode(mode)
+	if mode, rule, ok := e.matchRulesDetail(e.exclusions, host, t.IP); ok {
+		return Decision{
+			Mode:   normalizeMode(mode),
+			Rule:   rule,
+			Source: "exclusion",
+			Reason: "user_exclusion_direct",
+		}
 	}
-	if mode, ok := e.matchRules(e.rules, host, t.IP); ok {
-		return normalizeMode(mode)
+	if mode, rule, ok := e.matchRulesDetail(e.rules, host, t.IP); ok {
+		m := normalizeMode(mode)
+		return Decision{
+			Mode:   m,
+			Rule:   rule,
+			Source: "rule",
+			Reason: reasonForRule(m, rule),
+		}
 	}
-	return e.defaultMode
+	return Decision{
+		Mode:   e.defaultMode,
+		Rule:   "default",
+		Source: "default",
+		Reason: reasonForDefault(e.defaultMode),
+	}
+}
+
+func reasonForRule(mode Mode, pattern string) string {
+	p := strings.ToLower(pattern)
+	switch mode {
+	case ModeDirect:
+		if strings.Contains(p, ".ru") || strings.HasSuffix(p, "ru") || strings.Contains(p, "рф") {
+			return "russian_service_direct"
+		}
+		if strings.Contains(p, "bank") || strings.Contains(p, "gos") {
+			return "critical_ru_app_direct"
+		}
+		return "rule_direct"
+	case ModeFallback:
+		return "rule_fallback"
+	default:
+		if strings.Contains(p, "youtube") || strings.Contains(p, "google") ||
+			strings.Contains(p, "instagram") || strings.Contains(p, "telegram") {
+			return "global_service_relay"
+		}
+		return "international_traffic_relay"
+	}
+}
+
+func reasonForDefault(mode Mode) string {
+	if mode == ModeDirect {
+		return "default_direct"
+	}
+	return "default_relay_foreign"
 }
 
 func (e *Engine) matchRules(rules []Rule, host string, ip netip.Addr) (Mode, bool) {
+	mode, _, ok := e.matchRulesDetail(rules, host, ip)
+	return mode, ok
+}
+
+func (e *Engine) matchRulesDetail(rules []Rule, host string, ip netip.Addr) (Mode, string, bool) {
 	for _, r := range rules {
 		switch r.Kind {
 		case KindDomain:
 			if host != "" && domainMatches(r.Pattern, host) {
-				return r.Mode, true
+				return r.Mode, r.Pattern, true
 			}
 		case KindCIDR:
 			if ip.IsValid() && cidrContains(r.Pattern, ip) {
-				return r.Mode, true
+				return r.Mode, r.Pattern, true
 			}
 		}
 	}
-	return "", false
+	return "", "", false
 }
 
 func normalizeHost(host string) string {

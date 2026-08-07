@@ -65,8 +65,16 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _sub = VpnChannel.statusStream.listen(_onStatus);
-    _diagUploader = DiagUploader(api: widget.api)..start();
+    _bootstrapDiagUploader();
     _bootstrap();
+  }
+
+  Future<void> _bootstrapDiagUploader() async {
+    final settings = await SettingsService().load();
+    if (!mounted) return;
+    if (settings.diagnosticsEnabled) {
+      _diagUploader = DiagUploader(api: widget.api)..start();
+    }
   }
 
   Future<void> _bootstrap() async {

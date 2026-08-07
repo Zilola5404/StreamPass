@@ -238,7 +238,7 @@ func runTunnel(fd int, relayHost string, relayPort int, connectionConfig string,
 		emitError(cb, fmt.Errorf("decision engine: %w", err))
 		return
 	}
-	bridge, err := tunbridge.Start(ctx, fd, hyClient, mtu, engine)
+	bridge, err := tunbridge.Start(ctx, fd, hyClient, mtu, engine, relayLabel)
 	if err != nil {
 		cancel()
 		_ = hyClient.Close()

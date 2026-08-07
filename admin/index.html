@@ -49,6 +49,7 @@
         <button type="button" data-tab="relays" class="tab">Relays</button>
         <button type="button" data-tab="rules" class="tab">Rules</button>
         <button type="button" data-tab="config" class="tab">Config</button>
+        <button type="button" data-tab="diagnostics" class="tab">Diagnostics</button>
       </nav>
       <main>
         <div id="tab-health" class="tab-panel">
@@ -168,6 +169,42 @@
             <button type="submit">Publish POST /config</button>
           </form>
           <pre id="config-out" class="mono panel"></pre>
+        </div>
+
+        <div id="tab-diagnostics" class="tab-panel" hidden>
+          <div class="row-actions">
+            <h2 style="margin:0;flex:1">Diagnostics</h2>
+            <button id="diag-refresh" type="button" class="ghost">Обновить</button>
+          </div>
+          <p class="muted">Последние события маршрутизации с клиентов (<code>GET /admin/diag</code>). Домен/IP/DIRECT|RELAY/задержка/причина — без полных URL.</p>
+          <p id="diag-error" class="error" hidden></p>
+          <div class="row-actions" style="gap:0.75rem;margin-bottom:0.75rem">
+            <label>limit <input id="diag-limit" type="number" value="100" min="1" max="500" style="width:5rem" /></label>
+            <label class="row-actions" style="align-items:center;gap:0.35rem">
+              <input id="diag-fails" type="checkbox" /> только ошибки/slow
+            </label>
+          </div>
+          <h3>Топ проблем</h3>
+          <pre id="diag-problems" class="mono panel"></pre>
+          <h3>События</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Site</th>
+                  <th>IP</th>
+                  <th>Via</th>
+                  <th>Result</th>
+                  <th>ms</th>
+                  <th>kbps</th>
+                  <th>Rule / Decision</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody id="diag-body"></tbody>
+            </table>
+          </div>
         </div>
       </main>
     </section>

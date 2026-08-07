@@ -66,11 +66,16 @@ func (s *Service) RecordBatch(ctx context.Context, userID string, events []diag.
 		e.Result = strings.ToLower(sanitizeToken(e.Result, 16))
 		e.Proto = strings.ToLower(sanitizeToken(e.Proto, 8))
 		e.Reason = sanitizeToken(e.Reason, 96)
+		e.Rule = sanitizeToken(e.Rule, 128)
+		e.DecisionReason = sanitizeToken(e.DecisionReason, 96)
 		e.ErrorCode = sanitizeToken(e.ErrorCode, 64)
 		e.RelayID = sanitizeToken(e.RelayID, 64)
 		e.ClientVersion = sanitizeToken(e.ClientVersion, 32)
 		if e.LatencyMS < 0 {
 			e.LatencyMS = 0
+		}
+		if e.SpeedKbps < 0 {
+			e.SpeedKbps = 0
 		}
 		if e.DestPort < 0 || e.DestPort > 65535 {
 			e.DestPort = 0
@@ -96,9 +101,13 @@ func (s *Service) RecordBatch(ctx context.Context, userID string, events []diag.
 			slog.String("mode", e.Mode),
 			slog.String("result", e.Result),
 			slog.Bool("slow", e.Slow),
+			slog.Int("speed_kbps", e.SpeedKbps),
+			slog.String("rule", e.Rule),
+			slog.String("decision", e.DecisionReason),
 			slog.String("reason", e.Reason),
 			slog.Int("latency_ms", e.LatencyMS),
 			slog.String("error_code", e.ErrorCode),
+			slog.String("relay_id", e.RelayID),
 			slog.String("user_id", e.UserID),
 		)
 	}

@@ -416,7 +416,10 @@ class DiagEvent {
   final String result;
   final int latencyMs;
   final bool slow;
+  final int speedKbps;
   final String reason;
+  final String rule;
+  final String decisionReason;
   final String errorCode;
   final String relayId;
   final String clientVersion;
@@ -432,7 +435,10 @@ class DiagEvent {
     required this.result,
     required this.latencyMs,
     this.slow = false,
+    this.speedKbps = 0,
     this.reason = '',
+    this.rule = '',
+    this.decisionReason = '',
     this.errorCode = '',
     this.relayId = '',
     this.clientVersion = '',
@@ -454,7 +460,10 @@ class DiagEvent {
         result: result,
         latencyMs: latencyMs,
         slow: slow,
+        speedKbps: speedKbps,
         reason: reason,
+        rule: rule,
+        decisionReason: decisionReason,
         errorCode: errorCode,
         relayId: relayId ?? this.relayId,
         clientVersion: clientVersion ?? this.clientVersion,
@@ -471,7 +480,10 @@ class DiagEvent {
         'result': result,
         'latency_ms': latencyMs,
         'slow': slow,
+        'speed_kbps': speedKbps,
         'reason': reason,
+        'rule': rule,
+        'decision_reason': decisionReason,
         'error_code': errorCode,
         'relay_id': relayId,
         'client_version': clientVersion,

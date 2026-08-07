@@ -16,6 +16,8 @@ class AppSettings {
   final String preferredServerId;
   /// Extra Android packages excluded from VPN (OS bypass).
   final List<String> bypassPackages;
+  /// Upload routing diagnostics to backend (TASK-01).
+  final bool diagnosticsEnabled;
 
   const AppSettings({
     this.autostart = false,
@@ -25,6 +27,7 @@ class AppSettings {
     this.preferredRegion = '',
     this.preferredServerId = '',
     this.bypassPackages = const [],
+    this.diagnosticsEnabled = true,
   });
 
   AppSettings copyWith({
@@ -35,6 +38,7 @@ class AppSettings {
     String? preferredRegion,
     String? preferredServerId,
     List<String>? bypassPackages,
+    bool? diagnosticsEnabled,
   }) {
     return AppSettings(
       autostart: autostart ?? this.autostart,
@@ -44,6 +48,7 @@ class AppSettings {
       preferredRegion: preferredRegion ?? this.preferredRegion,
       preferredServerId: preferredServerId ?? this.preferredServerId,
       bypassPackages: bypassPackages ?? this.bypassPackages,
+      diagnosticsEnabled: diagnosticsEnabled ?? this.diagnosticsEnabled,
     );
   }
 }
@@ -56,6 +61,7 @@ class SettingsService {
   static const _kPreferredRegion = 'sp_preferred_region';
   static const _kPreferredServer = 'sp_preferred_server';
   static const _kBypassPackages = 'sp_bypass_packages';
+  static const _kDiagnostics = 'sp_diagnostics_enabled';
 
   // Mirrors autostart/autoConnect into native SharedPreferences so
   // BootReceiver (which runs outside the Flutter engine) can read them
@@ -81,6 +87,7 @@ class SettingsService {
       preferredRegion: prefs.getString(_kPreferredRegion) ?? '',
       preferredServerId: prefs.getString(_kPreferredServer) ?? '',
       bypassPackages: bypassPackages,
+      diagnosticsEnabled: prefs.getBool(_kDiagnostics) ?? true,
     );
   }
 
@@ -124,4 +131,7 @@ class SettingsService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kBypassPackages, jsonEncode(packages));
   }
+
+  Future<void> setDiagnosticsEnabled(bool value) async =>
+      (await SharedPreferences.getInstance()).setBool(_kDiagnostics, value);
 }

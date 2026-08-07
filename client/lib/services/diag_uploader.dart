@@ -95,6 +95,8 @@ class DiagUploader {
         site = 'https://$host';
       }
       final reason = map['reason'] ?? '';
+      final decision = map['decision'] ?? map['decision_reason'] ?? '';
+      final speed = int.tryParse(map['speed_kbps'] ?? '') ?? 0;
       return DiagEvent(
         proto: map['proto'] ?? 'tcp',
         site: site,
@@ -105,8 +107,12 @@ class DiagUploader {
         result: map['result'] ?? 'unknown',
         latencyMs: latency,
         slow: slow || (map['result'] == 'slow'),
+        speedKbps: speed,
         reason: reason,
+        rule: map['rule'] ?? '',
+        decisionReason: decision,
         errorCode: err == '_' || err.isEmpty ? '' : err,
+        relayId: map['relay_id'] ?? '',
       );
     }
     final dnsMatch = _dnsRe.firstMatch(slice);
@@ -135,6 +141,6 @@ class DiagUploader {
 
   static String _fingerprint(DiagEvent e) {
     return '${e.proto}|${e.site}|${e.host}|${e.destIp}|${e.destPort}|${e.mode}|'
-        '${e.result}|${e.latencyMs}|${e.reason}|${e.errorCode}';
+        '${e.result}|${e.latencyMs}|${e.speedKbps}|${e.reason}|${e.rule}|${e.errorCode}';
   }
 }
