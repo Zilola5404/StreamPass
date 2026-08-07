@@ -1,6 +1,6 @@
 # StreamPass — Backlog
 
-> Дата: 2026-08-03 | Формат: ID | Название | Описание | Приоритет | Статус | Зависимости | Ответственный
+> Дата: 2026-08-08 | Формат: ID | Название | Описание | Приоритет | Статус | Зависимости | Ответственный
 
 ---
 
@@ -8,12 +8,14 @@
 
 | ID | Название | Описание | Приоритет | Статус | Зависимости | Ответственный |
 |----|----------|----------|-----------|--------|-------------|---------------|
-| BL-001 | Hysteria2 tunnel в go_core | Реализовать transport в `client/go_core/mobile/tunnel.go`, собрать AAR через gomobile | P0 | Done | — | 2026-08-03 |
+| BL-001 | Hysteria2 tunnel в go_core | Техническая перепроверка и hardening существующего Hysteria2 transport в `client/go_core/mobile/tunnel.go`: реальный relay handshake/data path, TUN lifecycle, protected underlay, fallback и Android E2E evidence; использовать готовую Hysteria2 реализацию | P0 | In Progress | — | Developer + QA |
 | BL-002 | Подключить streampasscore.aar | Собрать и положить в Android libs, проверить TunnelBridge | P0 | Done | BL-001 | 2026-08-03 |
-| BL-003 | End-to-end VPN на Android | Connect → TUN → Hysteria2 → relay, проверка IP | P0 | Done | BL-001, BL-002 | 2026-08-03 |
+| BL-003 | End-to-end VPN на Android | Connect → TUN → Hysteria2 → relay, проверка IP | P0 | Done* | BL-001, BL-002 | 2026-08-03 |
 | BL-004 | Live-тест ЮKassa | Sandbox ключи, CreatePayment + webhook flow | P0 | Skipped | — | 2026-08-04 |
 | BL-005 | Decision Engine (клиент) | DIRECT/RELAY/FALLBACK по правилам | P0 | Done | BL-003 | 2026-08-04 |
 | BL-006 | Rule Engine (клиент) | Загрузка правил с GET /api/v1/rules, polling, hot-reload | P0 | Done | BL-005 | 2026-08-04 |
+
+> **BL-001 audit note (2026-08-08):** базовый transport уже реализован и ранее отмечен Done. Team Lead возвращает задачу в `In Progress`, потому что для окончательной приёмки требуется воспроизводимое evidence полного физического Android E2E и проверки реального TCP/UDP data path, lifecycle и security gates. BL-003 исторически закрыт, но его evidence используется как часть текущего gate; `Done*` означает «исторически закрыт, evidence подлежит повторной проверке в рамках BL-001».
 
 ## P1 — Важно
 
@@ -80,8 +82,10 @@
 
 - **Open** — не начато
 - **In Progress** — в работе
-- **Done** — завершено
-- **Blocked** — заблокировано
+- **Done** — завершено и подтверждено
+- **Blocked** — заблокировано внешней зависимостью
+- **Skipped** — сознательно не выполняется
+- `Done*` — исторически закрыто, но evidence используется для текущей перепроверки
 
 ## Легенда приоритетов
 
