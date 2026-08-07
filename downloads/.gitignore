@@ -3,5 +3,6 @@
 client-config.json
 publish-config-remote.sh
 # Never publish Hiddify profiles with relay passwords
-hiddify-split*.json
+hiddify-split-*.json
 *-with-secrets.json
+!hiddify-split.template.json

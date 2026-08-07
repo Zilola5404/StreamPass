@@ -1,0 +1,78 @@
+{
+  "log": { "level": "info", "timestamp": true },
+  "dns": {
+    "servers": [
+      { "tag": "dns-ru", "address": "77.88.8.8", "detour": "direct" },
+      {
+        "tag": "dns-remote",
+        "address": "https://1.1.1.1/dns-query",
+        "detour": "proxy",
+        "strategy": "ipv4_only"
+      }
+    ],
+    "rules": [
+      { "domain_suffix": [".ru", ".su", ".xn--p1ai"], "server": "dns-ru" },
+      { "rule_set": "geosite-ru", "server": "dns-ru" }
+    ],
+    "final": "dns-remote",
+    "strategy": "ipv4_only",
+    "independent_cache": true
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "inet4_address": "172.19.0.1/30",
+      "auto_route": true,
+      "strict_route": true,
+      "stack": "mixed",
+      "sniff": true,
+      "sniff_override_destination": true
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "hysteria2",
+      "tag": "proxy",
+      "server": "__HY2_SERVER__",
+      "server_port": __HY2_PORT__,
+      "password": "__HY2_PASSWORD__",
+      "obfs": { "type": "salamander", "password": "__HY2_OBFS__" },
+      "tls": {
+        "enabled": true,
+        "server_name": "__HY2_SNI__",
+        "insecure": true,
+        "alpn": ["h3"]
+      }
+    },
+    { "type": "direct", "tag": "direct" },
+    { "type": "block", "tag": "block" },
+    { "type": "dns", "tag": "dns-out" }
+  ],
+  "route": {
+    "rule_set": [
+      {
+        "tag": "geoip-ru",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://212-43-156-33.nip.io/downloads/rules/geoip-ru.srs",
+        "download_detour": "direct"
+      },
+      {
+        "tag": "geosite-ru",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://212-43-156-33.nip.io/downloads/rules/geosite-category-ru.srs",
+        "download_detour": "direct"
+      }
+    ],
+    "rules": [
+      { "protocol": "dns", "outbound": "dns-out" },
+      { "ip_is_private": true, "outbound": "direct" },
+      { "domain_suffix": [".ru", ".su", ".xn--p1ai"], "outbound": "direct" },
+      { "rule_set": ["geoip-ru", "geosite-ru"], "outbound": "direct" }
+    ],
+    "final": "proxy",
+    "auto_detect_interface": true
+  }
+}
