@@ -75,7 +75,9 @@ cd client
 # BL-013 Done: place key.properties + JKS (not committed)
 flutter build apk --release
 # Output: build/app/outputs/flutter-apk/app-release.apk
-# Current ship: StreamPass-v0.1.1+25-signed-arm64.apk
+# Current ship: StreamPass-v0.1.1+34-signed-arm64.apk (routing-policy-v1)
+# OTA: https://212-43-156-33.nip.io/downloads/StreamPass.apk
+# Policy: docs/07.4_RoutingPolicy.md
 ```
 
 ---

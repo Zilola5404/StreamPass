@@ -190,7 +190,9 @@ cd client && flutter test test/traffic_behavior_test.dart test/vpn_lifecycle_tes
 | `scripts/traffic_expectations.json` | Матрица сайтов/приложений и ожидаемых log patterns |
 | `scripts/VerifyAppSiteSwitch.ps1` | **Пошаговый QA**: переключение сайт/приложение → проблемы по каждой цели |
 | `scripts/VerifyAppSiteSwitch.ps1 -AutoLaunch` | adb открывает URL/приложение, анализ logcat |
-| `client/test/traffic_switch_scenarios_test.dart` | Валидация switch_scenarios в JSON |
+| `scripts/DiagnoseTrafficBlock.ps1` | **Why no traffic**: backend, relay, protect, split-tunnel, tun mode, blockers |
+| `scripts/DiagnoseTrafficBlock.ps1 -LiveProbe` | Opens youtube.com, checks RELAY in fresh logcat |
+| `client/go_core/internal/tunbridge/traffic_path_test.go` | Unit: IP-only CDN must be RELAY not DIRECT |
 
 ### Manual matrix (на телефоне)
 

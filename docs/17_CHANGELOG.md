@@ -1,11 +1,43 @@
 # StreamPass — Changelog
 
 > Формат: [Keep a Changelog](https://keepachangelog.com/)  
-> Дата начала документа: 2026-08-03 | Обновлено: 2026-08-06
+> Дата начала документа: 2026-08-03 | Обновлено: 2026-08-07
 
 ---
 
 ## [Unreleased]
+
+### Known Issues
+- См. `docs/18_KnownIssues.md` и QA retest после OTA **+34**
+
+---
+
+## [0.1.1+34] — 2026-08-07
+
+### Added
+- Routing Policy SoT: `docs/07.4_RoutingPolicy.md`, ADR-015, TASK-02 Architecture Decision
+- DNS-in-TUN (`vpn dns=10.10.0.1`) + `HostForIP` reverse map + `[conn]` / `[dns-route]` diagnostics
+- Network Mode / MTU / UDP443 block in **Diagnostics (E09)** only (not E05 Settings)
+- Operator QA tooling: `DiagnoseTrafficBlock.ps1`, `VerifyAppSiteSwitch.ps1`
+- QA reports: `reports/QA/PRODUCT-QA-2026-08-07.md` + developer response
+
+### Changed
+- `DefaultMode=DIRECT` (FS §6 / 07.4); product path without `quic_direct_bypass` / silent RELAY→DIRECT
+- FALLBACK only for `mode=FALLBACK`; must-relay fails with diag (blackhole 3s)
+- Builtin + published rules: domain-first; Google/Meta CDN CIDR as **IP-only safety net**; no Cloudflare `/12`
+- Accelerator rules API **v8**; client config `latest_client_version=0.1.1+34`
+- OTA APK: `https://212-43-156-33.nip.io/downloads/StreamPass.apk` (`routing-policy-v1`)
+
+### Fixed (QA PRODUCT-QA-2026-08-07)
+- **BUG-001:** IP-only Meta/Google → DIRECT geo-block — CIDR RELAY safety net restored
+- **BUG-003:** OTA/docs drift +25 vs codebase — ship **+34** + config/docs sync
+
+### APK
+- `StreamPass-v0.1.1+34-signed-arm64.apk` (`connectFlow = routing-policy-v1`)
+
+---
+
+## [0.1.1+25] — 2026-08-06 (prior ship)
 
 ### Added
 - BL-042/043: password forgot/reset, GET/PUT/DELETE `/me`, Profile + ForgotPassword screens
@@ -30,7 +62,7 @@
 ### Fixed
 - (see 0.1.1 notes and git log for VPN crash / protect / sideload fixes)
 
-### Known Issues
+### Known Issues (at +25)
 - ЮKassa — **BL-040 Blocked** (нет live keys); client resume-poll готов
 - BL-030 auto-renewal Blocked on BL-040
 - Client connect/recover SLA — manual device pass (script covers API/cold launch)

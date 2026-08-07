@@ -73,7 +73,7 @@ See: `ai/CurrentSprint.md`
 |--------|-------|
 | Prod | `https://212-43-156-33.nip.io` |
 | Admin | `/admin/` |
-| APK | v0.1.1+25 |
+| APK | v0.1.1+34 |
 | Relays (prod) | NL nodes only (multi-region software ready) |
 | Open bugs (active) | 0 critical tunnel bugs |
 | Open backlog intentional | BL-023…025, BL-004 Skipped, BL-030 Blocked |

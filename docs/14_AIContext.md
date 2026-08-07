@@ -1,7 +1,7 @@
 # StreamPass — AI Context
 
 > **Самый важный файл для AI-агентов.** Прочитать первым после `00_ProjectRules.md`.  
-> Дата: 2026-08-06 | Статус продукта синхронизирован с `docs/04_Backlog.md`
+> Дата: 2026-08-07 | Статус продукта: `v0.1.1+34` / `docs/07.4_RoutingPolicy.md`
 
 ---
 
@@ -12,7 +12,7 @@ MVP: Go backend + Flutter Android client + Hysteria2 (foreign RELAY) + DIRECT д
 
 **Repo:** `C:\01_Projects\StreamPass` | **Branch:** `main`  
 **Prod API:** `https://212-43-156-33.nip.io` | **Admin:** `/admin/`  
-**Клиент:** `v0.1.1+25` (`tcp-underlay-v1`)
+**Клиент:** `v0.1.1+34` (`routing-policy-v1`)
 
 ---
 
@@ -28,13 +28,13 @@ MVP: Go backend + Flutter Android client + Hysteria2 (foreign RELAY) + DIRECT д
 ## Архитектура (кратко)
 
 ```
-Flutter Android UI (v0.1.1+25)
+Flutter Android UI (v0.1.1+34)
   → auth / API / VPN channel / rule engine / region picker
   → Android VpnService
       • RU IPv4 excludeRoute / intl-only routes (split-tunnel)
       • addDisallowedApplication (Госуслуги/ФНС/банки)
-      • DNS: .ru → Yandex, foreign → DoH
-  → TunnelBridge → go_core (Hysteria2 + decision + DNS)
+      • TUN DNS 10.10.0.1 → Go dnscache; .ru → Yandex, foreign → DoH
+  → TunnelBridge → go_core (Hysteria2 + decision + HostForIP)
   → HTTPS → Caddy → Go Backend :8080
   → PostgreSQL 16 + Redis 7
   → Hysteria2 relays (NL + region listeners de/pl/fi)
@@ -77,6 +77,8 @@ Composition root: `backend/cmd/server/main.go`
 | `scripts/backup-postgres.sh` | Daily backups (BL-033) |
 | `scripts/loadtest/` | API load test (BL-032) |
 | `docs/04_Backlog.md` | Source of truth for task status |
+| `docs/07.4_RoutingPolicy.md` | SoT маршрутизации (DIRECT default, RELAY, FALLBACK) |
+| `docs/18_KnownIssues.md` | Открытые баги / QA retest +34 |
 | `docs/33_DirectVsVpnBypass.md` | DIRECT ≠ TRANSPORT_VPN; app-bypass + split DNS |
 | `docs/18_KnownLimitations.md` | Подтверждённые ограничения |
 | `ai/CurrentTask.md` | Current agent focus |

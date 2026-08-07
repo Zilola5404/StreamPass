@@ -17,7 +17,7 @@
 | Relay Manager + Health Monitor | ✅ |
 | Regions API + multi-region software | ✅ (prod: NL nodes only) |
 | Billing (ЮKassa client) | ⚠️ Code ready; live Skipped (BL-004) |
-| Android app UI | ✅ v0.1.1+25 |
+| Android app UI | ✅ v0.1.1+34 |
 | VPN tunnel (Hysteria2) | ✅ |
 | Decision/Rule Engine (client) | ✅ |
 | HTTPS | ✅ Caddy |

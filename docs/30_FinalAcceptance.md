@@ -10,7 +10,7 @@
 |---|-----------|--------|----------|
 | F1 | User registration and authorization | ✅ | POST /register, /login, /logout, /refresh + Android onboarding |
 | F2 | Payment and subscription activation | ⚠️ | Backend coded; ЮKassa live Skipped (BL-004) |
-| F3 | One-button connect | ✅ | Hysteria2 + TUN + AAR (BL-001…003); APK v0.1.1+25 |
+| F3 | One-button connect | ✅ | Hysteria2 + TUN + AAR (BL-001…003); APK v0.1.1+34 |
 | F4 | Automatic routing by rules | ✅ | Decision Engine + Rule Engine (BL-005, BL-006) |
 | F5 | Foreign services via relay | ✅ | Depends on F3 — verified on BL-003 path |
 | F6 | Russian services direct | ✅ | DIRECT rules via Decision Engine |
@@ -63,7 +63,7 @@
 
 1. **ЮKassa live-tested** (BL-004 Skipped intentional)
 2. **Performance targets measured and met** (T1–T4)
-3. **Physical device recheck** APK v0.1.1+25
+3. **Physical device recheck** APK v0.1.1+34 (OTA + LiveProbe; см. `docs/18_KnownIssues.md`)
 
 VPN tunnel + Decision Engine are **no longer** blockers (BL-001…003,005,006 Done).
 

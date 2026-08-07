@@ -71,7 +71,7 @@ Low      │ SR-02  SR-06  (mitigated: TR-01,04,05,06 IR-03,04,06 SR-04)
 ## Top 5 Actions
 
 1. **Live-test ЮKassa** (BR-01) — only on explicit request; unblocks BL-030
-2. **Device recheck** APK v0.1.1+25 on physical Android
+2. **Device recheck** APK v0.1.1+34 on physical Android
 3. **Off-site backup copy** (IR-03 residual) — optional hardening
 4. **Real domain** (IR-02) before public launch
 5. **Measured perf** T1–T4 (startup/connect/recovery/uptime) — docs/29, docs/30

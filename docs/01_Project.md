@@ -1,6 +1,6 @@
 # StreamPass — Паспорт проекта
 
-> Версия: MVP v0.1.1+25 | Дата: 2026-08-06
+> Версия: MVP v0.1.1+34 | Дата: 2026-08-07
 
 ## Название
 
@@ -49,7 +49,7 @@
 | Backend API | Go 1.22, Clean Architecture | ✅ Работает |
 | Database | PostgreSQL 16 | ✅ Миграции автоматические |
 | Cache/Sessions | Redis 7 | ✅ |
-| Mobile Client | Flutter (Dart 3.3+), Android VPNService | ✅ v0.1.1+25 |
+| Mobile Client | Flutter (Dart 3.3+), Android VPNService | ✅ v0.1.1+34 |
 | Client Core | Go (gomobile) | ✅ Hysteria2 + Decision Engine |
 | Reverse Proxy | Caddy 2 | ✅ Docker Compose |
 | Health Monitor | Go worker | ✅ Docker Compose |

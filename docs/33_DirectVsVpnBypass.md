@@ -1,6 +1,6 @@
 # StreamPass — DIRECT vs VPN bypass (диагностика)
 
-> Дата: 2026-08-06 | Статус: подтверждено кодом + исправлено в клиенте `0.1.1+25`
+> Дата: 2026-08-07 | Статус: актуально для `0.1.1+34` (`routing-policy-v1`); история фиксов ниже
 
 ## Вердикт по разбору
 
@@ -37,6 +37,13 @@
 3. **Весь DNS через Cloudflare DoH** — для `.ru` отдавались не-RU IP → сайт/банкинг мог попасть в TUN и ломаться.
 4. **Silent fail** `dialDirectTCP` — ошибки dial не логировались.
 
+## Что исправлено в `0.1.1+34` (TASK-02 / QA)
+
+- VPN DNS в TUN: `10.10.0.1` (не внешний Yandex как VPN DNS) → queries через Go `dnscache` → `HostForIP` для IP-only flows
+- `DefaultMode=DIRECT`; Google/Meta CDN CIDR — IP-only RELAY safety net (без Cloudflare `/12`)
+- Политика: `docs/07.4_RoutingPolicy.md`; Known Issues: `docs/18_KnownIssues.md`
+- APK/OTA: `StreamPass-v0.1.1+34-signed-arm64.apk`
+
 ## Что исправлено в `0.1.1+25`
 
 - TCP underlay fallback (BL-017): connect candidate logged in diagnostics (`udp/443`, `tcp/8443`, …)
@@ -55,11 +62,12 @@
 
 ## Как проверить на устройстве
 
-1. Установить APK `StreamPass-v0.1.1+25-signed-arm64.apk`.
+1. Установить APK `StreamPass-v0.1.1+34-signed-arm64.apk` (OTA: `/downloads/StreamPass.apk`).
 2. Подключить StreamPass → в connect log искать:
+   - `vpn dns=10.10.0.1`, `build=0.1.1+34`
    - `VPN app-bypass applied=N` — N ≥ 1 для установленных Госуслуг/ФНС/S7
    - `split-tunnel mode=exclude-ru ruExcludes=...` (Android 13+)
-   - `[dns] query gosuslugi.ru via=yandex`
+   - `[dns] query gosuslugi.ru via=yandex` (или эквивалент split DNS)
 3. Открыть Госуслуги / Мои налоги / S7 — не должно требовать «отключите VPN».
 4. В браузере `2ip.ru` / `yandex.ru` — российский IP (не IP relay).
 5. YouTube / Instagram — через relay (ускорение).

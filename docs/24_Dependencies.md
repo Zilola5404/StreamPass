@@ -36,7 +36,7 @@ replace github.com/lib/pq => ./vendor-src/pq
 
 ## Flutter (Client)
 
-**Source:** `client/pubspec.yaml` | **Version:** 0.1.1+25 | **Dart SDK:** >=3.3.0 <4.0.0
+**Source:** `client/pubspec.yaml` | **Version:** 0.1.1+34 | **Dart SDK:** >=3.3.0 <4.0.0
 
 | Package | Version | Purpose |
 |---------|---------|---------|
