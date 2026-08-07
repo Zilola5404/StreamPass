@@ -32,13 +32,13 @@ func (r *DiagRepository) RecordBatch(ctx context.Context, events []diag.Event) e
 
 	const q = `
 		INSERT INTO diag_events
-			(user_id, proto, host, dest_ip, dest_port, mode, result, latency_ms, error_code, relay_id, client_version, recorded_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`
+			(user_id, proto, site, host, dest_ip, dest_port, mode, result, latency_ms, slow, reason, error_code, relay_id, client_version, recorded_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`
 
 	for _, e := range events {
 		if _, err := tx.ExecContext(ctx, q,
-			e.UserID, e.Proto, e.Host, e.DestIP, e.DestPort, e.Mode, e.Result,
-			e.LatencyMS, e.ErrorCode, e.RelayID, e.ClientVersion, e.RecordedAt,
+			e.UserID, e.Proto, e.Site, e.Host, e.DestIP, e.DestPort, e.Mode, e.Result,
+			e.LatencyMS, e.Slow, e.Reason, e.ErrorCode, e.RelayID, e.ClientVersion, e.RecordedAt,
 		); err != nil {
 			return apperrors.Wrap(apperrors.CodeInternal, "failed to insert diag event", err)
 		}
@@ -58,7 +58,7 @@ func (r *DiagRepository) List(ctx context.Context, userID string, limit int) ([]
 		rows *sql.Rows
 		err  error
 	)
-	const cols = `user_id, proto, host, dest_ip, dest_port, mode, result, latency_ms, error_code, relay_id, client_version, recorded_at`
+	const cols = `user_id, proto, site, host, dest_ip, dest_port, mode, result, latency_ms, slow, reason, error_code, relay_id, client_version, recorded_at`
 	if userID != "" {
 		rows, err = r.db.QueryContext(ctx,
 			`SELECT `+cols+` FROM diag_events WHERE user_id = $1 ORDER BY recorded_at DESC LIMIT $2`,
@@ -77,8 +77,8 @@ func (r *DiagRepository) List(ctx context.Context, userID string, limit int) ([]
 	for rows.Next() {
 		var e diag.Event
 		if err := rows.Scan(
-			&e.UserID, &e.Proto, &e.Host, &e.DestIP, &e.DestPort, &e.Mode, &e.Result,
-			&e.LatencyMS, &e.ErrorCode, &e.RelayID, &e.ClientVersion, &e.RecordedAt,
+			&e.UserID, &e.Proto, &e.Site, &e.Host, &e.DestIP, &e.DestPort, &e.Mode, &e.Result,
+			&e.LatencyMS, &e.Slow, &e.Reason, &e.ErrorCode, &e.RelayID, &e.ClientVersion, &e.RecordedAt,
 		); err != nil {
 			return nil, apperrors.Wrap(apperrors.CodeInternal, "failed to scan diag event", err)
 		}

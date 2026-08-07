@@ -24,12 +24,15 @@ func NewDiagHandler(svc *diagsvc.Service) *DiagHandler {
 type diagEventDTO struct {
 	UserID        string `json:"user_id,omitempty"`
 	Proto         string `json:"proto"`
+	Site          string `json:"site"`
 	Host          string `json:"host"`
 	DestIP        string `json:"dest_ip"`
 	DestPort      int    `json:"dest_port"`
 	Mode          string `json:"mode"`
 	Result        string `json:"result"`
 	LatencyMS     int    `json:"latency_ms"`
+	Slow          bool   `json:"slow"`
+	Reason        string `json:"reason"`
 	ErrorCode     string `json:"error_code"`
 	RelayID       string `json:"relay_id"`
 	ClientVersion string `json:"client_version"`
@@ -56,12 +59,15 @@ func (h *DiagHandler) RecordBatch(w http.ResponseWriter, r *http.Request) {
 	for _, d := range req.Events {
 		e := diag.Event{
 			Proto:         d.Proto,
+			Site:          d.Site,
 			Host:          d.Host,
 			DestIP:        d.DestIP,
 			DestPort:      d.DestPort,
 			Mode:          d.Mode,
 			Result:        d.Result,
 			LatencyMS:     d.LatencyMS,
+			Slow:          d.Slow,
+			Reason:        d.Reason,
 			ErrorCode:     d.ErrorCode,
 			RelayID:       d.RelayID,
 			ClientVersion: d.ClientVersion,
@@ -99,12 +105,15 @@ func (h *DiagHandler) ListAdmin(w http.ResponseWriter, r *http.Request) {
 		out = append(out, diagEventDTO{
 			UserID:        e.UserID,
 			Proto:         e.Proto,
+			Site:          e.Site,
 			Host:          e.Host,
 			DestIP:        e.DestIP,
 			DestPort:      e.DestPort,
 			Mode:          e.Mode,
 			Result:        e.Result,
 			LatencyMS:     e.LatencyMS,
+			Slow:          e.Slow,
+			Reason:        e.Reason,
 			ErrorCode:     e.ErrorCode,
 			RelayID:       e.RelayID,
 			ClientVersion: e.ClientVersion,

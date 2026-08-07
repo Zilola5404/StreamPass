@@ -60,10 +60,12 @@ func (s *Service) RecordBatch(ctx context.Context, userID string, events []diag.
 	for _, e := range events {
 		e.UserID = userID
 		e.Host = sanitizeHost(e.Host)
+		e.Site = sanitizeSite(e.Site, e.Host, e.DestIP)
 		e.DestIP = sanitizeToken(e.DestIP, 64)
 		e.Mode = strings.ToUpper(sanitizeToken(e.Mode, 16))
 		e.Result = strings.ToLower(sanitizeToken(e.Result, 16))
 		e.Proto = strings.ToLower(sanitizeToken(e.Proto, 8))
+		e.Reason = sanitizeToken(e.Reason, 96)
 		e.ErrorCode = sanitizeToken(e.ErrorCode, 64)
 		e.RelayID = sanitizeToken(e.RelayID, 64)
 		e.ClientVersion = sanitizeToken(e.ClientVersion, 32)
@@ -79,16 +81,22 @@ func (s *Service) RecordBatch(ctx context.Context, userID string, events []diag.
 		if e.Result == "" {
 			e.Result = "unknown"
 		}
+		if e.Result == "slow" {
+			e.Slow = true
+		}
 		if e.RecordedAt.IsZero() {
 			e.RecordedAt = now
 		}
 		cleaned = append(cleaned, e)
 		s.log.Info(ctx, "diag_event",
+			slog.String("site", e.Site),
 			slog.String("host", e.Host),
 			slog.String("dest_ip", e.DestIP),
 			slog.Int("dest_port", e.DestPort),
 			slog.String("mode", e.Mode),
 			slog.String("result", e.Result),
+			slog.Bool("slow", e.Slow),
+			slog.String("reason", e.Reason),
 			slog.Int("latency_ms", e.LatencyMS),
 			slog.String("error_code", e.ErrorCode),
 			slog.String("user_id", e.UserID),
@@ -126,6 +134,37 @@ func sanitizeHost(h string) string {
 		h = h[:maxHostLen]
 	}
 	return h
+}
+
+// sanitizeSite keeps only https://host or ip://addr (no path/query).
+func sanitizeSite(site, host, destIP string) string {
+	site = strings.TrimSpace(site)
+	if site != "" {
+		lower := strings.ToLower(site)
+		switch {
+		case strings.HasPrefix(lower, "https://"):
+			rest := site[len("https://"):]
+			if i := strings.IndexAny(rest, "/?#"); i >= 0 {
+				rest = rest[:i]
+			}
+			rest = sanitizeHost(rest)
+			if rest != "" {
+				return "https://" + rest
+			}
+		case strings.HasPrefix(lower, "ip://"):
+			ip := sanitizeToken(site[len("ip://"):], 64)
+			if ip != "" {
+				return "ip://" + ip
+			}
+		}
+	}
+	if host != "" {
+		return "https://" + sanitizeHost(host)
+	}
+	if destIP != "" {
+		return "ip://" + sanitizeToken(destIP, 64)
+	}
+	return ""
 }
 
 func sanitizeToken(s string, max int) string {

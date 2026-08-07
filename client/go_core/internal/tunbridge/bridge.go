@@ -546,23 +546,37 @@ func splitDest(destination M.Socksaddr) (host, destIP string, destPort int) {
 	if destination.Addr.IsValid() {
 		destIP = destination.Addr.String()
 	}
+	if host == "" && destIP != "" {
+		host = dnscache.HostForIP(destIP)
+	}
 	return host, destIP, destPort
 }
 
-// okDiagThrottle limits successful [diag] lines per host+mode (failures always emit).
+// okDiagThrottle limits successful [diag] lines per host+mode (failures/slow always emit).
 var okDiagThrottle sync.Map // key -> time.Time
 
-const okDiagMinInterval = 30 * time.Second
+const (
+	okDiagMinInterval  = 30 * time.Second
+	slowDialThreshold  = 1500 * time.Millisecond
+)
 
 func emitDiag(proto, host, destIP string, destPort int, mode string, ok bool, d time.Duration, errMsg string) {
+	if host == "" && destIP != "" {
+		host = dnscache.HostForIP(destIP)
+	}
+	site := siteLabel(host, destIP)
+	via := strings.ToUpper(mode)
 	result := "ok"
+	reason := reasonOK(via)
+	slow := 0
 	if !ok {
-		result = "fail"
-		if strings.Contains(strings.ToLower(errMsg), "timeout") {
-			result = "timeout"
-		}
+		result, reason = classifyFail(via, errMsg)
+	} else if d >= slowDialThreshold {
+		result = "slow"
+		slow = 1
+		reason = "slow_dial_" + strings.ToLower(via)
 	} else {
-		key := proto + "|" + mode + "|" + host + "|" + destIP + "|" + fmt.Sprintf("%d", destPort)
+		key := proto + "|" + via + "|" + host + "|" + destIP + "|" + fmt.Sprintf("%d", destPort)
 		if prev, loaded := okDiagThrottle.Load(key); loaded {
 			if t, okT := prev.(time.Time); okT && time.Since(t) < okDiagMinInterval {
 				return
@@ -571,10 +585,69 @@ func emitDiag(proto, host, destIP string, destPort int, mode string, ok bool, d 
 		okDiagThrottle.Store(key, time.Now())
 	}
 	errCode := sanitizeErr(errMsg)
+	// Machine-readable line (uploaded to backend).
 	logLine(fmt.Sprintf(
-		"[diag] proto=%s host=%s dest_ip=%s dest_port=%d mode=%s result=%s latency_ms=%d error=%s",
-		proto, host, destIP, destPort, mode, result, d.Milliseconds(), errCode,
+		"[diag] proto=%s site=%s host=%s dest_ip=%s dest_port=%d mode=%s via=%s result=%s latency_ms=%d slow=%d reason=%s error=%s",
+		proto, site, host, destIP, destPort, via, via, result, d.Milliseconds(), slow, reason, errCode,
 	))
+	// Human-readable route summary for on-device diagnostics screen.
+	logLine(fmt.Sprintf(
+		"[route] %s ip=%s:%d via=%s → %s (%dms) %s",
+		siteOrDash(site), destIP, destPort, via, result, d.Milliseconds(), reason,
+	))
+}
+
+func siteLabel(host, destIP string) string {
+	if host != "" {
+		// Origin only (scheme + host) — never path/query (ТЗ §14).
+		return "https://" + host
+	}
+	if destIP != "" {
+		return "ip://" + destIP
+	}
+	return ""
+}
+
+func siteOrDash(site string) string {
+	if site == "" {
+		return "-"
+	}
+	return site
+}
+
+func reasonOK(via string) string {
+	switch via {
+	case "DIRECT":
+		return "ok_direct"
+	case "RELAY":
+		return "ok_relay"
+	case "FALLBACK":
+		return "ok_fallback"
+	default:
+		return "ok"
+	}
+}
+
+func classifyFail(via, errMsg string) (result, reason string) {
+	low := strings.ToLower(errMsg)
+	switch {
+	case strings.Contains(low, "timeout") || strings.Contains(low, "i/o timeout") || strings.Contains(low, "deadline"):
+		return "timeout", "timeout_" + strings.ToLower(via)
+	case strings.Contains(low, "refused"):
+		return "fail", "connection_refused_" + strings.ToLower(via)
+	case strings.Contains(low, "reset"):
+		return "fail", "connection_reset_" + strings.ToLower(via)
+	case strings.Contains(low, "no route") || strings.Contains(low, "network is unreachable"):
+		return "fail", "network_unreachable"
+	case strings.Contains(low, "drop"):
+		return "drop", "traffic_cut_" + strings.ToLower(via)
+	case via == "RELAY":
+		return "fail", "relay_dial_fail"
+	case via == "DIRECT":
+		return "fail", "direct_dial_fail"
+	default:
+		return "fail", "dial_fail_" + strings.ToLower(via)
+	}
 }
 
 func sanitizeErr(s string) string {

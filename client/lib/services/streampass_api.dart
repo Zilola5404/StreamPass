@@ -408,12 +408,15 @@ class PaymentRecord {
 /// One routing diagnostic sample uploaded to POST /diag.
 class DiagEvent {
   final String proto;
+  final String site;
   final String host;
   final String destIp;
   final int destPort;
   final String mode;
   final String result;
   final int latencyMs;
+  final bool slow;
+  final String reason;
   final String errorCode;
   final String relayId;
   final String clientVersion;
@@ -421,12 +424,15 @@ class DiagEvent {
 
   const DiagEvent({
     required this.proto,
+    this.site = '',
     required this.host,
     required this.destIp,
     required this.destPort,
     required this.mode,
     required this.result,
     required this.latencyMs,
+    this.slow = false,
+    this.reason = '',
     this.errorCode = '',
     this.relayId = '',
     this.clientVersion = '',
@@ -440,12 +446,15 @@ class DiagEvent {
   }) =>
       DiagEvent(
         proto: proto,
+        site: site,
         host: host,
         destIp: destIp,
         destPort: destPort,
         mode: mode,
         result: result,
         latencyMs: latencyMs,
+        slow: slow,
+        reason: reason,
         errorCode: errorCode,
         relayId: relayId ?? this.relayId,
         clientVersion: clientVersion ?? this.clientVersion,
@@ -454,12 +463,15 @@ class DiagEvent {
 
   Map<String, dynamic> toJson() => {
         'proto': proto,
+        'site': site,
         'host': host,
         'dest_ip': destIp,
         'dest_port': destPort,
         'mode': mode,
         'result': result,
         'latency_ms': latencyMs,
+        'slow': slow,
+        'reason': reason,
         'error_code': errorCode,
         'relay_id': relayId,
         'client_version': clientVersion,

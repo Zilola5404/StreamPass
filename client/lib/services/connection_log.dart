@@ -60,7 +60,7 @@ class ConnectionLog {
   ConnectionLog._();
   static final ConnectionLog instance = ConnectionLog._();
 
-  static const maxEntries = 200;
+  static const maxEntries = 500;
   final Queue<ConnectionLogEntry> _entries = Queue<ConnectionLogEntry>();
   final StreamController<ConnectionLogEntry> _controller =
       StreamController<ConnectionLogEntry>.broadcast();

@@ -6,8 +6,10 @@ import 'connection_log.dart';
 import 'native_connect_log.dart';
 import 'streampass_api.dart';
 
-/// Parses Go-core `[diag]` lines from the on-device connect log and uploads
-/// batches to `POST /api/v1/diag` (hostname/IP/mode/latency only — no URLs).
+/// Parses Go-core `[diag]` / `[route]` lines from the on-device connect log
+/// and uploads batches to `POST /api/v1/diag`.
+///
+/// Stores hostname / https://host origin only — never full URL paths (ТЗ §14).
 class DiagUploader {
   DiagUploader({required this.api, this.interval = const Duration(seconds: 20)});
 
@@ -72,7 +74,6 @@ class DiagUploader {
   /// Exposed for unit tests.
   static DiagEvent? parseLine(String raw) {
     final line = raw.trim();
-    // Native connect.log prefixes: 2026-08-07T12:00:00.000Z [diag] ...
     final diagIdx = line.indexOf('[diag]');
     final dnsIdx = line.indexOf('[dns]');
     final slice = diagIdx >= 0
@@ -86,15 +87,25 @@ class DiagUploader {
       }
       final port = int.tryParse(map['dest_port'] ?? '') ?? 0;
       final latency = int.tryParse(map['latency_ms'] ?? '') ?? 0;
+      final slow = map['slow'] == '1' || map['slow'] == 'true';
       final err = map['error'] ?? '';
+      final host = map['host'] ?? '';
+      var site = map['site'] ?? '';
+      if (site.isEmpty && host.isNotEmpty) {
+        site = 'https://$host';
+      }
+      final reason = map['reason'] ?? '';
       return DiagEvent(
         proto: map['proto'] ?? 'tcp',
-        host: map['host'] ?? '',
+        site: site,
+        host: host,
         destIp: map['dest_ip'] ?? '',
         destPort: port,
-        mode: map['mode'] ?? '',
+        mode: map['mode'] ?? map['via'] ?? '',
         result: map['result'] ?? 'unknown',
         latencyMs: latency,
+        slow: slow || (map['result'] == 'slow'),
+        reason: reason,
         errorCode: err == '_' || err.isEmpty ? '' : err,
       );
     }
@@ -104,24 +115,26 @@ class DiagUploader {
       final rtt = int.tryParse(dnsMatch.group(3) ?? '') ?? 0;
       final err = (dnsMatch.group(4) ?? '').trim();
       final fail = via == 'fail' || err.isNotEmpty;
+      final host = dnsMatch.group(1) ?? '';
       return DiagEvent(
         proto: 'dns',
-        host: dnsMatch.group(1) ?? '',
+        site: host.isEmpty ? '' : 'https://$host',
+        host: host,
         destIp: '',
         destPort: 53,
         mode: via.toUpperCase(),
         result: fail ? 'fail' : 'ok',
         latencyMs: rtt,
+        slow: rtt >= 1500,
+        reason: fail ? 'dns_fail' : 'dns_$via',
         errorCode: err.replaceAll(' ', '_'),
       );
     }
     return null;
   }
 
-  // Content fingerprint (no wall-clock) so re-importing native log does not
-  // re-upload the same dial outcome every poll.
   static String _fingerprint(DiagEvent e) {
-    return '${e.proto}|${e.host}|${e.destIp}|${e.destPort}|${e.mode}|'
-        '${e.result}|${e.latencyMs}|${e.errorCode}';
+    return '${e.proto}|${e.site}|${e.host}|${e.destIp}|${e.destPort}|${e.mode}|'
+        '${e.result}|${e.latencyMs}|${e.reason}|${e.errorCode}';
   }
 }

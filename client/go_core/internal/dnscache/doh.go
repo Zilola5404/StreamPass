@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -135,6 +136,8 @@ func (r *Resolver) HandleQuery(ctx context.Context, query []byte) (resp []byte, 
 
 	if raw, ok := r.cache.GetRaw(qtype, name); ok {
 		logLine(r.logf, fmt.Sprintf("[dns] query %s via=cache", trimDot(name)))
+		IndexAnswers(name, raw)
+		emitDNSDiag(trimDot(name), "cache", 0, "")
 		return rewriteID(raw, header.ID)
 	}
 
@@ -163,11 +166,45 @@ func (r *Resolver) HandleQuery(ctx context.Context, query []byte) (resp []byte, 
 	}
 	if err != nil {
 		logLine(r.logf, fmt.Sprintf("[dns] query %s via=fail err=%v", trimDot(name), err))
+		emitDNSDiag(trimDot(name), "fail", 0, err.Error())
 		return buildServFail(header, q)
 	}
 	r.cache.PutRaw(qtype, name, raw, ttl)
-	logLine(r.logf, fmt.Sprintf("[dns] query %s via=%s rtt=%dms", trimDot(name), via, time.Since(start).Milliseconds()))
+	IndexAnswers(name, raw)
+	rtt := time.Since(start).Milliseconds()
+	logLine(r.logf, fmt.Sprintf("[dns] query %s via=%s rtt=%dms", trimDot(name), via, rtt))
+	emitDNSDiag(trimDot(name), via, rtt, "")
 	return rewriteID(raw, header.ID)
+}
+
+func emitDNSDiag(host, via string, rttMS int64, errMsg string) {
+	result := "ok"
+	reason := "dns_" + via
+	if via == "fail" || errMsg != "" {
+		result = "fail"
+		reason = "dns_fail"
+		if errMsg != "" {
+			reason = "dns_fail:" + sanitizeDNSErr(errMsg)
+		}
+	}
+	site := ""
+	if host != "" {
+		site = "https://" + host
+	}
+	logLine(nil, fmt.Sprintf(
+		"[diag] proto=dns site=%s host=%s dest_ip= dest_port=53 mode=DNS via=%s result=%s latency_ms=%d slow=0 reason=%s error=%s",
+		site, host, strings.ToUpper(via), result, rttMS, reason, sanitizeDNSErr(errMsg),
+	))
+}
+
+func sanitizeDNSErr(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.ReplaceAll(s, " ", "_")
+	s = strings.ReplaceAll(s, "\n", "")
+	if len(s) > 64 {
+		s = s[:64]
+	}
+	return s
 }
 
 func trimDot(name string) string {

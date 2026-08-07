@@ -1,0 +1,3 @@
+ALTER TABLE diag_events DROP COLUMN IF EXISTS slow;
+ALTER TABLE diag_events DROP COLUMN IF EXISTS reason;
+ALTER TABLE diag_events DROP COLUMN IF EXISTS site;

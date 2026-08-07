@@ -25,20 +25,49 @@ if ($UserId) { $qs += "&user_id=$([uri]::EscapeDataString($UserId))" }
 $url = "$api/admin/diag?$qs"
 
 Write-Host "GET $url"
-$headers = @{ "X-Admin-Key" = $AdminKey }
-$events = Invoke-RestMethod -Method GET -Uri $url -Headers $headers
+# Use WebRequest + ConvertFrom-Json: Invoke-RestMethod on PS5.1 sometimes
+# collapses JSON arrays into a single object with .value/.Count.
+$resp = Invoke-WebRequest -Method GET -Uri $url -Headers @{ "X-Admin-Key" = $AdminKey } -UseBasicParsing
+$parsed = $resp.Content | ConvertFrom-Json
+if ($null -eq $parsed) {
+    $events = @()
+} elseif ($parsed -is [System.Array]) {
+    $events = @($parsed)
+} elseif ($parsed.PSObject.Properties.Name -contains 'value' -and $parsed.value -is [System.Array]) {
+    # Tolerate accidental PS5 wrapper if someone re-uploaded a bad export
+    $events = @($parsed.value)
+} else {
+    $events = @($parsed)
+}
 
 if ($FailsOnly) {
     $events = @($events | Where-Object { $_.result -ne 'ok' })
 }
 
-# Compact table for terminal review
-$events | Select-Object recorded_at, user_id, proto, host, dest_ip, dest_port, mode, result, latency_ms, error_code |
-    Format-Table -AutoSize
+$count = $events.Count
+Write-Host "Fetched $count event(s)"
+
+if ($count -gt 0) {
+    $events |
+        Select-Object recorded_at, site, host, dest_ip, dest_port, mode, result, slow, latency_ms, reason, error_code, client_version |
+        Format-Table -AutoSize |
+        Out-Host
+}
 
 if ($OutFile) {
-    $events | ConvertTo-Json -Depth 6 | Set-Content -Path $OutFile -Encoding UTF8
-    Write-Host "Wrote $($events.Count) events to $OutFile"
+    $json = if ($count -eq 0) {
+        '[]'
+    } else {
+        # Compress avoids huge indented dumps; Depth keeps nested fields.
+        ConvertTo-Json -InputObject ([object[]]$events) -Depth 6
+    }
+    # If PS still wraps, unwrap once more to a raw JSON array string.
+    if ($json -match '^\s*\{\s*"value"\s*:') {
+        $wrap = $json | ConvertFrom-Json
+        $json = ConvertTo-Json -InputObject ([object[]]$wrap.value) -Depth 6
+    }
+    Set-Content -Path $OutFile -Value $json -Encoding UTF8
+    Write-Host "Wrote $count events to $OutFile"
 } else {
-    Write-Host "Total: $($events.Count) events (pass -OutFile to save JSON)"
+    Write-Host "Total: $count events (pass -OutFile to save JSON)"
 }
