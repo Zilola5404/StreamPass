@@ -59,6 +59,21 @@ obfs:
 bandwidth:
   up: 1 gbps
   down: 1 gbps
+
+# VPS often has no working IPv6 — force IPv4 outbound so clients
+# that resolve AAAA don't get "network is unreachable" on the relay.
+outbounds:
+  - name: v4
+    type: direct
+    direct:
+      mode: 4
+
+resolver:
+  type: udp
+  tcp:
+    addr: 8.8.8.8:53
+  udp:
+    addr: 8.8.8.8:53
 EOF
 
 cat > /etc/systemd/system/hysteria.service <<'EOF'

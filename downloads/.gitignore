@@ -2,3 +2,6 @@
 *.apk
 client-config.json
 publish-config-remote.sh
+# Never publish Hiddify profiles with relay passwords
+hiddify-split*.json
+*-with-secrets.json

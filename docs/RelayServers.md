@@ -1,6 +1,6 @@
 # StreamPass Relay Servers
 
-> Обновлено: 2026-08-04
+> Обновлено: 2026-08-07
 
 ## Роли серверов
 
@@ -10,6 +10,14 @@
 | `212.43.157.167` | **VPN Relay (Hiddify)** | Hiddify Manager + Hysteria2 (sing-box), HAProxy :443 |
 
 > `212.43.159.198` из старого ТЗ — **не используется**.
+
+## Секреты
+
+Пароли Hysteria **не коммитить** и **не класть в публичный `/downloads/`**.  
+Хранить в `/etc/hysteria/config.yaml` на VPS и в `relay_servers.connection_config` (Postgres).  
+Ротация: обновить yaml → `systemctl restart hysteria*` → UPDATE `connection_config`.
+
+Hiddify split-профили для ручной проверки — только локально в `private/` (gitignored), шаблон без секретов: `downloads/hiddify-split.template.json`.
 
 ## Relay в PostgreSQL (production)
 

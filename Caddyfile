@@ -7,9 +7,11 @@
 
 	redir /admin /admin/
 
+	# Public artifacts only (APK, rule-sets). No relay passwords here.
+	# Directory listing disabled (was: file_server browse).
 	handle_path /downloads/* {
 		root * /srv/downloads
-		file_server browse
+		file_server
 	}
 
 	# Metrics stay on the Docker network (Prometheus → backend:8080), not public.
