@@ -189,7 +189,7 @@ class StreamPassVpnService : VpnService() {
             if (relayHost.isEmpty()) {
                 throw IllegalStateException("No relay host provided — was GET /servers called first?")
             }
-            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+35 routing-policy-v1")
+            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+36 routing-policy-v1")
             ConnectLogger.log(this, "establishTunnel: validating connection_config")
             if (connectionConfig.isBlank()) {
                 throw IllegalStateException("connection_config is empty — relay misconfigured in backend")
@@ -241,6 +241,10 @@ class StreamPassVpnService : VpnService() {
                 .addAddress("10.10.0.1", 30)
                 .addDnsServer("10.10.0.1")
                 .setMtu(mtu)
+            // Avoid OEM "metered VPN" throttling / captive-portal weirdness.
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                vpnBuilder.setMetered(false)
+            }
             // MVP VPN is IPv4-only (sing-tun Inet4Address). Let IPv6 bypass TUN so
             // dual-stack sites (ya.ru / 2ip) are not blackholed on AF_INET6.
             // Documented product choice: IPv6 outside accelerator until IPv6 TUN lands.

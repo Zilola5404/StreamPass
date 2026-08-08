@@ -13,6 +13,17 @@ var DefaultDirectRules = []Rule{
 	{Kind: KindDomain, Pattern: "*.mil.ru", Mode: ModeDirect},
 	{Kind: KindDomain, Pattern: "vk.com", Mode: ModeDirect},
 	{Kind: KindDomain, Pattern: "*.vk.com", Mode: ModeDirect},
+
+	// Android NetworkMonitor / captive portal — must NOT go RELAY or the OS
+	// marks the VPN as "no internet" and apps stop using the network.
+	{Kind: KindDomain, Pattern: "connectivitycheck.gstatic.com", Mode: ModeDirect},
+	{Kind: KindDomain, Pattern: "*.connectivitycheck.gstatic.com", Mode: ModeDirect},
+	{Kind: KindDomain, Pattern: "connectivitycheck.android.com", Mode: ModeDirect},
+	{Kind: KindDomain, Pattern: "clients3.google.com", Mode: ModeDirect},
+	{Kind: KindDomain, Pattern: "clients1.google.com", Mode: ModeDirect},
+	{Kind: KindDomain, Pattern: "clients2.google.com", Mode: ModeDirect},
+	{Kind: KindDomain, Pattern: "clients4.google.com", Mode: ModeDirect},
+	{Kind: KindDomain, Pattern: "android.clients.google.com", Mode: ModeDirect},
 }
 
 // DefaultRelayRules are appended after backend rules when the published set is sparse.

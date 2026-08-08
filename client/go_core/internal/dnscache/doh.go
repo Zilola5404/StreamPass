@@ -155,10 +155,19 @@ func (r *Resolver) HandleQuery(ctx context.Context, query []byte) (resp []byte, 
 			via = "udp-fallback"
 		}
 	} else {
-		raw, ttl, err = r.fetchDoH(ctx, query)
+		// Foreign: DoH to Cloudflare often blocked/slow in RU (8s+ → Android
+		// NetworkMonitor fails → "VPN connected, no internet"). Cap DoH, then
+		// fall back to Yandex (reachable) before 1.1.1.1 UDP.
+		dohCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+		raw, ttl, err = r.fetchDoH(dohCtx, query)
+		cancel()
 		if err != nil {
-			raw, ttl, err = r.fetchPlainUDPTo(ctx, query, plainDNSAddr)
-			via = "udp"
+			raw, ttl, err = r.fetchPlainUDPTo(ctx, query, ruDNSAddr)
+			via = "yandex"
+			if err != nil {
+				raw, ttl, err = r.fetchPlainUDPTo(ctx, query, plainDNSAddr)
+				via = "udp"
+			}
 		} else {
 			dohOKOnce.Do(func() {
 				logLine(r.logf, "[dns] doh connected ip=1.1.1.1 sni=cloudflare-dns.com")
@@ -278,7 +287,7 @@ func (r *Resolver) fetchPlainUDPTo(ctx context.Context, query []byte, addr strin
 	if err != nil {
 		return nil, 0, err
 	}
-	_ = pc.SetDeadline(time.Now().Add(5 * time.Second))
+	_ = pc.SetDeadline(time.Now().Add(2 * time.Second))
 	if _, err := pc.WriteTo(query, raddr); err != nil {
 		return nil, 0, err
 	}

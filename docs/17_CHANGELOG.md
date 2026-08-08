@@ -12,6 +12,18 @@
 
 ---
 
+## [0.1.1+36] — 2026-08-09
+
+### Fixed
+- Android «VPN без интернета»: NetworkMonitor hosts (`connectivitycheck.gstatic.com`, `clients3.google.com`, …) → **DIRECT** (не Google CIDR RELAY)
+- Foreign DNS: DoH timeout 1.5s → fallback Yandex (Cloudflare часто медленный/блокируется в РФ)
+- `VpnService.setMetered(false)` (API 29+)
+
+### APK
+- `StreamPass-v0.1.1+36-signed-arm64.apk`
+
+---
+
 ## [0.1.1+35] — 2026-08-08
 
 ### Added
