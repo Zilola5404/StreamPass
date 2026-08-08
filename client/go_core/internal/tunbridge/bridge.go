@@ -26,14 +26,16 @@ import (
 type LogFunc func(message string)
 
 var (
-	logMu        sync.RWMutex
-	logf         LogFunc
-	trafficReady atomic.Bool
+	logMu         sync.RWMutex
+	logf          LogFunc
+	trafficReady  atomic.Bool
+	hostEmptyWarn atomic.Bool
 )
 
 // resetTrafficReady clears the session traffic-ready latch (handshake ≠ data path).
 func resetTrafficReady() {
 	trafficReady.Store(false)
+	hostEmptyWarn.Store(false)
 }
 
 // markTrafficReady emits a one-shot [vpn] traffic_ready when the first user-plane
@@ -41,6 +43,15 @@ func resetTrafficReady() {
 func markTrafficReady(via string) {
 	if trafficReady.CompareAndSwap(false, true) {
 		logLine(fmt.Sprintf("[vpn] traffic_ready via=%s", via))
+	}
+}
+
+func warnHostEmpty(ip, proto string) {
+	if hostEmptyWarn.CompareAndSwap(false, true) {
+		logLine(fmt.Sprintf(
+			"[dns] warn host_empty ip=%s proto=%s — set Private DNS=Off so queries hit 10.10.0.1 (HostForIP)",
+			ip, proto,
+		))
 	}
 }
 
@@ -234,9 +245,19 @@ func (h *routingHandler) NewConnectionEx(
 		defer onClose(nil)
 	}
 
+	// Private DNS (DNS-over-TLS) bypasses VPN DNS → HostForIP stays empty and
+	// domain rules never match. Drop DoT so the OS falls back to 10.10.0.1.
+	if destination.Port == 853 {
+		logLine(fmt.Sprintf("[dns] drop tcp/853 (Private DNS/DoT blocked) dest=%s", destination.String()))
+		return
+	}
+
 	dec := h.engine.DecideDetailed(h.targetFrom(destination))
 	mode := dec.Mode
 	host, destIP, destPort := splitDest(destination)
+	if host == "" && destIP != "" {
+		warnHostEmpty(destIP, "tcp")
+	}
 	logLine(fmt.Sprintf("[tun] tcp mode=%s rule=%s reason=%s dest=%s", mode, dec.Rule, dec.Reason, destination.String()))
 	logLine(fmt.Sprintf("[decision] host=%s ip=%s rule=%s action=%s reason=%s", host, destIP, dec.Rule, mode, dec.Reason))
 	switch mode {
@@ -413,6 +434,10 @@ func (h *routingHandler) NewPacketConnectionEx(
 		h.handleDNS(ctx, conn, destination)
 		return
 	}
+	if destination.Port == 853 {
+		logLine(fmt.Sprintf("[dns] drop udp/853 (Private DNS/DoT blocked) dest=%s", destination.String()))
+		return
+	}
 
 	// Diagnostic: force TCP/443 by dropping QUIC (UDP/443).
 	if h.blockUDP443 && destination.Port == 443 {
@@ -425,6 +450,9 @@ func (h *routingHandler) NewPacketConnectionEx(
 	dec := h.engine.DecideDetailed(h.targetFrom(destination))
 	mode := dec.Mode
 	host, destIP, destPort := splitDest(destination)
+	if host == "" && destIP != "" {
+		warnHostEmpty(destIP, "udp")
+	}
 	logLine(fmt.Sprintf("[decision] host=%s ip=%s rule=%s action=%s reason=%s proto=udp", host, destIP, dec.Rule, mode, dec.Reason))
 
 	switch mode {

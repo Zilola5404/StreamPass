@@ -11,6 +11,7 @@
 | BUG-001 | P0→fix pending retest | Foreign geo-block IP-only | CIDR safety net +34; retest on +35 |
 | BUG-002 | P1 | Госуслуги VPN visibility | Bypass in code; verify on device |
 | IPv6 | Note | VPN IPv4-only; AF_INET6 bypass outside TUN (+35) | Documented product choice until IPv6 TUN |
+| Private DNS | P1 UX | Android Private DNS/DoT bypasses `10.10.0.1` → `host=` empty | **Off** required; +38 drops TCP/UDP **:853** |
 | BL-040 | Blocked | ЮKassa live keys | No live billing |
 
 ## Ограничения политики (не баги)
