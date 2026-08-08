@@ -146,10 +146,11 @@ class StreamPassVpnService : VpnService() {
                     """{"networkMode":"$networkMode","mtu":$mtu,"blockUdp443":$block}"""
             }
 
+            ConnectLogger.clear(this)
             Log.i(TAG, "connect relayId=$relayId host=$relayHost port=$relayPort configLen=${connectionConfig.length}")
             ConnectLogger.log(
                 this,
-                "onStartCommand relayId=$relayId host=$relayHost port=$relayPort configLen=${connectionConfig.length} rulesLen=${rulesJson.length} networkMode=$networkMode mtu=$mtu blockUdp443=$blockUdp443",
+                "=== connect session begin === onStartCommand relayId=$relayId host=$relayHost port=$relayPort configLen=${connectionConfig.length} rulesLen=${rulesJson.length} networkMode=$networkMode mtu=$mtu blockUdp443=$blockUdp443",
             )
             startForeground(NOTIFICATION_ID, buildNotification("Подключение…"))
             emit("connecting")
@@ -189,7 +190,7 @@ class StreamPassVpnService : VpnService() {
             if (relayHost.isEmpty()) {
                 throw IllegalStateException("No relay host provided — was GET /servers called first?")
             }
-            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+36 routing-policy-v1")
+            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+37 routing-policy-v1")
             ConnectLogger.log(this, "establishTunnel: validating connection_config")
             if (connectionConfig.isBlank()) {
                 throw IllegalStateException("connection_config is empty — relay misconfigured in backend")

@@ -179,7 +179,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              'Network Mode (debug / E09)',
+              'Network Mode (только диагностика). Кнопка «Подключить» на главном всегда Split.',
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
@@ -193,7 +193,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
           ),
           RadioListTile<String>(
             title: const Text('Full Relay'),
-            subtitle: const Text('Force RELAY — isolate relay path'),
+            subtitle: const Text('Force RELAY — isolate relay path (не для обычного использования)'),
             value: 'full_relay',
             groupValue: _settings.networkMode,
             activeColor: AppColors.cyan,
@@ -201,7 +201,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
           ),
           RadioListTile<String>(
             title: const Text('Direct Test'),
-            subtitle: const Text('Force DIRECT — isolate ISP path'),
+            subtitle: const Text('Force DIRECT full-tunnel — может «убить» интернет; только тест'),
             value: 'direct_test',
             groupValue: _settings.networkMode,
             activeColor: AppColors.cyan,

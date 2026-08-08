@@ -593,10 +593,20 @@ class _HomeScreenState extends State<HomeScreen> {
         final settings = await SettingsService().load();
         exclusionsJson = jsonEncode(settings.exclusions);
         bypassPackagesJson = jsonEncode(settings.bypassPackages);
-        networkMode = settings.networkMode;
+        // Product Connect always uses split (docs/07.4 §9). Diagnostic modes
+        // (direct_test / full_relay / tcp_only) must not stick to the home button.
+        if (settings.networkMode != 'split') {
+          _connectLog.warn('vpn',
+              'ignoring diagnostic networkMode=${settings.networkMode}; product path uses split');
+        }
+        networkMode = 'split';
         mtu = settings.mtu;
-        blockUdp443 = settings.blockUdp443;
-        optionsJson = settings.optionsJson;
+        blockUdp443 = false;
+        optionsJson = jsonEncode({
+          'networkMode': 'split',
+          'mtu': mtu,
+          'blockUdp443': false,
+        });
         _pendingRulesVersion = ruleSet.version;
         _connectLog.info('decision', 'rules loaded', {
           'version': '${ruleSet.version}',
