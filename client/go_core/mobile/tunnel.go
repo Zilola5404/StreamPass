@@ -10,6 +10,7 @@ import (
 
 	"github.com/apernet/hysteria/core/v2/client"
 	"streampass/go_core/internal/decision"
+	"streampass/go_core/internal/dnscache"
 	"streampass/go_core/internal/hyconfig"
 	"streampass/go_core/internal/protect"
 	"streampass/go_core/internal/tunbridge"
@@ -269,6 +270,11 @@ func runTunnel(fd int, relayHost string, relayPort int, connectionConfig string,
 	default:
 		engine.SetForceMode("")
 	}
+	dnscache.SetRouteHint(func(host string) (rule, route, reason string) {
+		d := engine.DecideDetailed(decision.Target{Host: host})
+		return d.Rule, string(d.Mode), d.Reason
+	})
+	defer dnscache.SetRouteHint(nil)
 	blockUDP443 := opts.BlockUDP443 || opts.NetworkMode == "tcp_only"
 	bridge, err := tunbridge.StartWithOptions(ctx, fd, hyClient, mtu, engine, relayLabel, tunbridge.Options{
 		BlockUDP443: blockUDP443,

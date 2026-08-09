@@ -193,18 +193,45 @@ func emitDNSRoute(host string) {
 	if host == "" {
 		return
 	}
-	rule := "foreign"
-	route := "RELAY"
-	reason := "foreign_dns"
-	if IsRussianDomain(host) {
-		rule = "*.ru"
-		route = "DIRECT"
-		reason = "ru_domain_bypass"
-	}
+	rule, route, reason := ClassifyDNSRoute(host)
 	logLine(nil, fmt.Sprintf(
 		"[dns-route] host=%s rule=%s route=%s reason=%s",
 		host, rule, route, reason,
 	))
+}
+
+// ClassifyDNSRoute returns diagnostic rule/route/reason for a hostname.
+// Uses SetRouteHint (Decision Engine / forceMode) when installed; otherwise
+// DefaultMode=DIRECT for unknown foreign hosts (not RELAY — matches product).
+func ClassifyDNSRoute(host string) (rule, route, reason string) {
+	if hint := routeHint(); hint != nil {
+		return hint(host)
+	}
+	if IsRussianDomain(host) {
+		return "*.ru", "DIRECT", "ru_domain_bypass"
+	}
+	return "foreign", "DIRECT", "default_direct"
+}
+
+// RouteHint classifies a hostname the same way Decision Engine will (incl. forceMode).
+type RouteHint func(host string) (rule, route, reason string)
+
+var (
+	routeHintMu sync.RWMutex
+	routeHintFn RouteHint
+)
+
+// SetRouteHint installs Decision-aware DNS route logging (cleared with nil).
+func SetRouteHint(fn RouteHint) {
+	routeHintMu.Lock()
+	routeHintFn = fn
+	routeHintMu.Unlock()
+}
+
+func routeHint() RouteHint {
+	routeHintMu.RLock()
+	defer routeHintMu.RUnlock()
+	return routeHintFn
 }
 
 func emitDNSDiag(host, via string, rttMS int64, errMsg string) {

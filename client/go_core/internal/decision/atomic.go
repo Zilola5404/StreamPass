@@ -48,6 +48,13 @@ func (a *AtomicEngine) SetForceMode(mode Mode) {
 	a.mu.Unlock()
 }
 
+// ForceMode returns the diagnostic override, or empty when unset.
+func (a *AtomicEngine) ForceMode() Mode {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.forceMode
+}
+
 // Version returns the loaded rule set version (0 if unknown).
 func (a *AtomicEngine) Version() int {
 	a.mu.RLock()

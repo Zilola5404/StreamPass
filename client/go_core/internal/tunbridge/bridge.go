@@ -262,7 +262,15 @@ func (h *routingHandler) NewConnectionEx(
 	logLine(fmt.Sprintf("[decision] host=%s ip=%s rule=%s action=%s reason=%s", host, destIP, dec.Rule, mode, dec.Reason))
 	switch mode {
 	case decision.ModeDirect:
-		h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, true, false)
+		// Product safety net (audit traffic-path-p0): DIRECT dial/data fail → one
+		// marked RELAY retry. Skipped under diagnostic forceMode (direct_test).
+		if !h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, true, false) {
+			if h.engine != nil && h.engine.ForceMode() == "" {
+				dec.Reason = "direct_failed_retry_relay"
+				logLine(fmt.Sprintf("[tun] DIRECT fail → RELAY retry dest=%s reason=direct_failed_retry_relay", destination.String()))
+				h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, false, true)
+			}
+		}
 	case decision.ModeFallback:
 		// Decision policy: RELAY-first + allow_direct_fallback (docs/07.4 §6).
 		if !h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, false, true) {
@@ -343,39 +351,64 @@ func (h *routingHandler) pipeTCP(
 		},
 	}
 
+	// Always watch the blind spot: dial ok but no bytes either way (audit Этап 0).
+	xferCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = bufio.CopyConn(xferCtx, conn, counted)
+	}()
+	noDataTimer := time.NewTimer(4 * time.Second)
+	defer noDataTimer.Stop()
+	noDataC := noDataTimer.C
+	var blackholeC <-chan time.Time
 	if detectBlackhole && !direct {
-		xferCtx, cancel := context.WithCancel(ctx)
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			_ = bufio.CopyConn(xferCtx, conn, counted)
-		}()
-		deadline := time.NewTimer(3 * time.Second)
-		defer deadline.Stop()
+		t := time.NewTimer(3 * time.Second)
+		defer t.Stop()
+		blackholeC = t.C
+	}
+
+	failed := false
+loop:
+	for {
 		select {
 		case <-done:
 			_ = remote.Close()
-		case <-deadline.C:
+			break loop
+		case <-blackholeC:
+			blackholeC = nil
 			if firstByte.Load() == 0 {
 				cancel()
 				_ = remote.Close()
 				<-done
+				failed = true
 				logLine(fmt.Sprintf("[tun] relay blackhole (no first_byte in 3s) dest=%s", destination.String()))
 				emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "relay_blackhole", h.relayID, false, 3*time.Second, "relay_blackhole", 0)
 				emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, "relay_blackhole", dnscache.LastResolveMS(host), dialDur, 0, 0, "relay_blackhole")
-				return false
+				break loop
 			}
-			<-done
-			_ = remote.Close()
+		case <-noDataC:
+			noDataC = nil
+			if bytes.Load() == 0 {
+				cancel()
+				_ = remote.Close()
+				<-done
+				failed = true
+				logLine(fmt.Sprintf("[tun] stream_open_no_data (4s) dest=%s mode=%s", destination.String(), modeLabel))
+				emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "stream_open_no_data", h.relayID, false, 4*time.Second, "stream_open_no_data", 0)
+				emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, "stream_open_no_data", dnscache.LastResolveMS(host), dialDur, 0, 0, "stream_open_no_data")
+				break loop
+			}
 		case <-ctx.Done():
 			cancel()
 			_ = remote.Close()
 			<-done
 			return false
 		}
-	} else {
-		_ = bufio.CopyConn(ctx, conn, counted)
-		_ = remote.Close()
+	}
+
+	if failed {
+		return false
 	}
 
 	xferDur := time.Since(xferStart)
@@ -457,7 +490,13 @@ func (h *routingHandler) NewPacketConnectionEx(
 
 	switch mode {
 	case decision.ModeDirect:
-		h.relayUDP(ctx, conn, destination, true, host, destIP, destPort, dec)
+		if !h.relayUDP(ctx, conn, destination, true, host, destIP, destPort, dec) {
+			if h.engine != nil && h.engine.ForceMode() == "" {
+				dec.Reason = "direct_failed_retry_relay"
+				logLine(fmt.Sprintf("[tun] DIRECT-udp fail → RELAY retry dest=%s reason=direct_failed_retry_relay", destination.String()))
+				h.relayUDP(ctx, conn, destination, false, host, destIP, destPort, dec)
+			}
+		}
 	case decision.ModeFallback:
 		if !h.relayUDP(ctx, conn, destination, false, host, destIP, destPort, dec) {
 			dec.Reason = "fallback_after_relay_fail"

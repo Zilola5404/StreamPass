@@ -12,6 +12,22 @@
 
 ---
 
+## [0.1.1+39] — 2026-08-09
+
+### Added
+- `[diag] reason=stream_open_no_data` (4s, 0 bytes) — traffic-path P0 audit Этап 0
+- `direct_failed_retry_relay`: DIRECT fail → one marked RELAY retry (Этап 4; not in direct_test)
+- `dnscache.ClassifyDNSRoute` / `SetRouteHint` — DNS route log follows Decision/forceMode
+
+### Changed
+- Default `[dns-route]` for unknown foreign: **DIRECT** (was misleading RELAY)
+
+### APK
+- `StreamPass-v0.1.1+39-signed-arm64.apk`
+- Response: `reports/CodeReview/traffic-path-p0-audit-response.md`
+
+---
+
 ## [0.1.1+36] — 2026-08-09
 
 ### Fixed
