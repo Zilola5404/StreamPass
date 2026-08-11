@@ -7,6 +7,57 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!--
+      Package visibility (API 30+): without this, getPackageInfo / addDisallowedApplication
+      fail for gov/bank apps → appBypass=1 (self only) and Госуслуги/ФНС/S7 still see VPN.
+      Launcher intent covers heuristic discovery; explicit packages cover known critical apps.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <package android:name="ru.rostel" />
+        <package android:name="ru.gosuslugi.gosuslugi" />
+        <package android:name="ru.gosuslugi.mobile" />
+        <package android:name="ru.gosuslugi.pos" />
+        <package android:name="ru.gosuslugi.culture" />
+        <package android:name="ru.gosuslugi.house" />
+        <package android:name="ru.esia.mobile" />
+        <package android:name="com.esia.mobile" />
+        <package android:name="ru.minsvyaz.gosuslugi" />
+        <package android:name="ru.fns.lkfl" />
+        <package android:name="ru.nalog.lkfl" />
+        <package android:name="ru.nalog.lkip" />
+        <package android:name="com.gnivts.selfemployed" />
+        <package android:name="ru.gnivts.selfemployed" />
+        <package android:name="ru.s7tl.app" />
+        <package android:name="ru.s7.android" />
+        <package android:name="com.s7.android" />
+        <package android:name="ru.sberbankmobile" />
+        <package android:name="com.idamob.tinkoff.android" />
+        <package android:name="ru.vtb24.mobilebanking" />
+        <package android:name="ru.alfabank.mobile.android" />
+        <package android:name="ru.raiffeisennews" />
+        <package android:name="ru.mw" />
+        <package android:name="ru.gazprombank.android.mobilebank.app" />
+        <package android:name="logo.com.mbanking" />
+        <package android:name="ru.rshb.dbo" />
+        <package android:name="ru.rosbank.android.inbank" />
+        <package android:name="ru.otpbank.mobile" />
+        <package android:name="ru.sovcombank.halva" />
+        <package android:name="ru.yoo.money" />
+        <package android:name="ru.yoomoney.app" />
+        <package android:name="ru.mts.money" />
+        <package android:name="ru.megafon.mlk" />
+        <package android:name="ru.beeline.services" />
+        <package android:name="ru.tele2.mytele2" />
+        <package android:name="ru.aeroflot" />
+        <package android:name="ru.utair.android" />
+        <package android:name="ru.rzd.pass" />
+        <package android:name="ru.russianpost.android" />
+    </queries>
+
     <application
         android:label="StreamPass"
         android:icon="@mipmap/ic_launcher"

@@ -33,6 +33,9 @@ func TestDefaultDirectRules_mergedWithBackend(t *testing.T) {
 	if got := e.Decide(decision.Target{Host: "clients3.google.com"}); got != decision.ModeDirect {
 		t.Fatalf("clients3.google.com = %s, want DIRECT (captive portal)", got)
 	}
+	if got := e.Decide(decision.Target{Host: "gemini.gstatic.com"}); got != decision.ModeRelay {
+		t.Fatalf("gemini.gstatic.com = %s, want RELAY (Gemini assets)", got)
+	}
 }
 
 func TestNewEngineFromJSON_includesDefaults(t *testing.T) {

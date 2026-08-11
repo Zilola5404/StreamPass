@@ -21,7 +21,7 @@ func TestDomainMatch_wildcardRu(t *testing.T) {
 		{"yandex.ru", decision.ModeDirect},
 		{"sub.mail.ru", decision.ModeDirect},
 		{"www.youtube.com", decision.ModeRelay},
-		{"google.com", decision.ModeDirect}, // DefaultMode=DIRECT when no rule
+		{"google.com", decision.ModeRelay}, // DefaultMode=RELAY when no rule
 	}
 	for _, tc := range cases {
 		got := e.Decide(decision.Target{Host: tc.host})
@@ -46,8 +46,8 @@ func TestCIDRMatch_directRussianRange(t *testing.T) {
 
 	outside := netip.MustParseAddr("8.8.8.8")
 	got = e.Decide(decision.Target{IP: outside, Host: "dns.google"})
-	if got != decision.ModeDirect {
-		t.Fatalf("unmatched 8.8.8.8 = %s, want DIRECT (DefaultMode)", got)
+	if got != decision.ModeRelay {
+		t.Fatalf("unmatched 8.8.8.8 = %s, want RELAY (DefaultMode)", got)
 	}
 	got = e.Decide(decision.Target{Host: "google.com"})
 	if got != decision.ModeRelay {

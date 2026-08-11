@@ -134,9 +134,24 @@ func (r *Resolver) HandleQuery(ctx context.Context, query []byte) (resp []byte, 
 	name := q.Name.String()
 	qtype := uint16(q.Type)
 
+	// VPN/relay path is IPv4-only (VPS has no working IPv6 egress). Answering
+	// AAAA makes apps dial [IPv6]:443 via Hysteria → "no IPv4 address available".
+	if q.Type == dnsmessage.TypeAAAA {
+		hostTrim := trimDot(name)
+		logLine(r.logf, fmt.Sprintf("[dns] query %s via=aaaa-suppress (IPv4-only VPN)", hostTrim))
+		emitDNSDiag(hostTrim, "aaaa-suppress", 0, "")
+		emitDNSRoute(hostTrim)
+		// Android often keeps A in its own cache and never asks us for TypeA, so
+		// TCP arrives IP-only (host=). Prefetch A + pin BEFORE answering AAAA so
+		// 2ip.ru stays DIRECT under DefaultMode=RELAY.
+		r.prefetchAndPin(ctx, hostTrim)
+		return buildEmptyAnswer(header, q)
+	}
+
 	if raw, ok := r.cache.GetRaw(qtype, name); ok {
 		logLine(r.logf, fmt.Sprintf("[dns] query %s via=cache", trimDot(name)))
 		IndexAnswers(name, raw)
+		pinRouteFromAnswer(trimDot(name), raw)
 		emitDNSDiag(trimDot(name), "cache", 0, "")
 		emitDNSRoute(trimDot(name))
 		return rewriteID(raw, header.ID)
@@ -146,8 +161,18 @@ func (r *Resolver) HandleQuery(ctx context.Context, query []byte) (resp []byte, 
 	var raw []byte
 	var ttl time.Duration
 	via := "doh"
+	hostTrim := trimDot(name)
 
-	if IsRussianDomain(name) {
+	// Android NetworkMonitor / captive portal must resolve fast (<~3s) or the
+	// OS leaves the VPN without IS_VALIDATED → apps show "no internet".
+	if isNetworkMonitorHost(hostTrim) {
+		raw, ttl, err = r.fetchPlainUDPTo(ctx, query, ruDNSAddr)
+		via = "yandex-nm"
+		if err != nil {
+			raw, ttl, err = r.fetchPlainUDPTo(ctx, query, plainDNSAddr)
+			via = "udp-nm"
+		}
+	} else if IsRussianDomain(name) {
 		raw, ttl, err = r.fetchPlainUDPTo(ctx, query, ruDNSAddr)
 		via = "yandex"
 		if err != nil {
@@ -181,12 +206,104 @@ func (r *Resolver) HandleQuery(ctx context.Context, query []byte) (resp []byte, 
 	}
 	r.cache.PutRaw(qtype, name, raw, ttl)
 	IndexAnswers(name, raw)
+	pinRouteFromAnswer(trimDot(name), raw)
 	rtt := time.Since(start).Milliseconds()
 	RememberResolveMS(trimDot(name), rtt)
 	logLine(r.logf, fmt.Sprintf("[dns] query %s via=%s rtt=%dms", trimDot(name), via, rtt))
 	emitDNSDiag(trimDot(name), via, rtt, "")
 	emitDNSRoute(trimDot(name))
 	return rewriteID(raw, header.ID)
+}
+
+// pinRouteFromAnswer pins answer A-IPs as DIRECT or RELAY from DNS-time
+// classification so IP-only TCP keeps the right mode (2ip.ru vs ifconfig.me).
+func pinRouteFromAnswer(host string, raw []byte) {
+	if host == "" || len(raw) == 0 {
+		return
+	}
+	_, route, _ := ClassifyDNSRoute(host)
+	ips := ExtractAIPs(raw)
+	if len(ips) == 0 {
+		logLine(nil, fmt.Sprintf("[dns] pin-skip host=%s route=%s (no A in answer/additional)", host, route))
+		return
+	}
+	switch strings.ToUpper(route) {
+	case "RELAY":
+		for _, ip := range ips {
+			PinRelayIP(host, ip)
+		}
+		logLine(nil, fmt.Sprintf("[dns] pin-relay host=%s ips=%s", host, strings.Join(ips, ",")))
+	case "DIRECT":
+		for _, ip := range ips {
+			PinDirectIP(host, ip)
+		}
+		logLine(nil, fmt.Sprintf("[dns] pin-direct host=%s ips=%s", host, strings.Join(ips, ",")))
+	}
+}
+
+// prefetchAndPin resolves TypeA for host (side effect) and pins DIRECT/RELAY.
+// Called on AAAA-suppress because apps often dial a cached A without querying us.
+func (r *Resolver) prefetchAndPin(ctx context.Context, host string) {
+	host = trimDot(host)
+	if host == "" || r == nil {
+		return
+	}
+	// Reuse cached A if present.
+	if raw, ok := r.cache.GetRaw(uint16(dnsmessage.TypeA), host+"."); ok {
+		IndexAnswers(host, raw)
+		pinRouteFromAnswer(host, raw)
+		return
+	}
+	qwire, err := buildAQuery(host)
+	if err != nil {
+		return
+	}
+	pctx, cancel := context.WithTimeout(ctx, 450*time.Millisecond)
+	defer cancel()
+	var raw []byte
+	if IsRussianDomain(host) || isNetworkMonitorHost(host) {
+		raw, _, err = r.fetchPlainUDPTo(pctx, qwire, ruDNSAddr)
+		if err != nil {
+			raw, _, err = r.fetchPlainUDPTo(pctx, qwire, plainDNSAddr)
+		}
+	} else {
+		raw, _, err = r.fetchDoH(pctx, qwire)
+		if err != nil {
+			raw, _, err = r.fetchPlainUDPTo(pctx, qwire, plainDNSAddr)
+		}
+	}
+	if err != nil || len(raw) == 0 {
+		return
+	}
+	r.cache.PutRaw(uint16(dnsmessage.TypeA), host+".", raw, 30*time.Second)
+	IndexAnswers(host, raw)
+	pinRouteFromAnswer(host, raw)
+}
+
+func buildAQuery(host string) ([]byte, error) {
+	host = trimDot(host)
+	if host == "" {
+		return nil, fmt.Errorf("empty host")
+	}
+	name, err := dnsmessage.NewName(host + ".")
+	if err != nil {
+		return nil, err
+	}
+	builder := dnsmessage.NewBuilder(nil, dnsmessage.Header{
+		ID:               uint16(time.Now().UnixNano()),
+		RecursionDesired: true,
+	})
+	if err := builder.StartQuestions(); err != nil {
+		return nil, err
+	}
+	if err := builder.Question(dnsmessage.Question{
+		Name:  name,
+		Type:  dnsmessage.TypeA,
+		Class: dnsmessage.ClassINET,
+	}); err != nil {
+		return nil, err
+	}
+	return builder.Finish()
 }
 
 func emitDNSRoute(host string) {
@@ -202,7 +319,7 @@ func emitDNSRoute(host string) {
 
 // ClassifyDNSRoute returns diagnostic rule/route/reason for a hostname.
 // Uses SetRouteHint (Decision Engine / forceMode) when installed; otherwise
-// DefaultMode=DIRECT for unknown foreign hosts (not RELAY — matches product).
+// mirrors DefaultMode=RELAY for unknown foreign (RU still DIRECT via IsRussianDomain).
 func ClassifyDNSRoute(host string) (rule, route, reason string) {
 	if hint := routeHint(); hint != nil {
 		return hint(host)
@@ -210,7 +327,27 @@ func ClassifyDNSRoute(host string) (rule, route, reason string) {
 	if IsRussianDomain(host) {
 		return "*.ru", "DIRECT", "ru_domain_bypass"
 	}
-	return "foreign", "DIRECT", "default_direct"
+	if isNetworkMonitorHost(host) {
+		return "network_monitor", "DIRECT", "network_monitor_direct"
+	}
+	return "foreign", "RELAY", "default_relay_foreign"
+}
+
+func isNetworkMonitorHost(host string) bool {
+	h := strings.ToLower(strings.TrimSuffix(host, "."))
+	switch {
+	case h == "connectivitycheck.gstatic.com",
+		strings.HasSuffix(h, ".connectivitycheck.gstatic.com"),
+		h == "connectivitycheck.android.com",
+		h == "clients3.google.com",
+		h == "clients1.google.com",
+		h == "clients2.google.com",
+		h == "clients4.google.com",
+		h == "android.clients.google.com":
+		return true
+	default:
+		return false
+	}
 }
 
 // RouteHint classifies a hostname the same way Decision Engine will (incl. forceMode).
@@ -367,6 +504,26 @@ func buildServFail(req dnsmessage.Header, q dnsmessage.Question) ([]byte, error)
 		OpCode:           req.OpCode,
 		RCode:            dnsmessage.RCodeServerFailure,
 		RecursionDesired: req.RecursionDesired,
+	})
+	if err := builder.StartQuestions(); err != nil {
+		return nil, err
+	}
+	if err := builder.Question(q); err != nil {
+		return nil, err
+	}
+	return builder.Finish()
+}
+
+// buildEmptyAnswer returns a successful NOERROR response with zero answers
+// (used to suppress AAAA on IPv4-only relay deployments).
+func buildEmptyAnswer(req dnsmessage.Header, q dnsmessage.Question) ([]byte, error) {
+	builder := dnsmessage.NewBuilder(nil, dnsmessage.Header{
+		ID:                 req.ID,
+		Response:           true,
+		OpCode:             req.OpCode,
+		RCode:              dnsmessage.RCodeSuccess,
+		RecursionDesired:   req.RecursionDesired,
+		RecursionAvailable: true,
 	})
 	if err := builder.StartQuestions(); err != nil {
 		return nil, err

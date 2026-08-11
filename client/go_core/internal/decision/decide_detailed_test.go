@@ -20,11 +20,22 @@ func TestDecideDetailed_russianDirect(t *testing.T) {
 	}
 }
 
-func TestDecideDetailed_foreignDefaultDirect(t *testing.T) {
+func TestDecideDetailed_foreignDefaultRelay(t *testing.T) {
 	e := decision.NewEngine(decision.MergeWithDefaults(nil), nil, decision.DefaultMode)
 	d := e.DecideDetailed(decision.Target{Host: "example.com"})
+	if d.Mode != decision.ModeRelay {
+		t.Fatalf("mode=%s want RELAY (DefaultMode)", d.Mode)
+	}
+	if d.Reason != "default_relay_foreign" {
+		t.Fatalf("reason=%q want default_relay_foreign", d.Reason)
+	}
+}
+
+func TestDecideDetailed_2ipRuDirect(t *testing.T) {
+	e := decision.NewEngine(decision.MergeWithDefaults(nil), nil, decision.DefaultMode)
+	d := e.DecideDetailed(decision.Target{Host: "2ip.ru"})
 	if d.Mode != decision.ModeDirect {
-		t.Fatalf("mode=%s want DIRECT (DefaultMode)", d.Mode)
+		t.Fatalf("2ip.ru mode=%s want DIRECT", d.Mode)
 	}
 }
 

@@ -2,9 +2,12 @@ package tunbridge
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"net/netip"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -49,7 +52,7 @@ func markTrafficReady(via string) {
 func warnHostEmpty(ip, proto string) {
 	if hostEmptyWarn.CompareAndSwap(false, true) {
 		logLine(fmt.Sprintf(
-			"[dns] warn host_empty ip=%s proto=%s — set Private DNS=Off so queries hit 10.10.0.1 (HostForIP)",
+			"[dns] warn host_empty ip=%s proto=%s — Private DNS/Chrome Secure DNS Off; VPN DNS=198.18.0.1 (HostForIP)",
 			ip, proto,
 		))
 	}
@@ -162,7 +165,12 @@ func StartWithOptions(ctx context.Context, fd int, hyClient client.Client, mtu u
 	if opts.BlockUDP443 {
 		logLine("[vpn] udp443=blocked (force TCP/443 fallback)")
 	}
-	stack, err := tun.NewStack("system", tun.StackOptions{
+	// gvisor: system stack on One UI 8 / Android 16 accepts DNS UDP but never
+	// completes TCP (no NewConnectionEx) → foreign RELAY sites hang while
+	// RU excludeRoute works. Build AAR with -tags with_gvisor.
+	stackName := "gvisor"
+	logLine(fmt.Sprintf("[vpn] tun-stack=%s mtu=%d", stackName, mtu))
+	stack, err := tun.NewStack(stackName, tun.StackOptions{
 		Context:    runCtx,
 		Tun:        tunDev,
 		TunOptions: tunOptions,
@@ -219,13 +227,69 @@ func (h *routingHandler) targetFrom(destination M.Socksaddr) decision.Target {
 	}
 	if destination.Addr.IsValid() {
 		t.IP = destination.Addr
-		if t.Host == "" {
-			// OS often delivers IP-only flows after system DNS; recover hostname
-			// so *.ru / domain rules still match (TASK network diagnostics).
-			t.Host = dnscache.HostForIP(destination.Addr.String())
+		ipStr := destination.Addr.String()
+		// DIRECT pin first (*.ru / 2ip) so DefaultMode=RELAY cannot steal RU CDN IPs.
+		if pinned := dnscache.DirectHostNearIP(ipStr); pinned != "" {
+			t.Host = pinned
+		} else if pinned := dnscache.RelayHostNearIP(ipStr); pinned != "" {
+			t.Host = pinned
+		} else if t.Host == "" {
+			t.Host = dnscache.HostForIP(ipStr)
 		}
 	}
 	return t
+}
+
+// decideDest evaluates routing with DNS pins and anycast-safe host sets.
+func (h *routingHandler) decideDest(destination M.Socksaddr) decision.Decision {
+	if destination.Addr.IsValid() {
+		ipStr := destination.Addr.String()
+		if dh := dnscache.DirectHostNearIP(ipStr); dh != "" {
+			return h.engine.DecideDetailed(decision.Target{
+				Host: dh,
+				IP:   destination.Addr,
+			})
+		}
+		// Any remembered hostname that is *.ru wins over DefaultMode=RELAY.
+		for _, host := range dnscache.HostsForIP(ipStr) {
+			if dnscache.IsRussianDomain(host) {
+				return h.engine.DecideDetailed(decision.Target{
+					Host: host,
+					IP:   destination.Addr,
+				})
+			}
+		}
+	}
+	t := h.targetFrom(destination)
+	dec := h.engine.DecideDetailed(t)
+	if dec.Mode == decision.ModeRelay || dec.Mode == decision.ModeFallback {
+		return dec
+	}
+	// Matched DIRECT rule (*.ru, NetworkMonitor, exclusion) — do not upgrade to RELAY.
+	if dec.Mode == decision.ModeDirect && (dec.Source == "rule" || dec.Source == "exclusion") {
+		return dec
+	}
+	if !destination.Addr.IsValid() {
+		return dec
+	}
+	ipStr := destination.Addr.String()
+	primary := strings.ToLower(strings.TrimSuffix(t.Host, "."))
+	for _, host := range dnscache.HostsForIP(ipStr) {
+		if host == "" || host == primary {
+			continue
+		}
+		alt := h.engine.DecideDetailed(decision.Target{Host: host, IP: t.IP})
+		if alt.Mode == decision.ModeRelay || alt.Mode == decision.ModeFallback {
+			return alt
+		}
+	}
+	if pinned := dnscache.RelayHostNearIP(ipStr); pinned != "" && pinned != primary {
+		alt := h.engine.DecideDetailed(decision.Target{Host: pinned, IP: t.IP})
+		if alt.Mode == decision.ModeRelay || alt.Mode == decision.ModeFallback {
+			return alt
+		}
+	}
+	return dec
 }
 
 func (h *routingHandler) NewConnectionEx(
@@ -246,15 +310,32 @@ func (h *routingHandler) NewConnectionEx(
 	}
 
 	// Private DNS (DNS-over-TLS) bypasses VPN DNS → HostForIP stays empty and
-	// domain rules never match. Drop DoT so the OS falls back to 10.10.0.1.
+	// domain rules never match. Drop DoT so the OS falls back to 198.18.0.1.
 	if destination.Port == 853 {
 		logLine(fmt.Sprintf("[dns] drop tcp/853 (Private DNS/DoT blocked) dest=%s", destination.String()))
 		return
 	}
+	// TCP DNS (RFC 7766) — some resolvers fall back after UDP; answer locally.
+	if destination.Port == 53 {
+		h.handleDNSTCP(ctx, conn)
+		return
+	}
+	// Hysteria relay on VPS is IPv4-only; dialing IPv6 yields "no IPv4 address available".
+	if isIPv6Literal(destination) {
+		logLine(fmt.Sprintf("[tun] drop ipv6 dest=%s (relay IPv4-only)", destination.String()))
+		return
+	}
 
-	dec := h.engine.DecideDetailed(h.targetFrom(destination))
+	dec := h.decideDest(destination)
 	mode := dec.Mode
 	host, destIP, destPort := splitDest(destination)
+	if host == "" && destIP != "" {
+		if pinned := dnscache.DirectHostNearIP(destIP); pinned != "" {
+			host = pinned
+		} else if pinned := dnscache.RelayHostNearIP(destIP); pinned != "" {
+			host = pinned
+		}
+	}
 	if host == "" && destIP != "" {
 		warnHostEmpty(destIP, "tcp")
 	}
@@ -323,9 +404,13 @@ func (h *routingHandler) pipeTCP(
 			return false
 		}
 	} else {
-		remote, err = h.client.TCP(destination.String())
+		dialTo := relayDialAddr(destination, host, destPort)
+		if dialTo != destination.String() {
+			logLine(fmt.Sprintf("[tun] relay-tcp rewrite dest=%s dial=%s", destination.String(), dialTo))
+		}
+		remote, err = h.client.TCP(dialTo)
 		if err != nil {
-			logLine(fmt.Sprintf("[tun] relay-tcp fail dest=%s err=%v", destination.String(), err))
+			logLine(fmt.Sprintf("[tun] relay-tcp fail dest=%s dial=%s err=%v", destination.String(), dialTo, err))
 			emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), err.Error(), 0)
 			emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, dec.Reason, dnscache.LastResolveMS(host), time.Since(start), 0, 0, err.Error())
 			return false
@@ -471,6 +556,10 @@ func (h *routingHandler) NewPacketConnectionEx(
 		logLine(fmt.Sprintf("[dns] drop udp/853 (Private DNS/DoT blocked) dest=%s", destination.String()))
 		return
 	}
+	if isIPv6Literal(destination) {
+		logLine(fmt.Sprintf("[tun] drop ipv6 dest=%s (relay IPv4-only)", destination.String()))
+		return
+	}
 
 	// Diagnostic: force TCP/443 by dropping QUIC (UDP/443).
 	if h.blockUDP443 && destination.Port == 443 {
@@ -480,7 +569,7 @@ func (h *routingHandler) NewPacketConnectionEx(
 		return
 	}
 
-	dec := h.engine.DecideDetailed(h.targetFrom(destination))
+	dec := h.decideDest(destination)
 	mode := dec.Mode
 	host, destIP, destPort := splitDest(destination)
 	if host == "" && destIP != "" {
@@ -542,6 +631,48 @@ func (h *routingHandler) handleDNS(ctx context.Context, conn N.PacketConn, desti
 	}
 }
 
+// handleDNSTCP answers length-prefixed DNS over TCP (port 53) via the same cache/DoH path.
+func (h *routingHandler) handleDNSTCP(ctx context.Context, conn net.Conn) {
+	defer func() {
+		if r := recover(); r != nil {
+			// Never let DNS path take down the VPN process.
+		}
+	}()
+	_ = conn.SetDeadline(time.Now().Add(15 * time.Second))
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		var hdr [2]byte
+		if _, err := io.ReadFull(conn, hdr[:]); err != nil {
+			return
+		}
+		n := int(binary.BigEndian.Uint16(hdr[:]))
+		if n <= 0 || n > 8192 {
+			return
+		}
+		query := make([]byte, n)
+		if _, err := io.ReadFull(conn, query); err != nil {
+			return
+		}
+		resp, err := dnscache.Default().HandleQuery(ctx, query)
+		if err != nil || len(resp) == 0 || len(resp) > 65535 {
+			continue
+		}
+		var outHdr [2]byte
+		binary.BigEndian.PutUint16(outHdr[:], uint16(len(resp)))
+		if _, err := conn.Write(outHdr[:]); err != nil {
+			return
+		}
+		if _, err := conn.Write(resp); err != nil {
+			return
+		}
+		_ = conn.SetDeadline(time.Now().Add(15 * time.Second))
+	}
+}
+
 func (h *routingHandler) relayUDP(
 	ctx context.Context,
 	conn N.PacketConn,
@@ -552,6 +683,13 @@ func (h *routingHandler) relayUDP(
 	dec decision.Decision,
 ) bool {
 	destAddr := destination.String()
+	if !direct {
+		rewritten := relayDialAddr(destination, host, destPort)
+		if rewritten != destAddr {
+			logLine(fmt.Sprintf("[tun] relay-udp rewrite dest=%s dial=%s", destAddr, rewritten))
+			destAddr = rewritten
+		}
+	}
 	start := time.Now()
 	modeLabel := "RELAY"
 	if direct {
@@ -784,9 +922,40 @@ func splitDest(destination M.Socksaddr) (host, destIP string, destPort int) {
 		destIP = destination.Addr.String()
 	}
 	if host == "" && destIP != "" {
-		host = dnscache.HostForIP(destIP)
+		if pinned := dnscache.DirectHostNearIP(destIP); pinned != "" {
+			host = pinned
+		} else if pinned := dnscache.RelayHostNearIP(destIP); pinned != "" {
+			host = pinned
+		} else {
+			host = dnscache.HostForIP(destIP)
+		}
 	}
 	return host, destIP, destPort
+}
+
+// isIPv6Literal is true when the TUN destination is a native IPv6 address
+// (not FQDN, not IPv4-mapped). Relay/VPS path is IPv4-only.
+func isIPv6Literal(destination M.Socksaddr) bool {
+	if destination.IsFqdn() || !destination.Addr.IsValid() {
+		return false
+	}
+	return destination.Addr.Is6() && !destination.Addr.Is4In6()
+}
+
+// relayDialAddr prefers hostname:port for Hysteria RELAY (like Hiddify) so the
+// VPS resolves A with outbound mode:4 instead of dialing client-side IP/AAAA.
+func relayDialAddr(destination M.Socksaddr, host string, destPort int) string {
+	if host == "" {
+		return destination.String()
+	}
+	host = strings.TrimSuffix(strings.ToLower(host), ".")
+	if host == "" || strings.Contains(host, ":") {
+		return destination.String()
+	}
+	if destPort <= 0 {
+		destPort = int(destination.Port)
+	}
+	return net.JoinHostPort(host, strconv.Itoa(destPort))
 }
 
 // okDiagThrottle limits successful [diag] lines per host+mode (failures/slow always emit).

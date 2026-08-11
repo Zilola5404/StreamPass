@@ -1,6 +1,7 @@
 # StreamPass — Security Checklist
 
-> Дата: 2026-08-05
+> Дата: 2026-08-05  
+> **Последняя формальная проверка:** 2026-08-10 — `reports/Security/28-SecurityChecklist-verification-2026-08-10.md`
 
 ---
 
@@ -62,7 +63,7 @@
 
 | Check | Status | Detail |
 |-------|--------|--------|
-| Token storage | ⚠️ | SharedPreferences (not encrypted) |
+| Token storage | ⚠️ | `flutter_secure_storage` primary; SharedPreferences fallback if secure storage unavailable |
 | Certificate pinning | ❌ | Not implemented |
 | Release signing | ✅ | BL-013: `key.properties` + JKS path; warn+debug fallback if missing |
 | VPN permission | ✅ | Standard Android VPN permission flow |

@@ -57,6 +57,9 @@ var DefaultRelayRules = []Rule{
 	{Kind: KindDomain, Pattern: "bard.google.com", Mode: ModeRelay},
 	{Kind: KindDomain, Pattern: "generativelanguage.googleapis.com", Mode: ModeRelay},
 	{Kind: KindDomain, Pattern: "*.googleapis.com", Mode: ModeRelay},
+	// Gemini / Google static assets (connectivitycheck.gstatic.com stays DIRECT above)
+	{Kind: KindDomain, Pattern: "gstatic.com", Mode: ModeRelay},
+	{Kind: KindDomain, Pattern: "*.gstatic.com", Mode: ModeRelay},
 	{Kind: KindDomain, Pattern: "google.com", Mode: ModeRelay},
 	{Kind: KindDomain, Pattern: "*.google.com", Mode: ModeRelay},
 	{Kind: KindDomain, Pattern: "chatgpt.com", Mode: ModeRelay},
@@ -77,10 +80,16 @@ var DefaultRelayRules = []Rule{
 	{Kind: KindDomain, Pattern: "*.linkedin.com", Mode: ModeRelay},
 	{Kind: KindDomain, Pattern: "licdn.com", Mode: ModeRelay},
 	{Kind: KindDomain, Pattern: "*.licdn.com", Mode: ModeRelay},
+	{Kind: KindDomain, Pattern: "linkedinusercontent.com", Mode: ModeRelay},
+	{Kind: KindDomain, Pattern: "*.linkedinusercontent.com", Mode: ModeRelay},
 	{Kind: KindDomain, Pattern: "upwork.com", Mode: ModeRelay},
 	{Kind: KindDomain, Pattern: "*.upwork.com", Mode: ModeRelay},
 	{Kind: KindDomain, Pattern: "indeed.com", Mode: ModeRelay},
 	{Kind: KindDomain, Pattern: "*.indeed.com", Mode: ModeRelay},
+	{Kind: KindDomain, Pattern: "indeed.tech", Mode: ModeRelay},
+	{Kind: KindDomain, Pattern: "*.indeed.tech", Mode: ModeRelay},
+	{Kind: KindDomain, Pattern: "indeedjobs.com", Mode: ModeRelay},
+	{Kind: KindDomain, Pattern: "*.indeedjobs.com", Mode: ModeRelay},
 
 	// Social / dev
 	{Kind: KindDomain, Pattern: "twitter.com", Mode: ModeRelay},

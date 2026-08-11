@@ -10,13 +10,13 @@
 | Issue #1 / E2E | P0 | Physical Stage 0 matrix на устройстве | **Blocked** — нет adb; APK +35 локально |
 | BUG-001 | P0→fix pending retest | Foreign geo-block IP-only | CIDR safety net +34; retest on +35 |
 | BUG-002 | P1 | Госуслуги VPN visibility | Bypass in code; verify on device |
-| IPv6 | Note | VPN IPv4-only; AF_INET6 bypass outside TUN (+35) | Documented product choice until IPv6 TUN |
+| IPv6 | Note | VPN/relay IPv4-only; AAAA suppress + TUN drop (+40); **no** AF_INET6 bypass (+41, One UI fix) | Product until IPv6 egress on VPS |
 | Private DNS | P1 UX | Android Private DNS/DoT bypasses `10.10.0.1` → `host=` empty | **Off** required; +38 drops TCP/UDP **:853** |
 | BL-040 | Blocked | ЮKassa live keys | No live billing |
 
 ## Ограничения политики (не баги)
 
-- `DefaultMode=DIRECT` — неизвестный destination не уходит в RELAY (FS §6 / 07.4).
+- `DefaultMode=RELAY` (+48 / ADR-018) + DNS `PinDirectIP` for RU — foreign→NL, 2ip→ISP.
 - Product `split` **не** делает UDP/443→DIRECT (`quic_direct_bypass` запрещён).
 - Cloudflare `/12` в builtin/rules **не** используется; Google/Meta CIDR — только IP-only safety net.
 - Network Mode (full_relay / direct_test / tcp_only) — только **Диагностика (E09)**.

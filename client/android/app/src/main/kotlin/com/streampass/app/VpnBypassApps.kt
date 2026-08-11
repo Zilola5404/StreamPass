@@ -1,5 +1,6 @@
 package com.streampass.app
 
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
@@ -134,6 +135,31 @@ object VpnBypassApps {
 
     private fun discoverHeuristicPackages(pm: PackageManager): Set<String> {
         val out = linkedSetOf<String>()
+        // Prefer launcher-visible apps (works with <queries> MAIN/LAUNCHER).
+        try {
+            val intent = Intent(Intent.ACTION_MAIN, null).addCategory(Intent.CATEGORY_LAUNCHER)
+            val resolved = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.queryIntentActivities(intent, 0)
+            }
+            for (info in resolved) {
+                val pkg = info.activityInfo?.packageName ?: continue
+                val label = try {
+                    info.loadLabel(pm)?.toString()?.lowercase().orEmpty()
+                } catch (_: Throwable) {
+                    ""
+                }
+                val pkgLower = pkg.lowercase()
+                if (heuristics.any { pkgLower.contains(it) || label.contains(it) }) {
+                    out.add(pkg)
+                }
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "launcher discover failed: ${t.message}")
+        }
+
         val apps = try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 pm.getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0))

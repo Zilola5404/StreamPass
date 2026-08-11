@@ -190,7 +190,14 @@ class StreamPassVpnService : VpnService() {
             if (relayHost.isEmpty()) {
                 throw IllegalStateException("No relay host provided — was GET /servers called first?")
             }
-            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=0.1.1+39 routing-policy-v1")
+            val verLabel = try {
+                val pi = packageManager.getPackageInfo(packageName, 0)
+                val vc = if (android.os.Build.VERSION.SDK_INT >= 28) pi.longVersionCode else @Suppress("DEPRECATION") pi.versionCode.toLong()
+                "${pi.versionName}+$vc"
+            } catch (_: Throwable) {
+                "unknown"
+            }
+            ConnectLogger.log(this, "connect-flow=v2-prepare-first build=$verLabel routing-policy-v1")
             ConnectLogger.log(this, "establishTunnel: validating connection_config")
             if (connectionConfig.isBlank()) {
                 throw IllegalStateException("connection_config is empty — relay misconfigured in backend")
@@ -234,37 +241,35 @@ class StreamPassVpnService : VpnService() {
                 return
             }
 
-            // DNS MUST be the TUN address so queries hit Go dnscache (*.ru DIRECT,
-            // reverse IP→host). Yandex 77.88.8.8 is in RU exclude ranges — OS DNS
-            // never entered TUN and left host= empty (all foreign → RELAY).
+            // DNS must be a routed fake address (NOT the TUN iface IP). On One UI,
+            // addDnsServer(10.10.0.1) hairpins locally → queries never enter TUN →
+            // Chrome "can't find IP" while VPN shows Connected. 198.18.0.1 is
+            // captured by 0.0.0.0/0; Go hijacks any *:53 (UDP+TCP).
+            val vpnDns = "198.18.0.1"
             val vpnBuilder = Builder()
                 .setSession("StreamPass")
                 .addAddress("10.10.0.1", 30)
-                .addDnsServer("10.10.0.1")
+                .addDnsServer(vpnDns)
                 .setMtu(mtu)
             // Avoid OEM "metered VPN" throttling / captive-portal weirdness.
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                 vpnBuilder.setMetered(false)
             }
-            // MVP VPN is IPv4-only (sing-tun Inet4Address). Let IPv6 bypass TUN so
-            // dual-stack sites (ya.ru / 2ip) are not blackholed on AF_INET6.
-            // Documented product choice: IPv6 outside accelerator until IPv6 TUN lands.
-            try {
-                vpnBuilder.allowFamily(android.system.OsConstants.AF_INET6)
-                ConnectLogger.log(this, "ipv6=bypass (AF_INET6 outside TUN; VPN IPv4-only)")
-            } catch (t: Throwable) {
-                ConnectLogger.log(this, "ipv6 allowFamily skipped: ${t.message}")
-            }
+            // Do NOT allowFamily(AF_INET6): on One UI / Chrome Secure DNS, AAAA leaks
+            // make apps dial IPv6 on the underlay (outside VPN) → sites hang while
+            // Hysteria sees zero streams. Keep IPv6 in TUN; Go drops it (+40) and
+            // DNS suppresses AAAA so apps use IPv4 via the tunnel.
+            ConnectLogger.log(this, "ipv6=capture (no allowFamily; drop+aaaa-suppress in Go)")
             val routeInfo = VpnRouteConfigurator.apply(vpnBuilder, assets, networkMode)
             val extraBypass = parseBypassPackages(bypassPackagesJson)
             val bypassCount = VpnBypassApps.apply(vpnBuilder, packageManager, packageName, extraBypass)
-            ConnectLogger.log(this, "vpn dns=10.10.0.1 (Go dnscache) networkMode=$networkMode mtu=$mtu")
+            ConnectLogger.log(this, "vpn dns=$vpnDns (Go dnscache hijack *:53) networkMode=$networkMode mtu=$mtu")
             ConnectLogger.log(this, "split-tunnel mode=${routeInfo.mode} routes=${routeInfo.routeCount} ruExcludes=${routeInfo.excludeCount} appBypass=$bypassCount extraUser=${extraBypass.size}")
             tunInterface = vpnBuilder.establish()
 
             val fd = tunInterface?.fd
                 ?: throw IllegalStateException("VPN interface could not be established")
-            ConnectLogger.log(this, "TUN established fd=$fd mtu=$mtu addr=10.10.0.1/30 options=$optionsJson")
+            ConnectLogger.log(this, "TUN established fd=$fd mtu=$mtu addr=10.10.0.1/30 dns=$vpnDns options=$optionsJson")
             if (tornDown) {
                 tunInterface?.close()
                 tunInterface = null

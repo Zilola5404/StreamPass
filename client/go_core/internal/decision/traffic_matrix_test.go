@@ -54,8 +54,12 @@ func TestTrafficMatrix(t *testing.T) {
 		{"instagram_fbcdn", "scontent.cdninstagram.com", decision.ModeRelay, "Instagram media CDN"},
 		{"gemini", "gemini.google.com", decision.ModeRelay, "Google AI via relay"},
 		{"google", "google.com", decision.ModeRelay, "built-in relay fallback"},
-		{"cloudflare", "cloudflare.com", decision.ModeDirect, "DefaultMode=DIRECT (FS §6 / 07.4)"},
+		{"cloudflare", "cloudflare.com", decision.ModeRelay, "DefaultMode=RELAY (foreign on TUN)"},
+		{"ifconfig", "ifconfig.me", decision.ModeRelay, "exit-IP check must show NL"},
+		{"ipify", "api.ipify.org", decision.ModeRelay, "exit-IP check must show NL"},
+		{"2ip_ru", "2ip.ru", decision.ModeDirect, "*.ru DIRECT (ISP IP)"},
 		{"linkedin", "www.linkedin.com", decision.ModeRelay, "built-in jobs relay"},
+		{"gemini", "gemini.google.com", decision.ModeRelay, "Google AI must-relay"},
 		{"telegram", "web.telegram.org", decision.ModeRelay, "built-in messenger relay"},
 	}
 

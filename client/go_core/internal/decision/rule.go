@@ -30,5 +30,8 @@ type RuleSet struct {
 	Rules   []Rule
 }
 
-// DefaultMode applies when nothing matches (FS §6 / docs/07.4_RoutingPolicy.md).
-const DefaultMode = ModeDirect
+// DefaultMode applies when nothing matches.
+// RELAY: unmatched foreign on TUN exits via NL (ifconfig / blocked sites).
+// RU stays DIRECT via DefaultDirectRules (*.ru) + DNS-time PinDirectIP so
+// IP-only 2ip.ru flows do not fall through to this default.
+const DefaultMode = ModeRelay

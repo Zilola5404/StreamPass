@@ -77,7 +77,7 @@ VPN tunnel + Decision Engine are **no longer** blockers (BL-001…003,005,006 Do
 - [ ] Real domain with HTTPS (nip.io works for MVP)
 - [ ] 10+ beta users successfully connected
 - [x] No open critical tunnel bugs in `docs/05_Bugs.md`
-- [ ] Security checklist fully passed (`docs/28_SecurityChecklist.md`)
+- [x] Security checklist MVP pass (`docs/28_SecurityChecklist.md`; report `reports/Security/28-SecurityChecklist-verification-2026-08-10.md`; pre-production items remain)
 
 ---
 

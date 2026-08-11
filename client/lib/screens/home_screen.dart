@@ -593,20 +593,26 @@ class _HomeScreenState extends State<HomeScreen> {
         final settings = await SettingsService().load();
         exclusionsJson = jsonEncode(settings.exclusions);
         bypassPackagesJson = jsonEncode(settings.bypassPackages);
-        // Product Connect always uses split (docs/07.4 §9). Diagnostic modes
-        // (direct_test / full_relay / tcp_only) must not stick to the home button.
-        if (settings.networkMode != 'split') {
-          _connectLog.warn('vpn',
-              'ignoring diagnostic networkMode=${settings.networkMode}; product path uses split');
+        // Default product path is split (docs/07.4 §9). Diagnostics may set
+        // full_relay / direct_test / tcp_only — honor it so QA can A/B modes.
+        networkMode = settings.networkMode;
+        if (networkMode != 'split' &&
+            networkMode != 'full_relay' &&
+            networkMode != 'direct_test' &&
+            networkMode != 'tcp_only') {
+          networkMode = 'split';
         }
-        networkMode = 'split';
         mtu = settings.mtu;
-        blockUdp443 = false;
+        blockUdp443 = settings.blockUdp443 || networkMode == 'tcp_only';
         optionsJson = jsonEncode({
-          'networkMode': 'split',
+          'networkMode': networkMode,
           'mtu': mtu,
-          'blockUdp443': false,
+          'blockUdp443': blockUdp443,
         });
+        if (networkMode != 'split') {
+          _connectLog.warn('vpn',
+              'diagnostic networkMode=$networkMode (not product split)');
+        }
         _pendingRulesVersion = ruleSet.version;
         _connectLog.info('decision', 'rules loaded', {
           'version': '${ruleSet.version}',

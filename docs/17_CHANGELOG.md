@@ -8,7 +8,131 @@
 ## [Unreleased]
 
 ### Known Issues
-- См. `docs/18_KnownIssues.md` и QA retest после OTA **+34**
+- См. `docs/18_KnownIssues.md`
+
+---
+
+## [0.1.1+50] — 2026-08-10
+
+### Fixed
+- DNS `ExtractAIPs` now reads **Additional** (CNAME→A); 2ip.ru pin was empty → TCP wrongly RELAY
+- Keep AAAA prefetch + PinDirectIP from +49
+
+### APK
+- `StreamPass-v0.1.1+50-signed-arm64.apk`
+
+---
+
+## [0.1.1+49] — 2026-08-10
+
+### Fixed
+- 2ip.ru IP-only TCP: AAAA-suppress now **prefetch A + PinDirectIP** (Android often never asks us for TypeA → host= empty → wrongly RELAY)
+
+### APK
+- `StreamPass-v0.1.1+49-signed-arm64.apk`
+
+---
+
+## [0.1.1+48] — 2026-08-10
+
+### Fixed
+- **ADR-018:** `DefaultMode=RELAY` again for foreign (ifconfig/Gemini/LinkedIn), plus **PinDirectIP** so `*.ru` / 2ip stay DIRECT (ISP IP)
+
+### APK
+- `StreamPass-v0.1.1+48-signed-arm64.apk`
+
+---
+
+## [0.1.1+47] — 2026-08-10
+
+### Fixed
+- **ADR-017:** rollback `DefaultMode=RELAY` → **DIRECT** (ТЗ: RU/2ip local; foreign must-relay + dial-fail→RELAY)
+- Gemini: `gstatic.com` added to must-relay (assets); NetworkMonitor `connectivitycheck.gstatic.com` stays DIRECT
+
+### APK
+- `StreamPass-v0.1.1+47-signed-arm64.apk`
+
+---
+
+## [0.1.1+46] — 2026-08-10
+
+### Changed
+- **DefaultMode = RELAY** in product split (ADR-016): unmatched foreign on TUN exits via NL; RU stays DIRECT via excludeRoute + `*.ru` / NetworkMonitor
+- Split now matches Full Relay for foreign sites (ifconfig / LinkedIn / Upwork / Indeed)
+
+### APK
+- `StreamPass-v0.1.1+46-signed-arm64.apk`
+
+---
+
+## [0.1.1+45] — 2026-08-10
+
+### Fixed
+- App bypass: `<queries>` + launcher discovery so Госуслуги/ФНС/S7 get `addDisallowedApplication` (was `appBypass=1` self-only under package visibility)
+- Indeed/Upwork/LinkedIn: DNS-time RELAY IP pin + anycast HostsForIP so TCP no longer falls to `default_direct` (RU geo-block)
+
+### APK
+- `StreamPass-v0.1.1+45-signed-arm64.apk`
+
+---
+
+## [0.1.1+44] — 2026-08-10
+
+### Fixed
+- TUN stack `system` → **gvisor** (One UI: DNS worked, TCP never reached handler → Google/Upwork/LinkedIn/Gemini hung; RU sites OK via excludeRoute)
+
+### APK
+- `StreamPass-v0.1.1+44-signed-arm64.apk`
+
+---
+
+## [0.1.1+43] — 2026-08-10
+
+### Fixed
+- DNS→VPN: `addDnsServer(198.18.0.1)` instead of TUN `10.10.0.1` (One UI hairpin broke Chrome DNS)
+- TCP DNS (port 53) answered by Go dnscache; DoT/853 still dropped
+- Connect honors Diagnostics networkMode (`full_relay` / `direct_test` / `tcp_only`)
+- NetworkMonitor hostnames resolve via fast Yandex/UDP first (VPN VALIDATED)
+
+### APK
+- `StreamPass-v0.1.1+43-signed-arm64.apk`
+
+---
+
+## [0.1.1+42] — 2026-08-09
+
+### Fixed
+- RELAY dial prefers `hostname:port` via HostForIP (Hiddify-like); VPS resolves A with `mode:4`
+- Log: `[tun] relay-tcp rewrite` / `relay-udp rewrite`
+
+### APK
+- `StreamPass-v0.1.1+42-signed-arm64.apk`
+
+---
+
+## [0.1.1+41] — 2026-08-09
+
+### Fixed
+- One UI / Chrome: removed `allowFamily(AF_INET6)` — AAAA no longer dials outside VPN while tunnel sits idle
+- `BuildInfo` / connect.log build label synced to ship number
+
+### APK
+- `StreamPass-v0.1.1+41-signed-arm64.apk`
+
+---
+
+## [0.1.1+40] — 2026-08-09
+
+### Fixed
+- VPS Hysteria IPv4-only: apps dialing AAAA → `no IPv4 address available` on relay
+  - DNS: empty NOERROR for AAAA (`aaaa-suppress`)
+  - TUN: drop native IPv6 destinations (`[tun] drop ipv6`)
+
+### Evidence
+- `reports/Audit/vps-hysteria-ipv6-block.md` (`journalctl -u hysteria`)
+
+### APK
+- `StreamPass-v0.1.1+40-signed-arm64.apk`
 
 ---
 

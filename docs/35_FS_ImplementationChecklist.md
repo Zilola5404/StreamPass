@@ -21,7 +21,7 @@
 | ~~6~~ | **BL-044** | Статистика | E03 Must | ✅ Done 2026-08-06 |
 | ~~7~~ | **BL-042** + **BL-043** | Сброс пароля, профиль, удаление | E01/E10 | ✅ Done 2026-08-06 |
 | ~~8~~ | **BL-048** | Тарифы + история + active_until after cancel | E06 | ✅ Done 2026-08-06 |
-| ~~9~~ | **BL-053** | Замер SLA на устройстве | §5 / ТЗ §22 | ✅ script+unit; device connect/recover — manual |
+| ~~9~~ | **BL-053** | Замер SLA на устройстве | §5 / ТЗ §22 | ✅ formal pass 2026-08-10 (`reports/QA/BL-053-sla-measurement.md`); recover — manual |
 | 10 | BL-049…054 | Устройства, admin Premium, уведомления, тема | Should | Post-MVP polish |
 
 Связь: **BL-030** (auto-renewal) остаётся Blocked до закрытия **BL-040**.
@@ -33,7 +33,7 @@
 ### E00 Splash / сессия
 | Требование | Статус | BL |
 |------------|--------|-----|
-| Проверка сессии ≤ 2 с, без вечного spinner | 🟡 | BL-053 |
+| Проверка сессии ≤ 2 с, без вечного spinner | ✅ API ≤0.3s | BL-053 |
 | Refresh fail → E01 | ✅ | — |
 
 ### E01 Вход / регистрация
@@ -111,7 +111,8 @@
 | Туннель при свёрнутом приложении | ✅ | — |
 | Автозапуск + автоподключение | 🟡 device QA | BL-053 |
 | Тихий refresh токена | ✅ | BL-015 |
-| Recover ≤ 10 с | 🟡 script+unit; device manual | **BL-053** |
+| Recover ≤ 10 s | 🟡 harness OK; device manual pending | **BL-053** |
+| Connect ≤ 5 s | 🟡 relay 0.75s PASS; TUN ~5.34s FAIL on One UI split | **BL-053** |
 | DIRECT / bypass / split DNS | ✅ | docs/33 |
 | Телеметрия без URL | ✅ | — |
 
@@ -135,7 +136,7 @@
 2. [x] BL-041, BL-045, BL-046, BL-047 — Home/аккаунт без дыр UX  
 3. [x] BL-044 — статистика не заглушка  
 4. [x] BL-042, BL-043 — пароль/профиль/удаление  
-5. [x] BL-053 — harness SLA (`scripts/MeasureDeviceSLA.ps1` + unit); connect/recover — manual на устройстве  
+5. [x] BL-053 — formal pass 2026-08-10 (`reports/QA/BL-053-sla-measurement.md`); recover manual pending  
 6. [ ] QA прогнал матрицу ERR-* из FS §8  
 
 Платформы Windows/iOS/macOS (BL-023…025) — отдельно, не блокер Android SaaS.

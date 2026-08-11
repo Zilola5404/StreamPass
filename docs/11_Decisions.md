@@ -184,6 +184,42 @@
 
 ---
 
+## ADR-016: DefaultMode=RELAY в product split
+
+| | |
+|---|---|
+| **Дата** | 2026-08-10 |
+| **Статус** | **Superseded by ADR-017** |
+| **Проблема** | Full Relay открывал зарубежные сайты; split оставлял unmatched foreign на DIRECT → RU ISP, geo-block |
+| **Решение** | `DefaultMode=RELAY` (временно в +46) |
+| **Последствие** | 2ip.ru / IP-only RU CDN показывали NL IP; gemini UX деградировал |
+
+---
+
+## ADR-017: DefaultMode=DIRECT + must-relay + DIRECT→RELAY retry
+
+| | |
+|---|---|
+| **Дата** | 2026-08-10 |
+| **Проблема** | ADR-016 ломал ТЗ: российские geo-check уходили в RELAY; нужен DIRECT first |
+| **Решение** | `DefaultMode=DIRECT`. RU/`*.ru`/bypass — DIRECT. Must-relay (Google/Gemini/LinkedIn/…) — RELAY. Неизвестный foreign — DIRECT, при dial fail — `direct_failed_retry_relay`. HostForIP pin (+45) для anycast |
+| **Причина** | ТЗ: российские сначала DIRECT; зарубежные must-relay / «не открывается» → RELAY |
+| **Последствия** | 2ip показывает ISP; Gemini/jobs через builtin RELAY; клиент +47 |
+
+---
+
+## ADR-018: DefaultMode=RELAY + PinDirectIP (RU vs foreign)
+
+| | |
+|---|---|
+| **Дата** | 2026-08-10 |
+| **Проблема** | ADR-016: 2ip→NL; ADR-017: foreign/ifconfig→RU и сайты не открываются |
+| **Решение** | `DefaultMode=RELAY` для foreign. При DNS на DIRECT-хосты (`*.ru`, NetworkMonitor) — `PinDirectIP` (+ `/24`), `decideDest` предпочитает DIRECT pin и не anycast-upgrade'ит rule-DIRECT в RELAY |
+| **Причина** | Нужны одновременно: 2ip=ISP, ifconfig=NL, Gemini/LinkedIn через relay |
+| **Последствия** | Клиент +48 |
+
+---
+
 ## Шаблон для новых ADR
 
 ```
