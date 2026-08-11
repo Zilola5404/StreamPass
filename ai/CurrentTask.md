@@ -1,15 +1,15 @@
 # Current Task
 
-> Updated: 2026-08-10
+> Updated: 2026-08-11
 
-## Shipping: +49
+## Done
+- BL-049 devices/limit (+ migration 0009)
+- BL-051 failure notifications
+- BL-050 admin Premium / ban / audit (+ migration 0010)
+- Deploy + APK +53 smoke (in progress / verify)
 
-### Bug (adb on +48)
-`2ip.ru` DNS→DIRECT but TCP `host=` empty → `default_relay_foreign` (Android A cache bypasses VPN DNS).
+## Blocked
+- **BL-040** ЮKassa — need live keys
 
-### Fix
-On AAAA-suppress: prefetch TypeA + `PinDirectIP` / `PinRelayIP` before answering.
-
-### Expect
-- ifconfig/ipify → NL `212.43.156.33`
-- 2ip TCP → DIRECT (ISP), logs `pin-direct` + `mode=DIRECT`
+## Next
+- Human sign-off / optional BL-052 theme

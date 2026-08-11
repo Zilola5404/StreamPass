@@ -361,7 +361,10 @@ func (h *routingHandler) NewConnectionEx(
 		}
 	default:
 		// Must-relay: no silent DIRECT (docs/07.4 §6.2).
-		if !h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, false, true) {
+		// Do not arm the short relay_blackhole timer here — Meta/Instagram
+		// open many parallel TLS sockets; 3s without first_byte is a common
+		// false positive and kills the only allowed path (BUG-IG-FEED).
+		if !h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, false, false) {
 			logLine(fmt.Sprintf("[tun] must-relay fail dest=%s (no DIRECT fallback)", destination.String()))
 		}
 	}

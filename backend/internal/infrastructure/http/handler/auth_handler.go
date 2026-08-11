@@ -23,8 +23,10 @@ func NewAuthHandler(svc *auth.Service) *AuthHandler {
 }
 
 type registerRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email      string `json:"email"`
+	Password   string `json:"password"`
+	DeviceID   string `json:"device_id,omitempty"`
+	DeviceName string `json:"device_name,omitempty"`
 }
 
 // Register handles "POST /register".
@@ -40,7 +42,12 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pair, err := h.svc.Login.Execute(r.Context(), req.Email, req.Password)
+	pair, err := h.svc.Login.Execute(r.Context(), auth.LoginInput{
+		Email:      req.Email,
+		Password:   req.Password,
+		DeviceID:   req.DeviceID,
+		DeviceName: req.DeviceName,
+	})
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
@@ -50,8 +57,10 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 type loginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email      string `json:"email"`
+	Password   string `json:"password"`
+	DeviceID   string `json:"device_id,omitempty"`
+	DeviceName string `json:"device_name,omitempty"`
 }
 
 type tokenResponse struct {
@@ -69,7 +78,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pair, err := h.svc.Login.Execute(r.Context(), req.Email, req.Password)
+	pair, err := h.svc.Login.Execute(r.Context(), auth.LoginInput{
+		Email:      req.Email,
+		Password:   req.Password,
+		DeviceID:   req.DeviceID,
+		DeviceName: req.DeviceName,
+	})
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
@@ -243,6 +257,66 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.ResetPassword.Execute(r.Context(), req.Token, req.NewPassword); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+type deviceResponse struct {
+	ID         string `json:"id"`
+	DeviceID   string `json:"device_id"`
+	Name       string `json:"name"`
+	CreatedAt  string `json:"created_at"`
+	LastSeenAt string `json:"last_seen_at"`
+}
+
+type devicesListResponse struct {
+	Devices    []deviceResponse `json:"devices"`
+	MaxDevices int              `json:"max_devices"`
+}
+
+// ListDevices handles "GET /me/devices" (authenticated).
+func (h *AuthHandler) ListDevices(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, httpx.ErrUnauthenticated())
+		return
+	}
+	list, err := h.svc.ListDevices.Execute(r.Context(), userID)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	resp := devicesListResponse{
+		Devices:    make([]deviceResponse, 0, len(list.Devices)),
+		MaxDevices: list.MaxDevices,
+	}
+	for _, d := range list.Devices {
+		resp.Devices = append(resp.Devices, deviceResponse{
+			ID:         d.ID,
+			DeviceID:   d.DeviceID,
+			Name:       d.Name,
+			CreatedAt:  d.CreatedAt.Format(httpx.TimeFormat),
+			LastSeenAt: d.LastSeenAt.Format(httpx.TimeFormat),
+		})
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+// RevokeDevice handles "DELETE /me/devices/{id}" (authenticated).
+func (h *AuthHandler) RevokeDevice(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, httpx.ErrUnauthenticated())
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		httpx.WriteError(w, httpx.ErrMissingPathValue("id"))
+		return
+	}
+	if err := h.svc.RevokeDevice.Execute(r.Context(), userID, id); err != nil {
 		httpx.WriteError(w, err)
 		return
 	}

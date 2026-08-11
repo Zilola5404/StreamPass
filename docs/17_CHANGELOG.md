@@ -12,6 +12,44 @@
 
 ---
 
+## [0.1.1+53] — 2026-08-11
+
+### Added
+- **BL-049:** устройства / лимит — `user_devices`, `GET|DELETE /me/devices`, login `device_id`, E10 список + «Отключить», `auth.max_devices` (default 3)
+- **BL-051:** E05 «Уведомления о сбоях» + native alert на `error` / VPN revoke (не на ручной Disconnect)
+- **BL-050:** Admin Premium/бан/поиск + `admin_audit_log` (`POST|DELETE /users/{id}/subscription`, ban, `GET /admin/audit`)
+
+### APK
+- `StreamPass-v0.1.1+53-signed-arm64.apk` (after build)
+
+---
+
+## [0.1.1+52] — 2026-08-11
+
+### Fixed
+- **BUG-IG-FEED:** must-relay TCP no longer uses 3s `relay_blackhole` kill — Instagram/Meta parallel TLS was false-positive’d (`i.instagram.com` dial ok → fail)
+
+### Added
+- BL-054 Terms/Privacy on E01 (from +51 tree)
+
+### APK
+- `StreamPass-v0.1.1+52-signed-arm64.apk`
+
+---
+
+## [0.1.1+51] — 2026-08-11
+
+### Added
+- **BL-054:** E01 register — «Условия» / «Политика конфиденциальности» (in-app screens)
+
+### Changed
+- Docs: KnownIssues / FinalAcceptance synced to +50 device pass; Instagram feed noted as BUG-IG-FEED
+
+### APK
+- `StreamPass-v0.1.1+51-signed-arm64.apk` (build when ready)
+
+---
+
 ## [0.1.1+50] — 2026-08-10
 
 ### Fixed

@@ -1,18 +1,26 @@
 # StreamPass — Known Issues
 
-> Дата: 2026-08-08 | Клиент: **v0.1.1+35** (`routing-policy-v1`)  
-> Связано: Issue #1, `docs/07.4_RoutingPolicy.md`, BL-001 re-validation
+> Дата: 2026-08-11 | Клиент: **v0.1.1+50**  
+> Связано: `docs/07.4_RoutingPolicy.md`, ADR-016…018
 
 ## Открытые (product / ops)
 
 | ID | Приоритет | Описание | Статус |
 |----|-----------|----------|--------|
-| Issue #1 / E2E | P0 | Physical Stage 0 matrix на устройстве | **Blocked** — нет adb; APK +35 локально |
-| BUG-001 | P0→fix pending retest | Foreign geo-block IP-only | CIDR safety net +34; retest on +35 |
-| BUG-002 | P1 | Госуслуги VPN visibility | Bypass in code; verify on device |
-| IPv6 | Note | VPN/relay IPv4-only; AAAA suppress + TUN drop (+40); **no** AF_INET6 bypass (+41, One UI fix) | Product until IPv6 egress on VPS |
-| Private DNS | P1 UX | Android Private DNS/DoT bypasses `10.10.0.1` → `host=` empty | **Off** required; +38 drops TCP/UDP **:853** |
+| BUG-IG-FEED | P1 | Instagram лента: must-relay `relay_blackhole` (3s) убивал TLS | **Fixed +52** — blackhole only on FALLBACK / DIRECT→RELAY retry |
+| Private DNS | P1 UX | Private DNS/DoT обходит VPN DNS → `host=` empty | **Off** required; +38 drops :853; +50 PinDirect mitigates known RU IPs |
+| IPv6 | Note | VPN/relay IPv4-only; AAAA suppress | Until IPv6 egress on VPS |
 | BL-040 | Blocked | ЮKassa live keys | No live billing |
+| BL-054 | P2 | Terms / Privacy на E01 | **Done** +51 (in-app; public URL later) |
+
+## Закрыто на +45…+50 (device adb)
+
+| ID | Было | Статус |
+|----|------|--------|
+| Issue #1 / Stage 0 matrix | No adb / stale | **Pass on +50** — ifconfig NL, 2ip DIRECT, Gemini/LinkedIn RELAY, `appBypass=8` |
+| BUG-001 geo IP-only | Foreign TCP `host=` → default DIRECT | **Mitigated** — DefaultMode RELAY + PinRelay/PinDirect + ExtractAIPs Unpack |
+| BUG-002 Госуслуги VPN | `appBypass=1` | **Fixed** — `<queries>` + bypass list |
+| 2ip shows NL | Pin empty / ExtractAIPs bug | **Fixed** +50 |
 
 ## Ограничения политики (не баги)
 
@@ -21,10 +29,10 @@
 - Cloudflare `/12` в builtin/rules **не** используется; Google/Meta CIDR — только IP-only safety net.
 - Network Mode (full_relay / direct_test / tcp_only) — только **Диагностика (E09)**.
 
-## Device checklist после OTA +35
+## Device checklist (+50)
 
-1. Install local `StreamPass-v0.1.1+35-signed-arm64.apk` (OTA APK upload may lag config)
-2. Private DNS = Off; Network Mode = Split; reconnect
-3. Connect log: `vpn dns=10.10.0.1`, `build=0.1.1+35`, `ipv6=bypass`, `[vpn] traffic_ready`
-4. ya.ru / 2ip.ru DIRECT; YouTube RELAY; Госуслуги bypass
-5. Config API already: `latest_client_version=0.1.1+35`
+1. Install `StreamPass-v0.1.1+50-signed-arm64.apk`
+2. Private DNS = Off; Network Mode = Split; Connect
+3. Log: `appBypass≥8`, `pin-direct` for `2ip.ru`, foreign `default_relay_foreign` / rule RELAY
+4. ifconfig.me / ipify → relay IP; 2ip.ru → ISP; gov apps без VPN detection
+5. Optional A/B: Diagnostics → `tcp_only` → Instagram feed

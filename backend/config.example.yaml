@@ -49,3 +49,4 @@ billing:
 # Keep false in production once email delivery is wired.
 auth:
   expose_reset_token: true
+  max_devices: 3

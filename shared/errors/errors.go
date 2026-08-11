@@ -30,6 +30,7 @@ const (
 	CodeTokenExpired       Code = "AUTH_TOKEN_EXPIRED"
 	CodeTokenInvalid       Code = "AUTH_TOKEN_INVALID"
 	CodeTokenRevoked       Code = "AUTH_TOKEN_REVOKED"
+	CodeDeviceLimit        Code = "AUTH_DEVICE_LIMIT"
 
 	// Billing
 	CodeSubscriptionExpired Code = "BILLING_SUBSCRIPTION_EXPIRED"

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -16,6 +17,8 @@ import (
 // violation, used to translate a duplicate email insert into a
 // domain-meaningful AppError.
 const pqUniqueViolationCode = "23505"
+
+const userSelectCols = `id, email, password_hash, created_at, updated_at, subscription_active_until, banned_at`
 
 // UserRepository implements user.Repository against the "users" table.
 type UserRepository struct {
@@ -45,35 +48,41 @@ func (r *UserRepository) Create(ctx context.Context, u *user.User) error {
 
 // FindByEmail looks up a user by email.
 func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*user.User, error) {
-	const q = `
-		SELECT id, email, password_hash, created_at, updated_at, subscription_active_until
-		FROM users WHERE email = $1`
-
+	q := `SELECT ` + userSelectCols + ` FROM users WHERE email = $1`
 	return r.scanOne(r.db.QueryRowContext(ctx, q, email), email)
 }
 
 // FindByID looks up a user by ID.
 func (r *UserRepository) FindByID(ctx context.Context, id user.ID) (*user.User, error) {
-	const q = `
-		SELECT id, email, password_hash, created_at, updated_at, subscription_active_until
-		FROM users WHERE id = $1`
-
+	q := `SELECT ` + userSelectCols + ` FROM users WHERE id = $1`
 	return r.scanOne(r.db.QueryRowContext(ctx, q, id), string(id))
 }
 
 func (r *UserRepository) scanOne(row *sql.Row, lookupKey string) (*user.User, error) {
-	var u user.User
-	var subUntil sql.NullTime
-
-	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt, &subUntil)
+	u, err := scanUser(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, user.ErrNotFound(lookupKey)
 	}
 	if err != nil {
 		return nil, apperrors.Wrap(apperrors.CodeInternal, "failed to scan user row", err)
 	}
+	return u, nil
+}
+
+func scanUser(scanner interface {
+	Scan(dest ...any) error
+}) (*user.User, error) {
+	var u user.User
+	var subUntil, bannedAt sql.NullTime
+	err := scanner.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt, &subUntil, &bannedAt)
+	if err != nil {
+		return nil, err
+	}
 	if subUntil.Valid {
 		u.SubscriptionActiveUntil = &subUntil.Time
+	}
+	if bannedAt.Valid {
+		u.BannedAt = &bannedAt.Time
 	}
 	return &u, nil
 }
@@ -87,7 +96,7 @@ func isUniqueViolation(err error) bool {
 
 // ExtendSubscription sets the user's subscription expiry timestamp.
 func (r *UserRepository) ExtendSubscription(ctx context.Context, id user.ID, activeUntil time.Time) error {
-	const q = `UPDATE users SET subscription_active_until = $2, updated_at = $2 WHERE id = $1`
+	const q = `UPDATE users SET subscription_active_until = $2, updated_at = NOW() WHERE id = $1`
 	res, err := r.db.ExecContext(ctx, q, id, activeUntil)
 	if err != nil {
 		return apperrors.Wrap(apperrors.CodeInternal, "failed to extend subscription", err)
@@ -95,6 +104,40 @@ func (r *UserRepository) ExtendSubscription(ctx context.Context, id user.ID, act
 	n, err := res.RowsAffected()
 	if err != nil {
 		return apperrors.Wrap(apperrors.CodeInternal, "failed to confirm subscription update", err)
+	}
+	if n == 0 {
+		return user.ErrNotFound(string(id))
+	}
+	return nil
+}
+
+// ClearSubscription removes Premium access.
+func (r *UserRepository) ClearSubscription(ctx context.Context, id user.ID, now time.Time) error {
+	const q = `UPDATE users SET subscription_active_until = NULL, updated_at = $2 WHERE id = $1`
+	res, err := r.db.ExecContext(ctx, q, id, now)
+	if err != nil {
+		return apperrors.Wrap(apperrors.CodeInternal, "failed to clear subscription", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return apperrors.Wrap(apperrors.CodeInternal, "failed to confirm subscription clear", err)
+	}
+	if n == 0 {
+		return user.ErrNotFound(string(id))
+	}
+	return nil
+}
+
+// SetBanned sets or clears banned_at (nil = unban).
+func (r *UserRepository) SetBanned(ctx context.Context, id user.ID, bannedAt *time.Time, now time.Time) error {
+	const q = `UPDATE users SET banned_at = $2, updated_at = $3 WHERE id = $1`
+	res, err := r.db.ExecContext(ctx, q, id, bannedAt, now)
+	if err != nil {
+		return apperrors.Wrap(apperrors.CodeInternal, "failed to update ban status", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return apperrors.Wrap(apperrors.CodeInternal, "failed to confirm ban update", err)
 	}
 	if n == 0 {
 		return user.ErrNotFound(string(id))
@@ -130,6 +173,9 @@ func (r *UserRepository) Delete(ctx context.Context, id user.ID) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM payments WHERE user_id = $1`, id); err != nil {
 		return apperrors.Wrap(apperrors.CodeInternal, "failed to delete user payments", err)
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM user_devices WHERE user_id = $1`, id); err != nil {
+		return apperrors.Wrap(apperrors.CodeInternal, "failed to delete user devices", err)
+	}
 	res, err := tx.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, id)
 	if err != nil {
 		return apperrors.Wrap(apperrors.CodeInternal, "failed to delete user", err)
@@ -149,11 +195,20 @@ func (r *UserRepository) Delete(ctx context.Context, id user.ID) error {
 
 // List returns every registered user, newest first.
 func (r *UserRepository) List(ctx context.Context) ([]*user.User, error) {
-	const q = `
-		SELECT id, email, password_hash, created_at, updated_at, subscription_active_until
-		FROM users ORDER BY created_at DESC`
+	return r.SearchByEmail(ctx, "")
+}
 
-	rows, err := r.db.QueryContext(ctx, q)
+// SearchByEmail returns users matching email substring (ILIKE), or all when q empty.
+func (r *UserRepository) SearchByEmail(ctx context.Context, q string) ([]*user.User, error) {
+	q = strings.TrimSpace(q)
+	var rows *sql.Rows
+	var err error
+	if q == "" {
+		rows, err = r.db.QueryContext(ctx, `SELECT `+userSelectCols+` FROM users ORDER BY created_at DESC`)
+	} else {
+		rows, err = r.db.QueryContext(ctx,
+			`SELECT `+userSelectCols+` FROM users WHERE email ILIKE '%' || $1 || '%' ORDER BY created_at DESC`, q)
+	}
 	if err != nil {
 		return nil, apperrors.Wrap(apperrors.CodeInternal, "failed to list users", err)
 	}
@@ -161,18 +216,17 @@ func (r *UserRepository) List(ctx context.Context) ([]*user.User, error) {
 
 	var users []*user.User
 	for rows.Next() {
-		var u user.User
-		var subUntil sql.NullTime
-		if err := rows.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt, &subUntil); err != nil {
+		u, err := scanUser(rows)
+		if err != nil {
 			return nil, apperrors.Wrap(apperrors.CodeInternal, "failed to scan user row", err)
 		}
-		if subUntil.Valid {
-			u.SubscriptionActiveUntil = &subUntil.Time
-		}
-		users = append(users, &u)
+		users = append(users, u)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, apperrors.Wrap(apperrors.CodeInternal, "failed while iterating users", err)
+	}
+	if users == nil {
+		users = []*user.User{}
 	}
 	return users, nil
 }

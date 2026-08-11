@@ -17,6 +17,7 @@ object NativeSettingsChannel {
     const val PREFS_NAME = "streampass_native_prefs"
     const val KEY_AUTOSTART = "autostart"
     const val KEY_AUTO_CONNECT = "auto_connect"
+    const val KEY_FAILURE_NOTIFICATIONS = "failure_notifications"
 
     fun register(context: Context, messenger: io.flutter.plugin.common.BinaryMessenger) {
         MethodChannel(messenger, "streampass/settings").setMethodCallHandler { call, result ->
@@ -29,9 +30,18 @@ object NativeSettingsChannel {
                     write(context, KEY_AUTO_CONNECT, call.arguments as Boolean)
                     result.success(null)
                 }
+                "setFailureNotifications" -> {
+                    write(context, KEY_FAILURE_NOTIFICATIONS, call.arguments as Boolean)
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
+    }
+
+    fun failureNotificationsEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_FAILURE_NOTIFICATIONS, true)
     }
 
     private fun write(context: Context, key: String, value: Boolean) {

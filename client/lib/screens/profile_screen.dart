@@ -7,7 +7,7 @@ import '../services/vpn_channel.dart';
 import '../theme/app_theme.dart';
 import 'subscription_screen.dart';
 
-/// E10 — профиль: email, смена пароля, удаление аккаунта (BL-043).
+/// E10 — профиль: email, устройства, смена пароля, удаление аккаунта (BL-043/049).
 class ProfileScreen extends StatefulWidget {
   final AuthService authService;
   final StreamPassApi api;
@@ -24,8 +24,11 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   UserProfile? _profile;
+  DeviceList? _devices;
+  String? _localDeviceId;
   bool _loading = true;
   String? _error;
+  String? _revokingId;
 
   final _currentPass = TextEditingController();
   final _newPass = TextEditingController();
@@ -52,12 +55,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _error = null;
     });
     try {
-      final p = await widget.authService.fetchProfile();
+      final results = await Future.wait([
+        widget.authService.fetchProfile(),
+        widget.authService.fetchDevices(),
+        widget.authService.localDeviceId(),
+      ]);
       if (!mounted) return;
       setState(() {
-        _profile = p;
+        _profile = results[0] as UserProfile?;
+        _devices = results[1] as DeviceList?;
+        _localDeviceId = results[2] as String?;
         _loading = false;
-        if (p == null) _error = 'Не удалось загрузить профиль';
+        if (_profile == null) _error = 'Не удалось загрузить профиль';
       });
     } catch (_) {
       if (!mounted) return;
@@ -66,6 +75,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _loading = false;
       });
     }
+  }
+
+  Future<void> _revokeDevice(RegisteredDevice device) async {
+    final isCurrent = device.deviceId == _localDeviceId;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text(isCurrent ? 'Отключить это устройство?' : 'Отключить устройство?'),
+        content: Text(
+          isCurrent
+              ? 'Вы выйдете из аккаунта на этом телефоне.'
+              : '«${device.name}» потеряет доступ до следующего входа.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Отключить', style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _revokingId = device.id);
+    final result = await widget.authService.revokeDevice(device.id);
+    if (!mounted) return;
+    setState(() => _revokingId = null);
+
+    if (!result.success) {
+      setState(() => _error = result.error ?? 'Не удалось отключить устройство');
+      return;
+    }
+    if (isCurrent) {
+      try {
+        await VpnChannel.disconnect();
+      } catch (_) {}
+      await widget.authService.clearSession();
+      if (!mounted) return;
+      navigateToLogin(context, widget.authService, widget.api);
+      return;
+    }
+    await _load();
   }
 
   Future<void> _changePassword() async {
@@ -154,6 +207,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         '${local.year}';
   }
 
+  String _fmtDateTime(DateTime? d) {
+    if (d == null) return '—';
+    final local = d.toLocal();
+    return '${_fmt(d)} ${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -194,6 +254,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   child: const Text('Управление подпиской'),
                 ),
+                const Divider(height: 36),
+                Text('Устройства', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                Text(
+                  _devices == null
+                      ? 'Не удалось загрузить список'
+                      : 'Активных: ${_devices!.devices.length} из ${_devices!.maxDevices}',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 12),
+                if (_devices != null)
+                  for (final d in _devices!.devices) ...[
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        d.deviceId == _localDeviceId ? '${d.name} (это устройство)' : d.name,
+                        style: const TextStyle(color: AppColors.textPrimary),
+                      ),
+                      subtitle: Text(
+                        'Вход: ${_fmtDateTime(d.lastSeenAt)}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      trailing: _revokingId == d.id
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : TextButton(
+                              onPressed: () => _revokeDevice(d),
+                              child: const Text('Отключить'),
+                            ),
+                    ),
+                  ],
                 const Divider(height: 36),
                 Text('Смена пароля', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 12),

@@ -95,6 +95,8 @@ func New(d Deps) http.Handler {
 	mux.Handle(v1("GET /me"), authMW(http.HandlerFunc(d.Auth.GetProfile)))
 	mux.Handle(v1("PUT /me/password"), authMW(http.HandlerFunc(d.Auth.ChangePassword)))
 	mux.Handle(v1("DELETE /me"), authMW(http.HandlerFunc(d.Auth.DeleteAccount)))
+	mux.Handle(v1("GET /me/devices"), authMW(http.HandlerFunc(d.Auth.ListDevices)))
+	mux.Handle(v1("DELETE /me/devices/{id}"), authMW(http.HandlerFunc(d.Auth.RevokeDevice)))
 	mux.Handle(v1("GET /servers"), authMW(http.HandlerFunc(d.Relay.ListAvailable)))
 	mux.Handle(v1("POST /telemetry"), authMW(http.HandlerFunc(d.Telemetry.Record)))
 	mux.Handle(v1("GET /plans"), authMW(http.HandlerFunc(d.Billing.ListPlans)))
@@ -114,6 +116,11 @@ func New(d Deps) http.Handler {
 	mux.Handle(v1("DELETE /servers/{id}"), adminMW(http.HandlerFunc(d.Relay.Delete)))
 	mux.Handle(v1("POST /servers/health"), adminMW(http.HandlerFunc(d.Relay.RecordHealthCheck)))
 	mux.Handle(v1("GET /users"), adminMW(http.HandlerFunc(d.Admin.ListUsers)))
+	mux.Handle(v1("POST /users/{id}/subscription"), adminMW(http.HandlerFunc(d.Admin.GrantPremium)))
+	mux.Handle(v1("DELETE /users/{id}/subscription"), adminMW(http.HandlerFunc(d.Admin.RevokePremium)))
+	mux.Handle(v1("POST /users/{id}/ban"), adminMW(http.HandlerFunc(d.Admin.BanUser)))
+	mux.Handle(v1("DELETE /users/{id}/ban"), adminMW(http.HandlerFunc(d.Admin.UnbanUser)))
+	mux.Handle(v1("GET /admin/audit"), adminMW(http.HandlerFunc(d.Admin.ListAudit)))
 	mux.Handle(v1("GET /admin/diag"), adminMW(http.HandlerFunc(d.Diag.ListAdmin)))
 
 	return middleware.Chain(

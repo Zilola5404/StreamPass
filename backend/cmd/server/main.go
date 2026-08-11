@@ -92,6 +92,8 @@ func run() error {
 func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *logger.Logger) router.Deps {
 	// --- Infrastructure adapters ---
 	userRepo := postgres.NewUserRepository(db)
+	deviceRepo := postgres.NewDeviceRepository(db)
+	auditRepo := postgres.NewAuditRepository(db)
 	ruleRepo := postgres.NewRuleRepository(db)
 	relayRepo := postgres.NewRelayRepository(db)
 	telemetryRepo := postgres.NewTelemetryRepository(db)
@@ -117,7 +119,8 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 
 	// --- Application services ---
 	registerUC := authsvc.NewRegisterUseCase(userRepo, hasher, idGeneratorAdapter{}, authsvc.SystemClock{}, log)
-	loginUC := authsvc.NewLoginUseCase(userRepo, hasher, tokens, sessions, authsvc.SystemClock{}, log)
+	maxDevices := cfg.IntOr("auth.max_devices", 3)
+	loginUC := authsvc.NewLoginUseCase(userRepo, deviceRepo, hasher, tokens, sessions, authsvc.SystemClock{}, maxDevices, log)
 	logoutUC := authsvc.NewLogoutUseCase(tokens, sessions, log)
 	refreshUC := authsvc.NewRefreshUseCase(tokens, sessions, log)
 	getProfileUC := authsvc.NewGetProfileUseCase(userRepo, log)
@@ -126,17 +129,20 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 	exposeReset := cfg.BoolOr("auth.expose_reset_token", true)
 	forgotPasswordUC := authsvc.NewForgotPasswordUseCase(userRepo, resetTokens, exposeReset, log)
 	resetPasswordUC := authsvc.NewResetPasswordUseCase(userRepo, hasher, resetTokens, sessions, authsvc.SystemClock{}, log)
+	listDevicesUC := authsvc.NewListDevicesUseCase(deviceRepo, maxDevices, log)
+	revokeDeviceUC := authsvc.NewRevokeDeviceUseCase(deviceRepo, sessions, log)
 	authService := authsvc.NewService(
 		registerUC, loginUC, logoutUC, refreshUC,
 		getProfileUC, changePasswordUC, deleteAccountUC,
 		forgotPasswordUC, resetPasswordUC,
+		listDevicesUC, revokeDeviceUC,
 	)
 
 	ruleService := rulesvc.NewService(ruleRepo, rulesvc.SystemClock{}, log)
 	relayService := relaysvc.NewService(relayRepo, log)
 	telemetryService := telemetrysvc.NewService(telemetryRepo, telemetrysvc.SystemClock{}, log)
 	configService := configsvcpkg.NewService(appConfigRepo, configsvcpkg.SystemClock{}, log)
-	adminUserService := adminsvc.NewUserService(userRepo, adminsvc.SystemClock{}, log)
+	adminUserService := adminsvc.NewUserService(userRepo, sessions, auditRepo, adminsvc.SystemClock{}, log)
 
 	monthAmount := int64(cfg.IntOr("billing.plan_amount_rub", 299))
 	monthDays := cfg.IntOr("billing.plan_period_days", 30)

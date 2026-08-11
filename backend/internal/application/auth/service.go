@@ -15,6 +15,8 @@ type Service struct {
 	DeleteAccount  *DeleteAccountUseCase
 	ForgotPassword *ForgotPasswordUseCase
 	ResetPassword  *ResetPasswordUseCase
+	ListDevices    *ListDevicesUseCase
+	RevokeDevice   *RevokeDeviceUseCase
 }
 
 // NewService constructs the Auth service facade.
@@ -28,6 +30,8 @@ func NewService(
 	deleteAccount *DeleteAccountUseCase,
 	forgotPassword *ForgotPasswordUseCase,
 	resetPassword *ResetPasswordUseCase,
+	listDevices *ListDevicesUseCase,
+	revokeDevice *RevokeDeviceUseCase,
 ) *Service {
 	return &Service{
 		Register:       register,
@@ -39,5 +43,7 @@ func NewService(
 		DeleteAccount:  deleteAccount,
 		ForgotPassword: forgotPassword,
 		ResetPassword:  resetPassword,
+		ListDevices:    listDevices,
+		RevokeDevice:   revokeDevice,
 	}
 }

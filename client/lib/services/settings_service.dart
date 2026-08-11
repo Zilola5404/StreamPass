@@ -24,6 +24,8 @@ class AppSettings {
   final int mtu;
   /// Drop UDP/443 so apps fall back to TCP (QUIC off).
   final bool blockUdp443;
+  /// System notifications when the tunnel fails unexpectedly (BL-051).
+  final bool failureNotifications;
 
   const AppSettings({
     this.autostart = false,
@@ -37,6 +39,7 @@ class AppSettings {
     this.networkMode = 'split',
     this.mtu = 1400,
     this.blockUdp443 = false,
+    this.failureNotifications = true,
   });
 
   AppSettings copyWith({
@@ -51,6 +54,7 @@ class AppSettings {
     String? networkMode,
     int? mtu,
     bool? blockUdp443,
+    bool? failureNotifications,
   }) {
     return AppSettings(
       autostart: autostart ?? this.autostart,
@@ -64,6 +68,7 @@ class AppSettings {
       networkMode: networkMode ?? this.networkMode,
       mtu: mtu ?? this.mtu,
       blockUdp443: blockUdp443 ?? this.blockUdp443,
+      failureNotifications: failureNotifications ?? this.failureNotifications,
     );
   }
 
@@ -86,6 +91,7 @@ class SettingsService {
   static const _kNetworkMode = 'sp_network_mode';
   static const _kMtu = 'sp_mtu';
   static const _kBlockUdp443 = 'sp_block_udp443';
+  static const _kFailureNotifications = 'sp_failure_notifications';
 
   // Mirrors autostart/autoConnect into native SharedPreferences so
   // BootReceiver (which runs outside the Flutter engine) can read them
@@ -104,6 +110,16 @@ class SettingsService {
         : <String>[];
     final mode = prefs.getString(_kNetworkMode) ?? 'split';
     final mtu = prefs.getInt(_kMtu) ?? 1400;
+    final failureNotifications = prefs.getBool(_kFailureNotifications) ?? true;
+
+    // Keep native prefs in sync for VPN-service reads (BL-051).
+    try {
+      await _nativeChannel.invokeMethod('setFailureNotifications', failureNotifications);
+    } on PlatformException {
+      // ignore
+    } on MissingPluginException {
+      // ignore
+    }
 
     return AppSettings(
       autostart: prefs.getBool(_kAutostart) ?? false,
@@ -117,6 +133,7 @@ class SettingsService {
       networkMode: mode,
       mtu: mtu,
       blockUdp443: prefs.getBool(_kBlockUdp443) ?? false,
+      failureNotifications: failureNotifications,
     );
   }
 
@@ -172,4 +189,15 @@ class SettingsService {
 
   Future<void> setBlockUdp443(bool value) async =>
       (await SharedPreferences.getInstance()).setBool(_kBlockUdp443, value);
+
+  Future<void> setFailureNotifications(bool value) async {
+    (await SharedPreferences.getInstance()).setBool(_kFailureNotifications, value);
+    try {
+      await _nativeChannel.invokeMethod('setFailureNotifications', value);
+    } on PlatformException {
+      // ignore
+    } on MissingPluginException {
+      // ignore
+    }
+  }
 }

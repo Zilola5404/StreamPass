@@ -263,7 +263,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _SectionLabel('Аккаунт'),
             ListTile(
               title: const Text('Профиль'),
-              subtitle: const Text('Email, смена пароля, удаление аккаунта'),
+              subtitle: const Text('Email, устройства, смена пароля'),
               leading: const Icon(Icons.person_outline, color: AppColors.textSecondary),
               trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
               onTap: () => Navigator.of(context).push(
@@ -282,6 +282,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: _confirmLogout,
             ),
           ],
+          const Divider(height: 32),
+          _SectionLabel('Оформление'),
+          SwitchListTile(
+            title: const Text('Уведомления о сбоях'),
+            subtitle: const Text('Системное уведомление при обрыве соединения'),
+            value: _settings.failureNotifications,
+            activeColor: AppColors.cyan,
+            onChanged: (v) async {
+              await _service.setFailureNotifications(v);
+              setState(() => _settings = _settings.copyWith(failureNotifications: v));
+            },
+          ),
         ],
       ),
     );

@@ -25,12 +25,22 @@ type User struct {
 	// SubscriptionActiveUntil is a denormalized read model updated by the
 	// Billing module; Auth only reads it, never writes it.
 	SubscriptionActiveUntil *time.Time
+	// BannedAt is set by admin ban (BL-050); nil means not banned.
+	BannedAt *time.Time
 }
 
 // IsSubscriptionActive reports whether the user currently has access,
 // per spec section 22 ("Оплата и активация подписки").
 func (u *User) IsSubscriptionActive(now time.Time) bool {
+	if u.IsBanned() {
+		return false
+	}
 	return u.SubscriptionActiveUntil != nil && u.SubscriptionActiveUntil.After(now)
+}
+
+// IsBanned reports whether the account is admin-banned.
+func (u *User) IsBanned() bool {
+	return u.BannedAt != nil
 }
 
 // NewUser constructs a new User aggregate with a freshly hashed password.
@@ -59,6 +69,13 @@ type Repository interface {
 	// single denormalized field on the User row — see
 	// domain/subscription's package doc for the reasoning.
 	ExtendSubscription(ctx context.Context, id ID, activeUntil time.Time) error
+	// ClearSubscription removes Premium (admin revoke / ban).
+	ClearSubscription(ctx context.Context, id ID, now time.Time) error
+	// SetBanned marks or clears the ban timestamp.
+	SetBanned(ctx context.Context, id ID, bannedAt *time.Time, now time.Time) error
+	// SearchByEmail returns users whose email contains q (case-insensitive).
+	// Empty q lists all users (same as List).
+	SearchByEmail(ctx context.Context, q string) ([]*User, error)
 	// List returns every registered user, newest first. Used by the admin
 	// user-listing endpoint — there is no pagination yet (fine at MVP
 	// scale; revisit if the user table grows large enough for this to

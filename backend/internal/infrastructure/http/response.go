@@ -97,7 +97,7 @@ func statusForCode(code apperrors.Code) int {
 		return http.StatusForbidden
 	case apperrors.CodeNotFound:
 		return http.StatusNotFound
-	case apperrors.CodeAlreadyExists, apperrors.CodeConflict:
+	case apperrors.CodeAlreadyExists, apperrors.CodeConflict, apperrors.CodeDeviceLimit:
 		return http.StatusConflict
 	case apperrors.CodeRateLimited:
 		return http.StatusTooManyRequests

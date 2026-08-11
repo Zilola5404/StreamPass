@@ -234,6 +234,8 @@ func NewTestHandler(t *testing.T, db *sql.DB) (http.Handler, *fakePayments) {
 	payments := newFakePayments()
 
 	userRepo := postgres.NewUserRepository(db)
+	deviceRepo := postgres.NewDeviceRepository(db)
+	auditRepo := postgres.NewAuditRepository(db)
 	ruleRepo := postgres.NewRuleRepository(db)
 	relayRepo := postgres.NewRelayRepository(db)
 	telemetryRepo := postgres.NewTelemetryRepository(db)
@@ -246,7 +248,7 @@ func NewTestHandler(t *testing.T, db *sql.DB) (http.Handler, *fakePayments) {
 	tokens := security.NewJWTTokenIssuer(testJWTSecret, 15*time.Minute, 720*time.Hour)
 
 	registerUC := authsvc.NewRegisterUseCase(userRepo, hasher, idGen{}, authsvc.SystemClock{}, log)
-	loginUC := authsvc.NewLoginUseCase(userRepo, hasher, tokens, sessions, authsvc.SystemClock{}, log)
+	loginUC := authsvc.NewLoginUseCase(userRepo, deviceRepo, hasher, tokens, sessions, authsvc.SystemClock{}, 3, log)
 	logoutUC := authsvc.NewLogoutUseCase(tokens, sessions, log)
 	refreshUC := authsvc.NewRefreshUseCase(tokens, sessions, log)
 	resetTokens := newMemoryResetTokens()
@@ -257,12 +259,16 @@ func NewTestHandler(t *testing.T, db *sql.DB) (http.Handler, *fakePayments) {
 		authsvc.NewDeleteAccountUseCase(userRepo, sessions, log),
 		authsvc.NewForgotPasswordUseCase(userRepo, resetTokens, true, log),
 		authsvc.NewResetPasswordUseCase(userRepo, hasher, resetTokens, sessions, authsvc.SystemClock{}, log),
+		authsvc.NewListDevicesUseCase(deviceRepo, 3, log),
+		authsvc.NewRevokeDeviceUseCase(deviceRepo, sessions, log),
 	)
 
 	billingService := billingsvc.NewService(userRepo, paymentRepo, payments, []billingsvc.Plan{
 		{Code: "month", Title: "Месяц", AmountRUB: 299, PeriodDays: 30},
 		{Code: "year", Title: "Год", AmountRUB: 2990, PeriodDays: 365},
 	}, billingsvc.SystemClock{}, log)
+
+	adminUserService := adminsvc.NewUserService(userRepo, sessions, auditRepo, adminsvc.SystemClock{}, log)
 
 	h := router.New(router.Deps{
 		Auth:            handler.NewAuthHandler(authService),
@@ -273,7 +279,7 @@ func NewTestHandler(t *testing.T, db *sql.DB) (http.Handler, *fakePayments) {
 		Billing:         handler.NewBillingHandler(billingService, ""),
 		Exclusion:       handler.NewExclusionHandler(exclusionsvc.NewService(exclusionRepo, log)),
 		Health:          handler.NewHealthHandler(),
-		Admin:           handler.NewAdminHandler(adminsvc.NewUserService(userRepo, adminsvc.SystemClock{}, log)),
+		Admin:           handler.NewAdminHandler(adminUserService),
 		Diag:            handler.NewDiagHandler(diagsvc.NewService(diagRepo, diagsvc.SystemClock{}, log)),
 		TokenVerifier:   tokens,
 		AdminKey:        testAdminKey,

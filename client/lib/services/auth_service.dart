@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import 'auth_errors.dart';
 import 'connection_log.dart';
+import 'device_identity.dart';
 import 'token_storage.dart';
 
 /// Wraps POST /register, POST /login, POST /logout, POST /refresh and local token storage.
@@ -13,13 +14,16 @@ class AuthService {
   final String baseUrl; // e.g. https://api.streampass.com/api/v1
   final http.Client _client;
   final TokenStorage _tokens;
+  final DeviceIdentity _device;
 
   AuthService({
     required this.baseUrl,
     http.Client? client,
     TokenStorage? tokenStorage,
+    DeviceIdentity? deviceIdentity,
   })  : _client = client ?? http.Client(),
-        _tokens = tokenStorage ?? TokenStorage.secure();
+        _tokens = tokenStorage ?? TokenStorage.secure(),
+        _device = deviceIdentity ?? DeviceIdentity(storage: tokenStorage);
 
   static final _log = ConnectionLog.instance;
 
@@ -135,10 +139,17 @@ class AuthService {
 
   Future<AuthResult> login(String email, String password) async {
     try {
+      final deviceId = await _device.deviceId();
+      final deviceName = await _device.deviceName();
       final res = await _client.post(
         Uri.parse('${apiBaseUrl}/login'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password}),
+        body: jsonEncode({
+          'email': email,
+          'password': password,
+          'device_id': deviceId,
+          'device_name': deviceName,
+        }),
       );
       return _handleAuthResponse(res);
     } catch (_) {
@@ -148,10 +159,17 @@ class AuthService {
 
   Future<AuthResult> register(String email, String password) async {
     try {
+      final deviceId = await _device.deviceId();
+      final deviceName = await _device.deviceName();
       final res = await _client.post(
         Uri.parse('${apiBaseUrl}/register'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password}),
+        body: jsonEncode({
+          'email': email,
+          'password': password,
+          'device_id': deviceId,
+          'device_name': deviceName,
+        }),
       );
       return _handleAuthResponse(res);
     } catch (_) {
@@ -236,6 +254,50 @@ class AuthService {
     final body = _decodeBody(res.body) as Map<String, dynamic>?;
     if (body == null) return null;
     return UserProfile.fromJson(body);
+  }
+
+  Future<DeviceList?> fetchDevices() async {
+    if (!await ensureValidSession()) return null;
+    final token = await storedToken;
+    if (token == null) return null;
+    final res = await _client.get(
+      Uri.parse('${apiBaseUrl}/me/devices'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    if (res.statusCode != 200) return null;
+    final body = _decodeBody(res.body) as Map<String, dynamic>?;
+    if (body == null) return null;
+    return DeviceList.fromJson(body);
+  }
+
+  Future<String> localDeviceId() => _device.deviceId();
+
+  Future<AuthResult> revokeDevice(String deviceRowId) async {
+    if (!await ensureValidSession()) {
+      return AuthResult(success: false, error: 'Сессия истекла. Войдите снова.');
+    }
+    final token = await storedToken;
+    try {
+      final res = await _client.delete(
+        Uri.parse('${apiBaseUrl}/me/devices/$deviceRowId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (res.statusCode == 204 || res.statusCode == 200) {
+        return AuthResult(success: true);
+      }
+      return AuthResult(success: false, error: _errorMessage(res));
+    } catch (_) {
+      return AuthResult(
+        success: false,
+        error: 'Сервис временно недоступен. Проверьте подключение к серверу.',
+      );
+    }
   }
 
   Future<AuthResult> changePassword(String currentPassword, String newPassword) async {
@@ -387,6 +449,50 @@ class UserProfile {
         subscriptionActiveUntil:
             DateTime.tryParse(json['subscription_active_until'] as String? ?? ''),
       );
+}
+
+class RegisteredDevice {
+  final String id;
+  final String deviceId;
+  final String name;
+  final DateTime? lastSeenAt;
+
+  const RegisteredDevice({
+    required this.id,
+    required this.deviceId,
+    required this.name,
+    this.lastSeenAt,
+  });
+
+  factory RegisteredDevice.fromJson(Map<String, dynamic> json) => RegisteredDevice(
+        id: json['id'] as String? ?? '',
+        deviceId: json['device_id'] as String? ?? '',
+        name: json['name'] as String? ?? 'Устройство',
+        lastSeenAt: DateTime.tryParse(json['last_seen_at'] as String? ?? ''),
+      );
+}
+
+class DeviceList {
+  final List<RegisteredDevice> devices;
+  final int maxDevices;
+
+  const DeviceList({required this.devices, required this.maxDevices});
+
+  factory DeviceList.fromJson(Map<String, dynamic> json) {
+    final raw = json['devices'];
+    final list = <RegisteredDevice>[];
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map<String, dynamic>) {
+          list.add(RegisteredDevice.fromJson(item));
+        }
+      }
+    }
+    return DeviceList(
+      devices: list,
+      maxDevices: json['max_devices'] as int? ?? 3,
+    );
+  }
 }
 
 class SessionExpiredException implements Exception {

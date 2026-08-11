@@ -46,6 +46,7 @@
       <nav class="tabs" id="tabs">
         <button type="button" data-tab="health" class="tab active">Health</button>
         <button type="button" data-tab="users" class="tab">Users</button>
+        <button type="button" data-tab="audit" class="tab">Audit</button>
         <button type="button" data-tab="relays" class="tab">Relays</button>
         <button type="button" data-tab="rules" class="tab">Rules</button>
         <button type="button" data-tab="config" class="tab">Config</button>
@@ -62,6 +63,7 @@
         <div id="tab-users" class="tab-panel" hidden>
           <div class="row-actions">
             <h2 style="margin:0;flex:1">Users</h2>
+            <input id="users-search" type="search" placeholder="Поиск по email" style="max-width:14rem" />
             <button id="users-refresh" type="button" class="ghost">Обновить</button>
           </div>
           <p id="users-error" class="error" hidden></p>
@@ -73,10 +75,32 @@
                   <th>Subscription</th>
                   <th>Until</th>
                   <th>Created</th>
-                  <th>ID</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="users-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="tab-audit" class="tab-panel" hidden>
+          <div class="row-actions">
+            <h2 style="margin:0;flex:1">Audit</h2>
+            <button id="audit-refresh" type="button" class="ghost">Обновить</button>
+          </div>
+          <p id="audit-error" class="error" hidden></p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Actor</th>
+                  <th>Action</th>
+                  <th>Target</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody id="audit-body"></tbody>
             </table>
           </div>
         </div>

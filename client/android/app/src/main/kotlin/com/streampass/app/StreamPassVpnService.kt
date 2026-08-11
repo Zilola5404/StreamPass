@@ -41,9 +41,15 @@ class StreamPassVpnService : VpnService() {
         private const val ACTION_CONNECT = "com.streampass.app.CONNECT"
         private const val ACTION_DISCONNECT = "com.streampass.app.DISCONNECT"
         private const val NOTIFICATION_CHANNEL_ID = "streampass_vpn_status"
+        private const val FAILURE_CHANNEL_ID = "streampass_vpn_failures"
         private const val NOTIFICATION_ID = 1
+        private const val FAILURE_NOTIFICATION_ID = 2
+
+        @Volatile
+        private var userRequestedStop = false
 
         fun start(context: Context, args: Map<*, *>?) {
+            userRequestedStop = false
             ConnectLogger.log(context, "VpnService.start id=${args?.get("id")} host=${args?.get("host")}")
             val intent = Intent(context, StreamPassVpnService::class.java).apply {
                 action = ACTION_CONNECT
@@ -68,6 +74,7 @@ class StreamPassVpnService : VpnService() {
         }
 
         fun stop(context: Context) {
+            userRequestedStop = true
             val svc = instance
             if (svc != null) {
                 svc.tearDown()
@@ -122,6 +129,7 @@ class StreamPassVpnService : VpnService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_DISCONNECT) {
+            userRequestedStop = true
             tearDown()
             return START_NOT_STICKY
         }
@@ -157,6 +165,34 @@ class StreamPassVpnService : VpnService() {
             scope.launch { establishTunnel() }
         }
         return START_STICKY
+    }
+
+    private fun ensureFailureChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = getSystemService(NotificationManager::class.java)
+            val channel = NotificationChannel(
+                FAILURE_CHANNEL_ID,
+                "Сбои соединения",
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply { description = "Уведомления при обрыве StreamPass" }
+            manager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun notifyFailure(message: String) {
+        if (userRequestedStop) return
+        if (!NativeSettingsChannel.failureNotificationsEnabled(this)) return
+        ensureFailureChannel()
+        val text = message.ifBlank { "Соединение прервано" }
+        val notification = NotificationCompat.Builder(this, FAILURE_CHANNEL_ID)
+            .setContentTitle("StreamPass")
+            .setContentText(text)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+        getSystemService(NotificationManager::class.java)
+            .notify(FAILURE_NOTIFICATION_ID, notification)
     }
 
     private fun buildNotification(status: String): Notification {
@@ -357,6 +393,7 @@ class StreamPassVpnService : VpnService() {
 
     override fun onRevoke() {
         // System revoked VPN permission (e.g. another VPN app took over).
+        notifyFailure("VPN отозван системой")
         tearDown()
         super.onRevoke()
     }
@@ -384,6 +421,9 @@ class StreamPassVpnService : VpnService() {
                 else -> "Отключено"
             }
             if (event != "disconnected") updateNotification(statusText)
+            if (event == "error") {
+                notifyFailure(error ?: "Ошибка соединения")
+            }
         }
     }
 

@@ -17,6 +17,10 @@
     usersBody: document.getElementById("users-body"),
     usersError: document.getElementById("users-error"),
     usersRefresh: document.getElementById("users-refresh"),
+    usersSearch: document.getElementById("users-search"),
+    auditBody: document.getElementById("audit-body"),
+    auditError: document.getElementById("audit-error"),
+    auditRefresh: document.getElementById("audit-refresh"),
     relaysBody: document.getElementById("relays-body"),
     relaysError: document.getElementById("relays-error"),
     relaysRefresh: document.getElementById("relays-refresh"),
@@ -149,6 +153,7 @@
       panel.hidden = panel.id !== `tab-${name}`;
     });
     if (name === "users") loadUsers();
+    if (name === "audit") loadAudit();
     if (name === "relays") loadRelays();
     if (name === "rules") loadRules();
     if (name === "config") loadConfig();
@@ -239,22 +244,34 @@
     el.usersError.hidden = true;
     el.usersBody.innerHTML = `<tr><td colspan="5">Загрузка…</td></tr>`;
     try {
-      const users = await api("/users");
+      const q = (el.usersSearch?.value || "").trim();
+      const path = q ? `/users?q=${encodeURIComponent(q)}` : "/users";
+      const users = await api(path);
       if (!Array.isArray(users) || users.length === 0) {
         el.usersBody.innerHTML = `<tr><td colspan="5">Нет пользователей</td></tr>`;
         return;
       }
       el.usersBody.innerHTML = users
         .map((u) => {
-          const active = u.subscription_active
-            ? `<span class="badge ok">active</span>`
-            : `<span class="badge bad">inactive</span>`;
+          const active = u.banned
+            ? `<span class="badge bad">banned</span>`
+            : u.subscription_active
+              ? `<span class="badge ok">active</span>`
+              : `<span class="badge bad">inactive</span>`;
+          const id = esc(u.id);
+          const banBtn = u.banned
+            ? `<button type="button" data-unban="${id}">Unban</button>`
+            : `<button type="button" class="danger" data-ban="${id}">Ban</button>`;
           return `<tr>
             <td>${esc(u.email)}</td>
             <td>${active}</td>
             <td class="mono">${esc(u.subscription_active_until || "—")}</td>
             <td class="mono">${esc(u.created_at || "—")}</td>
-            <td class="mono">${esc(u.id)}</td>
+            <td class="row-actions" style="gap:0.35rem;flex-wrap:wrap">
+              <button type="button" data-grant="${id}">+30д</button>
+              <button type="button" data-revoke="${id}">Revoke</button>
+              ${banBtn}
+            </td>
           </tr>`;
         })
         .join("");
@@ -262,6 +279,32 @@
       el.usersBody.innerHTML = "";
       el.usersError.hidden = false;
       el.usersError.textContent = String(err.message || err);
+    }
+  }
+
+  async function loadAudit() {
+    if (!el.auditBody) return;
+    el.auditError.hidden = true;
+    el.auditBody.innerHTML = `<tr><td colspan="5">Загрузка…</td></tr>`;
+    try {
+      const rows = await api("/admin/audit?limit=100");
+      if (!Array.isArray(rows) || rows.length === 0) {
+        el.auditBody.innerHTML = `<tr><td colspan="5">Пока пусто</td></tr>`;
+        return;
+      }
+      el.auditBody.innerHTML = rows
+        .map((e) => `<tr>
+          <td class="mono">${esc(e.created_at || "")}</td>
+          <td>${esc(e.actor || "")}</td>
+          <td>${esc(e.action || "")}</td>
+          <td class="mono">${esc([e.target_type, e.target_id].filter(Boolean).join(" "))}</td>
+          <td class="mono">${esc(JSON.stringify(e.detail || {}))}</td>
+        </tr>`)
+        .join("");
+    } catch (err) {
+      el.auditBody.innerHTML = "";
+      el.auditError.hidden = false;
+      el.auditError.textContent = String(err.message || err);
     }
   }
 
@@ -428,7 +471,48 @@
 
   el.healthCheck.addEventListener("click", () => runHealthCheck());
   el.usersRefresh.addEventListener("click", () => loadUsers());
+  el.usersSearch?.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      loadUsers();
+    }
+  });
+  el.auditRefresh?.addEventListener("click", () => loadAudit());
   el.relaysRefresh.addEventListener("click", () => loadRelays());
+
+  el.usersBody.addEventListener("click", async (ev) => {
+    const grant = ev.target.closest("[data-grant]");
+    const revoke = ev.target.closest("[data-revoke]");
+    const ban = ev.target.closest("[data-ban]");
+    const unban = ev.target.closest("[data-unban]");
+    try {
+      if (grant) {
+        const id = grant.getAttribute("data-grant");
+        await api(`/users/${encodeURIComponent(id)}/subscription`, {
+          method: "POST",
+          body: JSON.stringify({ days: 30 }),
+        });
+        await loadUsers();
+      } else if (revoke) {
+        const id = revoke.getAttribute("data-revoke");
+        if (!confirm("Забрать Premium?")) return;
+        await api(`/users/${encodeURIComponent(id)}/subscription`, { method: "DELETE" });
+        await loadUsers();
+      } else if (ban) {
+        const id = ban.getAttribute("data-ban");
+        if (!confirm("Забанить пользователя? Сессии будут сброшены.")) return;
+        await api(`/users/${encodeURIComponent(id)}/ban`, { method: "POST" });
+        await loadUsers();
+      } else if (unban) {
+        const id = unban.getAttribute("data-unban");
+        await api(`/users/${encodeURIComponent(id)}/ban`, { method: "DELETE" });
+        await loadUsers();
+      }
+    } catch (err) {
+      el.usersError.hidden = false;
+      el.usersError.textContent = String(err.message || err);
+    }
+  });
   el.rulesRefresh.addEventListener("click", () => loadRules());
   el.rulesPublish.addEventListener("click", () => publishRules());
   el.configRefresh.addEventListener("click", () => loadConfig());

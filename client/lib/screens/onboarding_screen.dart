@@ -4,6 +4,7 @@ import '../services/auth_service.dart';
 import '../services/streampass_api.dart';
 import 'home_screen.dart';
 import 'forgot_password_screen.dart';
+import 'legal_document_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final AuthService authService;
@@ -162,11 +163,79 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                 ),
               ),
+              if (_isRegisterMode) ...[
+                const SizedBox(height: 8),
+                _LegalAcceptLine(
+                  onTerms: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => LegalDocumentScreen.terms(),
+                      ),
+                    );
+                  },
+                  onPrivacy: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => LegalDocumentScreen.privacy(),
+                      ),
+                    );
+                  },
+                ),
+              ],
               const Spacer(flex: 2),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _LegalAcceptLine extends StatelessWidget {
+  final VoidCallback onTerms;
+  final VoidCallback onPrivacy;
+
+  const _LegalAcceptLine({required this.onTerms, required this.onPrivacy});
+
+  @override
+  Widget build(BuildContext context) {
+    const base = TextStyle(
+      color: AppColors.textSecondary,
+      fontSize: 12,
+      height: 1.35,
+    );
+    const link = TextStyle(
+      color: AppColors.cyan,
+      fontSize: 12,
+      height: 1.35,
+      decoration: TextDecoration.underline,
+    );
+    return Text.rich(
+      TextSpan(
+        style: base,
+        children: [
+          const TextSpan(text: 'Создавая аккаунт, вы принимаете '),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: GestureDetector(
+              onTap: onTerms,
+              child: const Text('Условия', style: link),
+            ),
+          ),
+          const TextSpan(text: ' и '),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: GestureDetector(
+              onTap: onPrivacy,
+              child: const Text('Политику конфиденциальности', style: link),
+            ),
+          ),
+          const TextSpan(text: '.'),
+        ],
+      ),
+      textAlign: TextAlign.center,
     );
   }
 }
