@@ -42,6 +42,7 @@ type Deps struct {
 	Telemetry *handler.TelemetryHandler
 	Config    *handler.ConfigHandler
 	Billing   *handler.BillingHandler
+	Payments  *handler.PaymentsHandler
 	Exclusion *handler.ExclusionHandler
 	Health    *handler.HealthHandler
 	Admin     *handler.AdminHandler
@@ -79,6 +80,11 @@ func New(d Deps) http.Handler {
 	mux.HandleFunc(v1("GET /config"), d.Config.GetLatest)
 	mux.HandleFunc(v1("GET /regions"), d.Relay.ListRegions)
 	mux.Handle(v1("POST /payments/webhook"), strictLimiter.Middleware()(http.HandlerFunc(d.Billing.HandleWebhook)))
+	if d.Payments != nil {
+		mux.Handle(v1("POST /payments/telegram/webhook"), strictLimiter.Middleware()(http.HandlerFunc(d.Payments.HandleTelegramWebhook)))
+		mux.Handle(v1("GET /payments/usdt/address"), strictLimiter.Middleware()(http.HandlerFunc(d.Payments.USDTAddress)))
+		mux.Handle(v1("POST /payments/usdt/confirm"), strictLimiter.Middleware()(http.HandlerFunc(d.Payments.ConfirmUSDT)))
+	}
 
 	// --- Auth endpoints (stricter rate limit: brute-force resistance) ---
 	mux.Handle(v1("POST /register"), strictLimiter.Middleware()(http.HandlerFunc(d.Auth.Register)))
@@ -102,6 +108,9 @@ func New(d Deps) http.Handler {
 	mux.Handle(v1("GET /plans"), authMW(http.HandlerFunc(d.Billing.ListPlans)))
 	mux.Handle(v1("GET /payments"), authMW(http.HandlerFunc(d.Billing.ListPayments)))
 	mux.Handle(v1("POST /payments"), authMW(http.HandlerFunc(d.Billing.CreatePayment)))
+	if d.Payments != nil {
+		mux.Handle(v1("POST /payments/telegram/create"), authMW(http.HandlerFunc(d.Payments.CreateTelegramPayment)))
+	}
 	mux.Handle(v1("GET /subscription"), authMW(http.HandlerFunc(d.Billing.GetSubscription)))
 	mux.Handle(v1("POST /subscription/cancel"), authMW(http.HandlerFunc(d.Billing.CancelSubscription)))
 	mux.Handle(v1("GET /exclusions"), authMW(http.HandlerFunc(d.Exclusion.List)))

@@ -26,6 +26,10 @@ class AppSettings {
   final bool blockUdp443;
   /// System notifications when the tunnel fails unexpectedly (BL-051).
   final bool failureNotifications;
+  /// system | light | dark (BL-052).
+  final String themeMode;
+  /// BCP-47 language tag; MVP supports ru only (BL-052).
+  final String languageCode;
 
   const AppSettings({
     this.autostart = false,
@@ -40,6 +44,8 @@ class AppSettings {
     this.mtu = 1400,
     this.blockUdp443 = false,
     this.failureNotifications = true,
+    this.themeMode = 'dark',
+    this.languageCode = 'ru',
   });
 
   AppSettings copyWith({
@@ -55,6 +61,8 @@ class AppSettings {
     int? mtu,
     bool? blockUdp443,
     bool? failureNotifications,
+    String? themeMode,
+    String? languageCode,
   }) {
     return AppSettings(
       autostart: autostart ?? this.autostart,
@@ -69,6 +77,8 @@ class AppSettings {
       mtu: mtu ?? this.mtu,
       blockUdp443: blockUdp443 ?? this.blockUdp443,
       failureNotifications: failureNotifications ?? this.failureNotifications,
+      themeMode: themeMode ?? this.themeMode,
+      languageCode: languageCode ?? this.languageCode,
     );
   }
 
@@ -92,6 +102,8 @@ class SettingsService {
   static const _kMtu = 'sp_mtu';
   static const _kBlockUdp443 = 'sp_block_udp443';
   static const _kFailureNotifications = 'sp_failure_notifications';
+  static const _kThemeMode = 'sp_theme_mode';
+  static const _kLanguageCode = 'sp_language_code';
 
   // Mirrors autostart/autoConnect into native SharedPreferences so
   // BootReceiver (which runs outside the Flutter engine) can read them
@@ -134,6 +146,8 @@ class SettingsService {
       mtu: mtu,
       blockUdp443: prefs.getBool(_kBlockUdp443) ?? false,
       failureNotifications: failureNotifications,
+      themeMode: prefs.getString(_kThemeMode) ?? 'dark',
+      languageCode: prefs.getString(_kLanguageCode) ?? 'ru',
     );
   }
 
@@ -200,4 +214,10 @@ class SettingsService {
       // ignore
     }
   }
+
+  Future<void> setThemeMode(String mode) async =>
+      (await SharedPreferences.getInstance()).setString(_kThemeMode, mode);
+
+  Future<void> setLanguageCode(String code) async =>
+      (await SharedPreferences.getInstance()).setString(_kLanguageCode, code);
 }

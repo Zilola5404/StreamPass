@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'theme/app_theme.dart';
 import 'services/auth_service.dart';
+import 'services/settings_service.dart';
 import 'services/streampass_api.dart';
 import 'services/vpn_channel.dart';
 import 'screens/onboarding_screen.dart';
@@ -24,7 +25,7 @@ void main() {
   runApp(StreamPassApp(authService: authService, api: api));
 }
 
-class StreamPassApp extends StatelessWidget {
+class StreamPassApp extends StatefulWidget {
   final AuthService authService;
   final StreamPassApi api;
   const StreamPassApp({
@@ -34,16 +35,51 @@ class StreamPassApp extends StatelessWidget {
   });
 
   @override
+  State<StreamPassApp> createState() => _StreamPassAppState();
+
+  static _StreamPassAppState? _of(BuildContext context) =>
+      context.findAncestorStateOfType<_StreamPassAppState>();
+}
+
+/// Updates [MaterialApp.themeMode] from Settings (BL-052). No MaterialApp.builder overlays.
+void applyAppAppearance(BuildContext context, {required ThemeMode themeMode}) {
+  StreamPassApp._of(context)?.setThemeMode(themeMode);
+}
+
+class _StreamPassAppState extends State<StreamPassApp> {
+  ThemeMode _themeMode = ThemeMode.dark;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTheme();
+  }
+
+  Future<void> _loadTheme() async {
+    final s = await SettingsService().load();
+    if (!mounted) return;
+    setState(() => _themeMode = themeModeFromSetting(s.themeMode));
+  }
+
+  void setThemeMode(ThemeMode mode) {
+    if (_themeMode == mode) return;
+    setState(() => _themeMode = mode);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Intentionally no MaterialApp.builder Stack overlays (caused grey AppBar bugs).
     return MaterialApp(
       title: 'StreamPass',
       debugShowCheckedModeBanner: false,
-      theme: buildAppTheme(),
+      theme: buildLightAppTheme(),
+      darkTheme: buildAppTheme(),
+      themeMode: _themeMode,
       home: FutureBuilder<bool>(
-        future: authService.isLoggedIn.catchError((_) => false),
+        future: widget.authService.isLoggedIn.catchError((_) => false),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return OnboardingScreen(authService: authService, api: api);
+            return OnboardingScreen(authService: widget.authService, api: widget.api);
           }
           if (!snapshot.hasData) {
             return const Scaffold(
@@ -51,8 +87,8 @@ class StreamPassApp extends StatelessWidget {
             );
           }
           return snapshot.data!
-              ? HomeScreen(api: api, authService: authService)
-              : OnboardingScreen(authService: authService, api: api);
+              ? HomeScreen(api: widget.api, authService: widget.authService)
+              : OnboardingScreen(authService: widget.authService, api: widget.api);
         },
       ),
     );

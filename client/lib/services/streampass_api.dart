@@ -70,13 +70,11 @@ class StreamPassApi {
     return SubscriptionInfo.fromJson(body as Map<String, dynamic>);
   }
 
-  /// Returns the ЮKassa confirmation URL to open in a browser to complete
-  /// payment. Note: backend billing has not been tested against live
-  /// ЮKassa credentials yet — this call is only as reliable as that
-  /// backend path (see project notes).
+  /// Returns a payment confirmation URL (Telegram invoice link or card redirect).
   Future<String> createPayment({String planCode = 'month'}) async {
     final body = await _post('/payments', {'plan_code': planCode});
-    return (body as Map<String, dynamic>)['confirmation_url'] as String;
+    final map = body as Map<String, dynamic>;
+    return (map['confirmation_url'] ?? map['invoice_link']) as String;
   }
 
   Future<void> cancelSubscription() async {
@@ -365,12 +363,14 @@ class PlanInfo {
   final String title;
   final int amountRub;
   final int periodDays;
+  final String currency;
 
   const PlanInfo({
     required this.code,
     required this.title,
     required this.amountRub,
     required this.periodDays,
+    this.currency = 'RUB',
   });
 
   factory PlanInfo.fromJson(Map<String, dynamic> json) => PlanInfo(
@@ -378,7 +378,14 @@ class PlanInfo {
         title: json['title'] as String? ?? '',
         amountRub: (json['amount_rub'] as num?)?.toInt() ?? 0,
         periodDays: (json['period_days'] as num?)?.toInt() ?? 0,
+        currency: (json['currency'] as String?)?.toUpperCase() ?? 'RUB',
       );
+
+  String get priceLabel {
+    if (currency == 'XTR') return '$amountRub ⭐';
+    if (currency == 'USDT') return '\$$amountRub USDT';
+    return '$amountRub ₽';
+  }
 }
 
 class PaymentRecord {

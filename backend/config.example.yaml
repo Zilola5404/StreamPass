@@ -44,6 +44,16 @@ billing:
   yookassa_shop_id: ${YOOKASSA_SHOP_ID}
   yookassa_secret_key: ${YOOKASSA_SECRET_KEY}
   yookassa_return_url: ${YOOKASSA_RETURN_URL}
+  # Telegram Stars + USDT (TZ 02.3 / BL-040). When telegram_bot_token is set,
+  # POST /payments creates Stars invoices instead of YooKassa.
+  telegram_bot_token: ${TELEGRAM_BOT_TOKEN}
+  telegram_webhook_secret: ${TELEGRAM_WEBHOOK_SECRET}
+  usdt_trc20_address: ${USDT_TRC20_ADDRESS}
+  # Optional Stars amounts override (defaults: 499 / 1299 / 3999)
+  # stars_month: 499
+  # stars_quarter: 1299
+  # stars_year: 3999
+  public_url: ${STREAMPASS_PUBLIC_URL}
 
 # When true, POST /password/forgot returns reset_token in JSON (no SMTP yet).
 # Keep false in production once email delivery is wired.

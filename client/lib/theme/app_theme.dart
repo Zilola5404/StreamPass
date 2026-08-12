@@ -32,6 +32,12 @@ ThemeData buildAppTheme() {
       surface: AppColors.surface,
       error: AppColors.danger,
     ),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.transparent,
+      foregroundColor: AppColors.textPrimary,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+    ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: AppColors.surface,
@@ -87,4 +93,96 @@ ThemeData buildAppTheme() {
       ),
     ),
   );
+}
+
+/// Light theme for BL-052. Brand accents stay cyan; surfaces lighten.
+/// Many screens still hard-code [AppColors] dark tokens — that is OK for MVP.
+ThemeData buildLightAppTheme() {
+  final base = ThemeData.light();
+  const bg = Color(0xFFF4F7FB);
+  const surface = Color(0xFFFFFFFF);
+  const textPrimary = Color(0xFF0F172A);
+  const textSecondary = Color(0xFF64748B);
+  return base.copyWith(
+    scaffoldBackgroundColor: bg,
+    colorScheme: base.colorScheme.copyWith(
+      primary: AppColors.cyan,
+      secondary: AppColors.violet,
+      surface: surface,
+      error: AppColors.danger,
+      onSurface: textPrimary,
+    ),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.transparent,
+      foregroundColor: textPrimary,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: surface,
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: const BorderSide(color: AppColors.cyan, width: 1.4),
+      ),
+      hintStyle: GoogleFonts.inter(color: textSecondary),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.cyan,
+        foregroundColor: AppColors.bg,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+        ),
+        textStyle: GoogleFonts.spaceGrotesk(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ),
+    textTheme: GoogleFonts.interTextTheme(base.textTheme).copyWith(
+      displayLarge: GoogleFonts.spaceGrotesk(
+        fontSize: 40,
+        fontWeight: FontWeight.w700,
+        color: textPrimary,
+      ),
+      headlineSmall: GoogleFonts.spaceGrotesk(
+        fontSize: 26,
+        fontWeight: FontWeight.w600,
+        color: textPrimary,
+      ),
+      titleMedium: GoogleFonts.spaceGrotesk(
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+        color: textPrimary,
+      ),
+      bodyMedium: GoogleFonts.inter(
+        fontSize: 14,
+        color: textSecondary,
+      ),
+      bodySmall: GoogleFonts.inter(
+        fontSize: 12,
+        color: textSecondary,
+      ),
+    ),
+  );
+}
+
+ThemeMode themeModeFromSetting(String mode) {
+  switch (mode) {
+    case 'light':
+      return ThemeMode.light;
+    case 'system':
+      return ThemeMode.system;
+    case 'dark':
+    default:
+      return ThemeMode.dark;
+  }
 }

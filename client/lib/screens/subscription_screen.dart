@@ -240,7 +240,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
                                       ),
                                     ),
                                     Text(
-                                      '${p.amountRub} ₽',
+                                      p.priceLabel,
                                       style: Theme.of(context).textTheme.titleMedium,
                                     ),
                                   ],
@@ -264,8 +264,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
                                   color: AppColors.bg,
                                 ),
                               )
-                            : const Text('Перейти к оплате'),
+                            : const Text('Оплатить через Telegram'),
                       ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Счёт откроется в Telegram (Stars). Альтернатива: USDT на сайте оплаты.',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ] else ...[
                     const SizedBox(height: 24),

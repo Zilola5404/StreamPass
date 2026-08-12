@@ -33,13 +33,19 @@ func NewInfo(activeUntil *time.Time, now time.Time) Info {
 // Payment records one payment-provider transaction, used for
 // audit/idempotency when handling webhooks.
 type Payment struct {
-	ID         string
-	UserID     string
-	ProviderID string // payment ID assigned by the payment provider (e.g. ЮKassa)
-	AmountRUB  int64  // stored as minor-unit-free whole rubles; MVP does not sell fractional-ruble plans
-	PeriodDays int
-	Status     PaymentStatus
-	CreatedAt  time.Time
+	ID             string
+	UserID         string
+	ProviderID     string // payment ID assigned by the payment provider (or our id for pending Stars)
+	AmountRUB      int64  // rubles OR Stars amount when Currency=XTR
+	PeriodDays     int
+	Status         PaymentStatus
+	CreatedAt      time.Time
+	Provider       string // yookassa | telegram | usdt
+	Currency       string // RUB | XTR | USDT
+	TelegramUserID *int64
+	Tariff         string
+	TxHash         string
+	PaidAt         *time.Time
 }
 
 // PaymentStatus mirrors the provider-agnostic payment lifecycle.

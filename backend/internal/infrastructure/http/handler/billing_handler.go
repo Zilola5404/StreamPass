@@ -135,6 +135,7 @@ type planDTO struct {
 	Title      string `json:"title"`
 	AmountRUB  int64  `json:"amount_rub"`
 	PeriodDays int    `json:"period_days"`
+	Currency   string `json:"currency"`
 }
 
 // ListPlans handles "GET /plans" (authenticated — tariffs for E06).
@@ -142,11 +143,16 @@ func (h *BillingHandler) ListPlans(w http.ResponseWriter, r *http.Request) {
 	plans := h.svc.ListPlans()
 	out := make([]planDTO, 0, len(plans))
 	for _, p := range plans {
+		cur := p.Currency
+		if cur == "" {
+			cur = "RUB"
+		}
 		out = append(out, planDTO{
 			Code:       p.Code,
 			Title:      p.Title,
 			AmountRUB:  p.AmountRUB,
 			PeriodDays: p.PeriodDays,
+			Currency:   cur,
 		})
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)

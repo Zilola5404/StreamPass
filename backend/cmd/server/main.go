@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -22,12 +23,14 @@ import (
 	configsvcpkg "streampass/backend/internal/application/configsvc"
 	diagsvc "streampass/backend/internal/application/diag"
 	exclusionsvc "streampass/backend/internal/application/exclusion"
+	paymentssvc "streampass/backend/internal/application/payments"
 	relaysvc "streampass/backend/internal/application/relay"
 	rulesvc "streampass/backend/internal/application/rule"
 	telemetrysvc "streampass/backend/internal/application/telemetry"
 	"streampass/backend/internal/domain/user"
 	"streampass/backend/internal/infrastructure/http/handler"
 	"streampass/backend/internal/infrastructure/http/router"
+	"streampass/backend/internal/infrastructure/payment/telegram"
 	"streampass/backend/internal/infrastructure/payment/yookassa"
 	"streampass/backend/internal/infrastructure/postgres"
 	"streampass/backend/internal/infrastructure/redisclient"
@@ -76,6 +79,19 @@ func run() error {
 
 	deps := buildDeps(cfg, db, redis, log)
 
+	if tg := telegram.New(cfg.StringOr("billing.telegram_bot_token", "")); tg.Enabled() {
+		publicURL := strings.TrimRight(cfg.StringOr("billing.public_url", ""), "/")
+		secret := cfg.StringOr("billing.telegram_webhook_secret", "")
+		if publicURL != "" {
+			wh := publicURL + "/api/v1/payments/telegram/webhook"
+			if err := tg.SetWebhook(ctx, wh, secret); err != nil {
+				log.Error(ctx, err)
+			} else {
+				log.Info(ctx, "telegram webhook registered", slog.String("url", wh))
+			}
+		}
+	}
+
 	srv := &http.Server{
 		Addr:              ":" + intToStr(cfg.IntOr("server.http_port", 8080)),
 		Handler:           router.New(deps),
@@ -117,6 +133,19 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 		ReturnURL: cfg.StringOr("billing.yookassa_return_url", ""),
 	})
 
+	tgBot := telegram.New(cfg.StringOr("billing.telegram_bot_token", ""))
+	starsPlans := telegram.DefaultStarsPlans()
+	if v := cfg.IntOr("billing.stars_month", 0); v > 0 {
+		starsPlans[0].Stars = v
+	}
+	if v := cfg.IntOr("billing.stars_quarter", 0); v > 0 {
+		starsPlans[1].Stars = v
+	}
+	if v := cfg.IntOr("billing.stars_year", 0); v > 0 {
+		starsPlans[2].Stars = v
+	}
+	tgProvider := telegram.NewProvider(tgBot, starsPlans)
+
 	// --- Application services ---
 	registerUC := authsvc.NewRegisterUseCase(userRepo, hasher, idGeneratorAdapter{}, authsvc.SystemClock{}, log)
 	maxDevices := cfg.IntOr("auth.max_devices", 3)
@@ -144,15 +173,33 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 	configService := configsvcpkg.NewService(appConfigRepo, configsvcpkg.SystemClock{}, log)
 	adminUserService := adminsvc.NewUserService(userRepo, sessions, auditRepo, adminsvc.SystemClock{}, log)
 
-	monthAmount := int64(cfg.IntOr("billing.plan_amount_rub", 299))
-	monthDays := cfg.IntOr("billing.plan_period_days", 30)
-	yearAmount := int64(cfg.IntOr("billing.yearly_amount_rub", int(monthAmount*10)))
-	yearDays := cfg.IntOr("billing.yearly_period_days", 365)
-	billingPlans := []billingsvc.Plan{
-		{Code: "month", Title: "Месяц", AmountRUB: monthAmount, PeriodDays: monthDays},
-		{Code: "year", Title: "Год", AmountRUB: yearAmount, PeriodDays: yearDays},
+	var billingPlans []billingsvc.Plan
+	if tgBot.Enabled() {
+		for _, sp := range starsPlans {
+			billingPlans = append(billingPlans, billingsvc.Plan{
+				Code: sp.Code, Title: sp.Title, AmountRUB: int64(sp.Stars),
+				PeriodDays: sp.PeriodDays, Currency: "XTR",
+			})
+		}
+	} else {
+		monthAmount := int64(cfg.IntOr("billing.plan_amount_rub", 299))
+		monthDays := cfg.IntOr("billing.plan_period_days", 30)
+		yearAmount := int64(cfg.IntOr("billing.yearly_amount_rub", int(monthAmount*10)))
+		yearDays := cfg.IntOr("billing.yearly_period_days", 365)
+		billingPlans = []billingsvc.Plan{
+			{Code: "month", Title: "Месяц", AmountRUB: monthAmount, PeriodDays: monthDays, Currency: "RUB"},
+			{Code: "year", Title: "Год", AmountRUB: yearAmount, PeriodDays: yearDays, Currency: "RUB"},
+		}
 	}
 	billingService := billingsvc.NewService(userRepo, paymentRepo, paymentProvider, billingPlans, billingsvc.SystemClock{}, log)
+	if tgBot.Enabled() {
+		billingService.SetTelegramInvoicer(tgProvider)
+	}
+	paymentsService := paymentssvc.NewService(
+		billingService, tgBot, tgProvider, userRepo, paymentRepo,
+		cfg.StringOr("billing.usdt_trc20_address", ""),
+		starsPlans, log,
+	)
 	exclusionService := exclusionsvc.NewService(exclusionRepo, log)
 	diagService := diagsvc.NewService(diagRepo, diagsvc.SystemClock{}, log)
 
@@ -163,6 +210,7 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 		Telemetry:       handler.NewTelemetryHandler(telemetryService),
 		Config:          handler.NewConfigHandler(configService),
 		Billing:         handler.NewBillingHandler(billingService, cfg.StringOr("billing.webhook_secret", "")),
+		Payments:        handler.NewPaymentsHandler(paymentsService, cfg.StringOr("billing.telegram_webhook_secret", "")),
 		Exclusion:       handler.NewExclusionHandler(exclusionService),
 		Health:          handler.NewHealthHandler(),
 		Admin:           handler.NewAdminHandler(adminUserService),

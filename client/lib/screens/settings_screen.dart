@@ -6,11 +6,12 @@ import '../services/auth_service.dart';
 import '../services/settings_service.dart';
 import '../services/streampass_api.dart';
 import '../services/vpn_channel.dart';
-import '../main.dart' show navigateToLogin;
+import '../main.dart' show navigateToLogin, applyAppAppearance;
 import 'exclusions_screen.dart';
 import 'app_bypass_screen.dart';
 import 'diagnostics_screen.dart';
 import 'profile_screen.dart';
+import 'about_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final StreamPassApi? api;
@@ -284,6 +285,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
           const Divider(height: 32),
           _SectionLabel('Оформление'),
+          ListTile(
+            title: const Text('Язык'),
+            subtitle: Text(
+              _settings.languageCode == 'ru' ? 'Русский' : _settings.languageCode,
+            ),
+            trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Пока доступен только русский язык')),
+              );
+            },
+          ),
+          ListTile(
+            title: const Text('Тема'),
+            subtitle: Text(_themeLabel(_settings.themeMode)),
+            trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+            onTap: _pickTheme,
+          ),
           SwitchListTile(
             title: const Text('Уведомления о сбоях'),
             subtitle: const Text('Системное уведомление при обрыве соединения'),
@@ -294,9 +313,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
               setState(() => _settings = _settings.copyWith(failureNotifications: v));
             },
           ),
+          ListTile(
+            title: const Text('О приложении'),
+            subtitle: const Text('Версия, сборка, канал обновлений'),
+            trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AboutScreen()),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  String _themeLabel(String mode) {
+    switch (mode) {
+      case 'light':
+        return 'Светлая';
+      case 'system':
+        return 'Как в системе';
+      case 'dark':
+      default:
+        return 'Тёмная';
+    }
+  }
+
+  Future<void> _pickTheme() async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: const Text('Как в системе'),
+              onTap: () => Navigator.pop(ctx, 'system'),
+            ),
+            ListTile(
+              title: const Text('Светлая'),
+              onTap: () => Navigator.pop(ctx, 'light'),
+            ),
+            ListTile(
+              title: const Text('Тёмная'),
+              onTap: () => Navigator.pop(ctx, 'dark'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    await _service.setThemeMode(selected);
+    if (!mounted) return;
+    setState(() => _settings = _settings.copyWith(themeMode: selected));
+    applyAppAppearance(context, themeMode: themeModeFromSetting(selected));
   }
 }
 

@@ -14,6 +14,14 @@
 		file_server
 	}
 
+	# Public payment page (Telegram Stars / USDT) — TZ 02.3
+	handle_path /pay/* {
+		root * /srv/web
+		rewrite * /pay.html
+		file_server
+	}
+	redir /pay /pay/
+
 	# Metrics stay on the Docker network (Prometheus → backend:8080), not public.
 	handle /metrics {
 		respond 404

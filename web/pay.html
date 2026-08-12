@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StreamPass — Оплата</title>
+  <style>
+    :root {
+      --bg: #020612;
+      --surface: #07111f;
+      --cyan: #00e5ff;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --danger: #ff5a6e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+      background: radial-gradient(1200px 600px at 20% -10%, #0d1a2b, var(--bg));
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+    main { max-width: 480px; margin: 0 auto; }
+    h1 { font-size: 1.6rem; margin: 0 0 8px; }
+    p { color: var(--muted); line-height: 1.5; }
+    .card {
+      background: var(--surface);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 18px;
+      padding: 20px;
+      margin-top: 20px;
+    }
+    .card h2 { margin: 0 0 12px; font-size: 1.1rem; }
+    button, .btn {
+      display: inline-block;
+      width: 100%;
+      border: 0;
+      border-radius: 14px;
+      padding: 14px 16px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      text-decoration: none;
+      color: var(--bg);
+      background: var(--cyan);
+    }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .addr {
+      word-break: break-all;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #020612;
+      padding: 12px;
+      border-radius: 12px;
+      margin: 12px 0;
+    }
+    .warn { color: var(--danger); font-size: .9rem; }
+    #qr { display: block; margin: 12px auto; background: #fff; padding: 8px; border-radius: 12px; }
+    label { display: block; margin-top: 12px; color: var(--muted); font-size: .85rem; }
+    input, select {
+      width: 100%;
+      margin-top: 6px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: #020612;
+      color: var(--text);
+    }
+    .hint { font-size: .85rem; color: var(--muted); margin-top: 8px; }
+    .ok { color: #00ff9c; }
+    .err { color: var(--danger); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>StreamPass</h1>
+    <p>Оплата подписки через Telegram Stars или USDT (TRC20).</p>
+
+    <section class="card">
+      <h2>Telegram Stars</h2>
+      <p class="hint">Войдите в приложение → Подписка → Оплатить, либо напишите боту <code>/buy</code>.</p>
+      <button id="tgPay" type="button">Создать счёт Telegram</button>
+      <p id="tgHint" class="hint">Нужен access token приложения (после входа). Можно открыть оплату из Android-клиента без этой страницы.</p>
+      <p id="tgStatus" class="hint"></p>
+    </section>
+
+    <section class="card">
+      <h2>USDT TRC20</h2>
+      <p>Сеть: <strong>TRC20</strong></p>
+      <img id="qr" width="180" height="180" alt="QR адрес USDT" hidden />
+      <div class="addr" id="usdtAddr">Загрузка адреса…</div>
+      <p class="warn">Отправляйте только USDT TRC20 на этот адрес. Другие сети/токены — потеря средств.</p>
+
+      <label for="email">Email аккаунта StreamPass</label>
+      <input id="email" type="email" placeholder="you@example.com" autocomplete="email" />
+
+      <label for="tariff">Тариф</label>
+      <select id="tariff">
+        <option value="month">1 месяц</option>
+        <option value="quarter">3 месяца</option>
+        <option value="year">12 месяцев</option>
+      </select>
+
+      <label for="tx">Hash транзакции</label>
+      <input id="tx" type="text" placeholder="tx_hash" autocomplete="off" />
+
+      <button id="confirm" type="button" style="margin-top:16px">Подтвердить оплату USDT</button>
+      <p id="usdtStatus" class="hint"></p>
+    </section>
+  </main>
+
+  <script>
+    const API = (location.origin || '') + '/api/v1';
+
+    async function loadUsdt() {
+      const el = document.getElementById('usdtAddr');
+      const qr = document.getElementById('qr');
+      try {
+        const r = await fetch(API + '/payments/usdt/address');
+        const j = await r.json();
+        if (!r.ok) throw new Error(j?.error?.message || 'address unavailable');
+        el.textContent = j.address;
+        qr.hidden = false;
+        qr.src = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(j.address);
+      } catch (e) {
+        el.textContent = 'Адрес USDT ещё не настроен (USDT_TRC20_ADDRESS).';
+      }
+    }
+
+    document.getElementById('tgPay').addEventListener('click', async () => {
+      const status = document.getElementById('tgStatus');
+      const token = localStorage.getItem('sp_access_token') || prompt('Access token (Bearer) из приложения:');
+      if (!token) return;
+      status.textContent = 'Создаём счёт…';
+      status.className = 'hint';
+      try {
+        const r = await fetch(API + '/payments/telegram/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token.trim(),
+          },
+          body: JSON.stringify({ tariff: 'month' }),
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j?.error?.message || 'create failed');
+        localStorage.setItem('sp_access_token', token.trim());
+        status.innerHTML = '<a class="btn" href="' + j.invoice_link + '">Открыть оплату в Telegram</a>';
+        status.className = 'hint ok';
+        window.location.href = j.invoice_link;
+      } catch (e) {
+        status.textContent = String(e.message || e);
+        status.className = 'hint err';
+      }
+    });
+
+    document.getElementById('confirm').addEventListener('click', async () => {
+      const status = document.getElementById('usdtStatus');
+      status.textContent = 'Проверяем…';
+      status.className = 'hint';
+      try {
+        const r = await fetch(API + '/payments/usdt/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: document.getElementById('email').value.trim(),
+            tariff: document.getElementById('tariff').value,
+            tx_hash: document.getElementById('tx').value.trim(),
+          }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j?.error?.message || ('HTTP ' + r.status));
+        status.textContent = 'Оплата принята. Подписка активирована.';
+        status.className = 'hint ok';
+      } catch (e) {
+        status.textContent = String(e.message || e);
+        status.className = 'hint err';
+      }
+    });
+
+    loadUsdt();
+  </script>
+</body>
+</html>

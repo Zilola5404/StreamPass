@@ -9,14 +9,27 @@
 
 ### Known Issues
 - См. `docs/18_KnownIssues.md`
+- TUN connect ~6s vs SLA ≤5s (accepted for Android MVP sign-off)
+- T3 airplane recover: needs clean manual retest
+
+---
+
+## [0.1.1+55] — 2026-08-12
+
+### Added
+- **BL-040:** Telegram Stars + USDT payments (TZ 02.3) — webhook, `/buy`, `/pay/`, migration 0011
+- **BL-052:** theme / language / About re-ship without SpAppBar overlays
+
+### APK
+- `StreamPass-v0.1.1+55-signed-arm64.apk`
 
 ---
 
 ## [0.1.1+54] — 2026-08-11
 
 ### Added
-- **BL-052:** E05 язык (RU), тема (system/light/dark), «О приложении»
-- Password show/hide on E01 + E10; E04 reconnect banner when tunnel already up
+- Password show/hide on E01 + E10 (`PasswordField`)
+- MVP human sign-off pack (payments → Telegram path; TUN ~6s noted)
 
 ### APK
 - Build `StreamPass-v0.1.1+54-signed-arm64.apk` when ready

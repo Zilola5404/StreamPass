@@ -1,7 +1,7 @@
 # MVP Sign-Off Package — 2026-08-12
 
-> Client: **v0.1.1+54** (`password eye` on auth/profile)  
-> Backend: `9560c60` (+ Telegram payments shipping next) on `https://212-43-156-33.nip.io`  
+> Client: **v0.1.1+55** (Telegram pay UX + BL-052 theme/about)  
+> Backend: Telegram payments (migration 0011) on `https://212-43-156-33.nip.io`  
 > Device: Samsung SM-S938B (One UI)
 
 ---
@@ -18,7 +18,7 @@
 | Instagram feed | ✅ | +52 must-relay blackhole fix |
 | Live card payments (YooKassa) | ❌ Deferred | Replaced by **Telegram Stars + USDT** (TZ `docs/02.3_ТЗ_Телеграм оплата.md`) |
 | Password show/hide | ✅ | +54 `PasswordField` on login + change password |
-| Theme / About (BL-052) | ⏳ | Re-ship carefully after SpAppBar regression |
+| Theme / About (BL-052) | ✅ | +55 Settings → тема / О приложении (без SpAppBar) |
 
 ---
 
@@ -58,7 +58,6 @@ Log: `reports/QA/bl053-connect-logcat.txt`
 
 ## Residual (post-sign-off)
 
-1. Ship Telegram payments (BL-040 redirect) + deploy  
-2. BL-052 theme/about polish (careful, no AppBar wrapper bugs)  
-3. Optional TUN ≤5 s optimization  
-4. Windows client (next task)
+1. PO: provide `TELEGRAM_BOT_TOKEN` (+ optional USDT address) → set webhook smoke  
+2. Optional TUN ≤5 s optimization / T3 recover stopwatch  
+3. **Next epic: Windows client (BL-023)**

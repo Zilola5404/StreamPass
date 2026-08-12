@@ -60,7 +60,7 @@
 
 | ID | Название | Описание (из FS) | Приоритет | Статус | Зависимости | Ответственный |
 |----|----------|------------------|-----------|--------|-------------|---------------|
-| BL-040 | Live ЮKassa + возврат в app | Ранее BL-004: live/sandbox оплата, poll статуса на E06, deep-link return | P0 | Blocked | — | resume poll Done; **live keys отсутствуют** |
+| BL-040 | Telegram Stars + USDT (вместо live ЮKassa) | TZ `docs/02.3_ТЗ_Телеграм оплата.md`: webhook, `/buy`, `/pay/`, invoice_link | P0 | Done* | — | 2026-08-12 code+deploy; **live bot token — отдельно** |
 | BL-041 | Logout + session UX | E05/E10: «Выйти», clear tokens, Stop tunnel → E01; единые тексты сессии | P1 | Done | — | 2026-08-06 |
 | BL-042 | Сброс пароля | E01 «Забыли пароль?» + backend flow | P1 | Done | — | 2026-08-06 |
 | BL-043 | Профиль и удаление аккаунта | E10: просмотр email, смена пароля, удалить аккаунт (двойное подтверждение) | P1 | Done | BL-041 | 2026-08-06 |
@@ -72,7 +72,7 @@
 | BL-049 | Устройства / лимит | E10 список устройств, revoke, лимит (**Should→P2**) | P2 | Done | BL-043 | 2026-08-11 |
 | BL-050 | Admin: Premium / бан / audit | Users: выдать/забрать подписку, поиск, audit log | P2 | Done | BL-020 | 2026-08-11 |
 | BL-051 | Уведомления о сбоях | E05 toggle + системные уведомления при обрыве | P2 | Done | — | 2026-08-11 |
-| BL-052 | Язык / тема / О приложении | E05 Should-секции | P3 | Done | — | 2026-08-11 |
+| BL-052 | Язык / тема / О приложении | E05 Should-секции | P3 | Done | — | 2026-08-12 re-ship без SpAppBar (+55) |
 | BL-053 | Device SLA measurement | Замер cold start ≤2с, connect ≤5с, recover ≤10с (ТЗ §22) | P1 | Done | — | 2026-08-10 formal pass; report `reports/QA/BL-053-sla-measurement.md` |
 | BL-054 | Terms / Privacy на E01 | Ссылки при регистрации | P2 | Done | — | 2026-08-11 in-app legal (+51) |
 
