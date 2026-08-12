@@ -1,7 +1,8 @@
 # StreamPass — Final Acceptance Criteria
 
 > Дата: 2026-08-11 | Based on ТЗ §22  
-> Client under test: **v0.1.1+50**
+> Client under test: **v0.1.1+53** (device); +54 polish in tree  
+> Sign-off pack: `reports/QA/MVP-signoff-package-2026-08-11.md`
 
 ---
 
@@ -28,7 +29,7 @@
 |---|-----------|--------|--------|
 | T1 | Client startup time | ≤ 2s | ✅ Formal device pass (BL-053, 2026-08-10) |
 | T2 | Connection time | ≤ 5s | ✅ Formal device pass (BL-053) |
-| T3 | Auto-recovery | ≤ 10s | ⚠️ Logic present; recover still manual note in BL-053 report |
+| T3 | Auto-recovery | ≤ 10s | ⚠️ Retest 2026-08-11 attempted; formal stopwatch still open (see BL-053 retest) |
 | T4 | Server availability | ≥ 99.9% | ⚠️ Not measured over 30d |
 | T5 | Rule update without reinstall | Required | ✅ API versioning + client polling |
 

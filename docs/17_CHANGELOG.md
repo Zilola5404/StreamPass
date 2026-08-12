@@ -12,6 +12,17 @@
 
 ---
 
+## [0.1.1+54] — 2026-08-11
+
+### Added
+- **BL-052:** E05 язык (RU), тема (system/light/dark), «О приложении»
+- Password show/hide on E01 + E10; E04 reconnect banner when tunnel already up
+
+### APK
+- Build `StreamPass-v0.1.1+54-signed-arm64.apk` when ready
+
+---
+
 ## [0.1.1+53] — 2026-08-11
 
 ### Added

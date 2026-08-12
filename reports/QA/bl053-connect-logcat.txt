@@ -1,0 +1,12 @@
+﻿08-11 21:26:34.618 25787 25787 I StreamPassConnect: === connect session begin === onStartCommand relayId=nl-native-1 host=212.43.156.33 port=443 configLen=145 rulesLen=3734 networkMode=split mtu=1400 blockUdp443=false
+08-11 21:26:34.621 25787 25895 I StreamPassConnect: establishTunnel: validating connection_config
+08-11 21:26:35.024 25787 25895 I StreamPassConnect: [connect] hysteria ok via udp/443 pingMs=382
+08-11 21:26:35.024 25787 25895 I StreamPassConnect: PrepareRelay OK, establishing TUN
+08-11 21:26:40.657 25787 25906 I StreamPassConnect: tunnel event=connected relay=212.43.156.33 error=null pingMs=382
+08-11 21:26:40.658 25787 25906 I StreamPassVpn: tunnel event=connected relay=212.43.156.33 error=null
+08-11 21:26:40.660 25787 25787 I flutter : [StreamPassConnect] [2026-08-11T18:26:40.660710Z] [INFO] [vpn] native VPN event event=connected relay=212.43.156.33 pingMs=382
+08-11 21:26:48.863 25787 25787 I flutter : [StreamPassConnect] [2026-08-11T18:26:48.863929Z] [INFO] [native] 2026-08-11T18:26:34.618Z === connect session begin === onStartCommand relayId=nl-native-1 host=212.43.156.33 port=443 configLen=145 rulesLen=3734 networkMode=split mtu=1400 blockUdp443=false
+08-11 21:26:48.864 25787 25787 I flutter : [StreamPassConnect] [2026-08-11T18:26:48.864Z] [INFO] [native] 2026-08-11T18:26:34.621Z establishTunnel: validating connection_config
+08-11 21:26:48.864 25787 25787 I flutter : [StreamPassConnect] [2026-08-11T18:26:48.864046Z] [INFO] [native] 2026-08-11T18:26:35.024Z [connect] hysteria ok via udp/443 pingMs=382
+08-11 21:26:48.864 25787 25787 I flutter : [StreamPassConnect] [2026-08-11T18:26:48.864057Z] [INFO] [native] 2026-08-11T18:26:35.024Z PrepareRelay OK, establishing TUN
+08-11 21:26:48.864 25787 25787 I flutter : [StreamPassConnect] [2026-08-11T18:26:48.864104Z] [INFO] [native] 2026-08-11T18:26:40.657Z tunnel event=connected relay=212.43.156.33 error=null pingMs=382

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 import '../services/streampass_api.dart';
+import '../widgets/password_field.dart';
 import 'home_screen.dart';
 import 'forgot_password_screen.dart';
 import 'legal_document_screen.dart';
@@ -94,11 +95,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 decoration: const InputDecoration(hintText: 'Email'),
               ),
               const SizedBox(height: 12),
-              TextField(
+              PasswordField(
                 controller: _passCtrl,
-                obscureText: true,
-                style: const TextStyle(color: AppColors.textPrimary),
-                decoration: const InputDecoration(hintText: 'Пароль'),
+                hintText: 'Пароль',
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) {
+                  if (!_loading) _submit();
+                },
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),

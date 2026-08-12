@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import '../services/streampass_api.dart';
 import '../services/vpn_channel.dart';
 import '../theme/app_theme.dart';
+import '../widgets/password_field.dart';
 import 'subscription_screen.dart';
 
 /// E10 — профиль: email, устройства, смена пароля, удаление аккаунта (BL-043/049).
@@ -291,25 +292,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const Divider(height: 36),
                 Text('Смена пароля', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 12),
-                TextField(
+                PasswordField(
                   controller: _currentPass,
-                  obscureText: true,
-                  decoration: const InputDecoration(hintText: 'Текущий пароль'),
-                  style: const TextStyle(color: AppColors.textPrimary),
+                  hintText: 'Текущий пароль',
                 ),
                 const SizedBox(height: 10),
-                TextField(
+                PasswordField(
                   controller: _newPass,
-                  obscureText: true,
-                  decoration: const InputDecoration(hintText: 'Новый пароль'),
-                  style: const TextStyle(color: AppColors.textPrimary),
+                  hintText: 'Новый пароль',
                 ),
                 const SizedBox(height: 10),
-                TextField(
+                PasswordField(
                   controller: _confirmPass,
-                  obscureText: true,
-                  decoration: const InputDecoration(hintText: 'Повтор нового пароля'),
-                  style: const TextStyle(color: AppColors.textPrimary),
+                  hintText: 'Повтор нового пароля',
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) {
+                    if (!_changingPass) _changePassword();
+                  },
                 ),
                 const SizedBox(height: 16),
                 SizedBox(

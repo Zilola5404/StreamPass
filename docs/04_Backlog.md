@@ -72,7 +72,7 @@
 | BL-049 | Устройства / лимит | E10 список устройств, revoke, лимит (**Should→P2**) | P2 | Done | BL-043 | 2026-08-11 |
 | BL-050 | Admin: Premium / бан / audit | Users: выдать/забрать подписку, поиск, audit log | P2 | Done | BL-020 | 2026-08-11 |
 | BL-051 | Уведомления о сбоях | E05 toggle + системные уведомления при обрыве | P2 | Done | — | 2026-08-11 |
-| BL-052 | Язык / тема / О приложении | E05 Should-секции | P3 | Open | — | TODO |
+| BL-052 | Язык / тема / О приложении | E05 Should-секции | P3 | Done | — | 2026-08-11 |
 | BL-053 | Device SLA measurement | Замер cold start ≤2с, connect ≤5с, recover ≤10с (ТЗ §22) | P1 | Done | — | 2026-08-10 formal pass; report `reports/QA/BL-053-sla-measurement.md` |
 | BL-054 | Terms / Privacy на E01 | Ссылки при регистрации | P2 | Done | — | 2026-08-11 in-app legal (+51) |
 
