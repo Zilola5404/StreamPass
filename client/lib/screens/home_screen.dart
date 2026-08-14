@@ -15,6 +15,7 @@ import '../services/rule_engine_service.dart';
 import '../services/settings_service.dart';
 import '../services/streampass_api.dart';
 import '../services/vpn_channel.dart';
+import '../services/connection_controller.dart';
 import '../services/client_update.dart';
 import '../services/diag_uploader.dart';
 import '../services/connection_duration.dart';
@@ -22,6 +23,7 @@ import '../services/relay_picker.dart';
 import '../services/region_catalog.dart';
 import '../services/session_stats.dart';
 import '../theme/app_theme.dart';
+import '../layout/adaptive.dart';
 import '../widgets/connect_orb.dart';
 import 'settings_screen.dart';
 import 'subscription_screen.dart';
@@ -79,6 +81,7 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
   void initState() {
     super.initState();
     _sub = VpnChannel.statusStream.listen(_onStatus);
+    ConnectionController.instance.addListener(_onGlobalConnection);
     _bootstrapDiagUploader();
     _bootstrap();
   }
@@ -103,6 +106,7 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
       final native = await VpnChannel.fetchNativeStatus();
       if (!mounted || native == null) return;
       if (native.event != VpnEvent.connected) return;
+      if (!ConnectionController.instance.showConnected) return;
       setState(() {
         _state = ConnState.connected;
         _connectedSince = DateTime.now();
@@ -361,6 +365,7 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
     _healthTimer?.cancel();
     _ruleEngine.stop();
     _sub?.cancel();
+    ConnectionController.instance.removeListener(_onGlobalConnection);
     super.dispose();
   }
 
@@ -501,6 +506,21 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
     return null;
   }
 
+  void _onGlobalConnection() {
+    final c = ConnectionController.instance;
+    // Stage 6: traffic_ready may arrive after VpnEvent.connected — flip UI then.
+    if (c.showConnected && _state == ConnState.connecting) {
+      setState(() {
+        _state = ConnState.connected;
+        _connectedSince ??= DateTime.now();
+        _durationLabel = formatConnectionDuration(Duration.zero);
+        _startDurationTimer();
+      });
+      return;
+    }
+    _onStatus(c.status);
+  }
+
   void _onStatus(VpnStatusUpdate update) {
     if (!mounted) return;
 
@@ -521,14 +541,18 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
           _state = ConnState.connecting;
           _stopDurationTimer();
         case VpnEvent.connected:
-          _state = ConnState.connected;
-          _connectedSince = DateTime.now();
-          _durationLabel = formatConnectionDuration(Duration.zero);
-          _startDurationTimer();
-          _pingMs = _effectivePing(update.pingMs);
-          final ping = _pingMs;
-          if (ping != null && ping > 0) {
-            unawaited(_sessionStats.recordRtt(ping));
+          if (!ConnectionController.instance.showConnected) {
+            _state = ConnState.connecting;
+          } else {
+            _state = ConnState.connected;
+            _connectedSince = DateTime.now();
+            _durationLabel = formatConnectionDuration(Duration.zero);
+            _startDurationTimer();
+            _pingMs = _effectivePing(update.pingMs);
+            final ping = _pingMs;
+            if (ping != null && ping > 0) {
+              unawaited(_sessionStats.recordRtt(ping));
+            }
           }
         case VpnEvent.disconnected:
           _state = ConnState.disconnected;
@@ -707,6 +731,7 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
             child: Column(
               children: [
                 _TopBar(
+                  showMenu: !isWideLayout(context),
                   onSettings: () {
                     if (widget.onNavigateTab != null) {
                       widget.onNavigateTab!(3);
@@ -725,14 +750,32 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
                   subscriptionActive: _subscription?.isActive ?? false,
                 ),
                 Expanded(
-                  child: ListView(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final wide = isWideLayout(context);
+                      final width = wide
+                          ? constraints.maxWidth.clamp(0, 560).toDouble()
+                          : constraints.maxWidth;
+                      return Align(
+                        alignment: Alignment.topCenter,
+                        child: SizedBox(
+                          width: width,
+                          height: constraints.maxHeight,
+                          child: ListView(
                     padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
                     children: [
                       Center(
                         child: _StatusChip(
                           label: _state == ConnState.connected
                               ? 'Система активна'
-                              : 'Авто-маршрут готов',
+                              : (_state == ConnState.connecting &&
+                                      !kIsWeb &&
+                                      defaultTargetPlatform ==
+                                          TargetPlatform.windows &&
+                                      !ConnectionController
+                                          .instance.trafficReady)
+                                  ? 'Ожидание traffic_ready…'
+                                  : 'Авто-маршрут готов',
                           active: _state != ConnState.error,
                         ),
                       ),
@@ -777,6 +820,10 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
                         onAutoModeChanged: _setAutoMode,
                       ),
                     ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -791,11 +838,13 @@ class _TopBar extends StatelessWidget {
   final VoidCallback onSettings;
   final VoidCallback onSubscription;
   final bool subscriptionActive;
+  final bool showMenu;
 
   const _TopBar({
     required this.onSettings,
     required this.onSubscription,
     required this.subscriptionActive,
+    this.showMenu = true,
   });
 
   @override
@@ -804,10 +853,13 @@ class _TopBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(18, 10, 18, 8),
       child: Row(
         children: [
-          IconButton(
-            onPressed: onSettings,
-            icon: const Icon(Icons.menu_rounded),
-          ),
+          if (showMenu)
+            IconButton(
+              onPressed: onSettings,
+              icon: const Icon(Icons.menu_rounded),
+            )
+          else
+            const SizedBox(width: 48),
           Expanded(
             child: Text(
               'StreamPass',

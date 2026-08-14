@@ -4,6 +4,7 @@ import '../services/auth_service.dart';
 import '../services/streampass_api.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_bottom_nav.dart';
+import '../layout/adaptive.dart';
 import 'home_screen.dart';
 import 'servers_screen.dart';
 import 'settings_screen.dart';
@@ -45,36 +46,53 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    final wide = isWideLayout(context);
+    final stack = IndexedStack(
+      index: _index,
+      sizing: StackFit.expand,
+      children: [
+        HomeScreen(
+          key: _homeKey,
+          api: widget.api,
+          authService: widget.authService,
+          onNavigateTab: _goToTab,
+        ),
+        StatisticsScreen(key: _statsKey),
+        ServersScreen(
+          api: widget.api,
+          authService: widget.authService,
+          mode: ServersScreenMode.tab,
+          onSelectionChanged: () =>
+              _homeKey.currentState?.refreshRelayDisplay(),
+        ),
+        SettingsScreen(
+          api: widget.api,
+          authService: widget.authService,
+        ),
+      ],
+    );
+
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: IndexedStack(
-        index: _index,
-        sizing: StackFit.expand,
-        children: [
-          HomeScreen(
-            key: _homeKey,
-            api: widget.api,
-            authService: widget.authService,
-            onNavigateTab: _goToTab,
-          ),
-          StatisticsScreen(key: _statsKey),
-          ServersScreen(
-            api: widget.api,
-            authService: widget.authService,
-            mode: ServersScreenMode.tab,
-            onSelectionChanged: () =>
-                _homeKey.currentState?.refreshRelayDisplay(),
-          ),
-          SettingsScreen(
-            api: widget.api,
-            authService: widget.authService,
-          ),
-        ],
-      ),
-      bottomNavigationBar: AppBottomNav(
-        currentIndex: _index,
-        onTap: _goToTab,
-      ),
+      body: wide
+          ? Row(
+              children: [
+                AppSideRail(currentIndex: _index, onTap: _goToTab),
+                VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: Colors.white.withOpacity(0.06),
+                ),
+                Expanded(child: stack),
+              ],
+            )
+          : stack,
+      bottomNavigationBar: wide
+          ? null
+          : AppBottomNav(
+              currentIndex: _index,
+              onTap: _goToTab,
+            ),
     );
   }
 }

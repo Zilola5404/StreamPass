@@ -22,6 +22,16 @@ func TestTunIPv4PrefixHasUsableNextHost(t *testing.T) {
 	}
 }
 
+func TestTunDNSIsNotTunHost(t *testing.T) {
+	dns := TunDNS()
+	if dns.String() != "198.18.0.1" {
+		t.Fatalf("expected 198.18.0.1, got %s", dns)
+	}
+	if dns == TunIPv4Prefix().Addr() {
+		t.Fatal("VPN DNS must not equal TUN host IP (hairpin)")
+	}
+}
+
 func TestLegacyTunPrefixWasBroadcastNext(t *testing.T) {
 	// Documents the +13 bug: 10.10.0.2/30 → Next() == broadcast.
 	legacy := netip.PrefixFrom(netip.MustParseAddr("10.10.0.2"), 30)

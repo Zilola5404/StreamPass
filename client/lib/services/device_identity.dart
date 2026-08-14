@@ -26,11 +26,13 @@ class DeviceIdentity {
   Future<String> deviceName() async {
     final existing = await _tokens.read(_nameKey);
     if (existing != null && existing.isNotEmpty) return existing;
-    final name = defaultTargetPlatform == TargetPlatform.android
-        ? 'Android'
-        : defaultTargetPlatform == TargetPlatform.iOS
-            ? 'iPhone'
-            : 'Устройство';
+    final name = switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'Android',
+      TargetPlatform.iOS => 'iPhone',
+      TargetPlatform.windows => 'Windows',
+      TargetPlatform.macOS => 'macOS',
+      _ => 'Устройство',
+    };
     await _tokens.write(_nameKey, name);
     return name;
   }

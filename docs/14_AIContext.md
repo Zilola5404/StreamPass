@@ -35,6 +35,7 @@ Flutter Android UI (v0.1.1+34)
       • addDisallowedApplication (Госуслуги/ФНС/банки)
       • TUN DNS 10.10.0.1 → Go dnscache; .ru → Yandex, foreign → DoH
   → TunnelBridge → go_core (Hysteria2 + decision + HostForIP)
+  → Windows (TASK-WIN-001): Flutter → streampasscore.exe (Wintun) → same go_core
   → HTTPS → Caddy → Go Backend :8080
   → PostgreSQL 16 + Redis 7
   → Hysteria2 relays (NL + region listeners de/pl/fi)

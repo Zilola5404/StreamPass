@@ -75,7 +75,7 @@
 
 | Компонент | Статус |
 |-----------|--------|
-| Windows / iOS / macOS клиенты | Open (BL-023…025) — не начинать без запроса |
+| Windows / iOS / macOS клиенты | Windows: TASK-WIN-001 stages 5–12 code+verify (live Admin E2E residual). iOS/macOS: Open |
 | Kubernetes / ML / multi-hop и пр. | Исключения ТЗ §21 |
 
 ---

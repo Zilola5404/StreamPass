@@ -61,8 +61,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.bg,
       body: SafeArea(
-        child: Padding(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -187,6 +191,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ],
               const Spacer(flex: 2),
             ],
+          ),
+            ),
           ),
         ),
       ),

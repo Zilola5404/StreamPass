@@ -125,13 +125,8 @@ class SettingsService {
     final failureNotifications = prefs.getBool(_kFailureNotifications) ?? true;
 
     // Keep native prefs in sync for VPN-service reads (BL-051).
-    try {
-      await _nativeChannel.invokeMethod('setFailureNotifications', failureNotifications);
-    } on PlatformException {
-      // ignore
-    } on MissingPluginException {
-      // ignore
-    }
+    // Do not await — unimplemented channels can hang widget tests on desktop.
+    _syncNativeFailureNotifications(failureNotifications);
 
     return AppSettings(
       autostart: prefs.getBool(_kAutostart) ?? false,
@@ -220,4 +215,8 @@ class SettingsService {
 
   Future<void> setLanguageCode(String code) async =>
       (await SharedPreferences.getInstance()).setString(_kLanguageCode, code);
+
+  void _syncNativeFailureNotifications(bool value) {
+    _nativeChannel.invokeMethod('setFailureNotifications', value).ignore();
+  }
 }

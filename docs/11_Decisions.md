@@ -220,6 +220,18 @@
 
 ---
 
+## ADR-019: Windows TUN = Wintun sidecar, not c-shared / not Android fd
+
+| | |
+|---|---|
+| **Дата** | 2026-08-14 |
+| **Проблема** | Windows не даёт VpnService fd; c-shared DLL требует CGO/gcc, которого нет в VS Build Tools |
+| **Решение** | `streampasscore.exe` (`go_core/desktop`, `-tags with_gvisor`) + JSON-lines на 127.0.0.1; sing-tun создаёт Wintun по имени; `IP_UNICAST_IF` на физический NIC до AutoRoute `0.0.0.0/0`; DNS `198.18.0.1`; IPv6 не захватываем (Variant B) |
+| **Причина** | Тот же Decision/DNS/Hysteria, что Android; DIRECT живёт при падении Relay; Connected только после TUN, UI Connected после `traffic_ready` |
+| **Последствия** | Нужны права администратора на CreateAdapter; рядом с exe — `wintun.dll` (официальный signed 0.14.1); не копировать Android excludeRoute/app-bypass |
+
+---
+
 ## Шаблон для новых ADR
 
 ```

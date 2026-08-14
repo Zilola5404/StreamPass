@@ -14,11 +14,11 @@ import (
 	"time"
 
 	"github.com/apernet/hysteria/core/v2/client"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
-	tun "github.com/sagernet/sing-tun"
 
 	"streampass/go_core/internal/decision"
 	"streampass/go_core/internal/dnscache"
@@ -133,26 +133,49 @@ func Start(ctx context.Context, fd int, hyClient client.Client, mtu uint32, engi
 	return StartWithOptions(ctx, fd, hyClient, mtu, engine, relayID, Options{})
 }
 
+// TunDNS is the fake resolver address advertised to the OS. Queries must enter
+// TUN (not hairpin on the TUN host IP) so Go can hijack *:53 (HostForIP).
+func TunDNS() netip.Addr {
+	return netip.MustParseAddr("198.18.0.1")
+}
+
+type stackHooks struct {
+	AfterCreate func()
+	AfterRoute  func()
+	AfterStop   func()
+}
+
 // StartWithOptions is Start plus diagnostic toggles (UDP/443 block, …).
 func StartWithOptions(ctx context.Context, fd int, hyClient client.Client, mtu uint32, engine *decision.AtomicEngine, relayID string, opts Options) (*Session, error) {
-	resetTrafficReady()
 	if mtu == 0 {
 		mtu = 1400
 	}
 	if engine == nil {
 		engine = decision.NewAtomicEngine(decision.NewEngine(nil, nil, decision.DefaultMode), 0)
 	}
-
-	tunOptions := tun.Options{
+	return startStack(ctx, tun.Options{
 		FileDescriptor: fd,
 		MTU:            mtu,
 		AutoRoute:      false,
 		Inet4Address:   []netip.Prefix{TunIPv4Prefix()},
+	}, hyClient, engine, relayID, opts, stackHooks{})
+}
+
+func startStack(ctx context.Context, tunOptions tun.Options, hyClient client.Client, engine *decision.AtomicEngine, relayID string, opts Options, hooks stackHooks) (*Session, error) {
+	resetTrafficReady()
+	if tunOptions.MTU == 0 {
+		tunOptions.MTU = 1400
+	}
+	if engine == nil {
+		engine = decision.NewAtomicEngine(decision.NewEngine(nil, nil, decision.DefaultMode), 0)
 	}
 
 	tunDev, err := tun.New(tunOptions)
 	if err != nil {
 		return nil, err
+	}
+	if hooks.AfterCreate != nil {
+		hooks.AfterCreate()
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)
@@ -169,7 +192,7 @@ func StartWithOptions(ctx context.Context, fd int, hyClient client.Client, mtu u
 	// completes TCP (no NewConnectionEx) → foreign RELAY sites hang while
 	// RU excludeRoute works. Build AAR with -tags with_gvisor.
 	stackName := "gvisor"
-	logLine(fmt.Sprintf("[vpn] tun-stack=%s mtu=%d", stackName, mtu))
+	logLine(fmt.Sprintf("[vpn] tun-stack=%s mtu=%d", stackName, tunOptions.MTU))
 	stack, err := tun.NewStack(stackName, tun.StackOptions{
 		Context:    runCtx,
 		Tun:        tunDev,
@@ -189,6 +212,9 @@ func StartWithOptions(ctx context.Context, fd int, hyClient client.Client, mtu u
 		_ = tunDev.Close()
 		return nil, err
 	}
+	if hooks.AfterRoute != nil {
+		hooks.AfterRoute()
+	}
 	if err := stack.Start(); err != nil {
 		cancel()
 		_ = stack.Close()
@@ -199,6 +225,9 @@ func StartWithOptions(ctx context.Context, fd int, hyClient client.Client, mtu u
 	stop := func() {
 		_ = stack.Close()
 		_ = tunDev.Close()
+		if hooks.AfterStop != nil {
+			hooks.AfterStop()
+		}
 	}
 	return &Session{cancel: cancel, stop: stop, engine: engine}, nil
 }
@@ -407,6 +436,13 @@ func (h *routingHandler) pipeTCP(
 			return false
 		}
 	} else {
+		if h.client == nil {
+			err := fmt.Errorf("hysteria client not ready")
+			logLine(fmt.Sprintf("[tun] relay-tcp fail dest=%s err=%v", destination.String(), err))
+			emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), err.Error(), 0)
+			emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, dec.Reason, dnscache.LastResolveMS(host), time.Since(start), 0, 0, err.Error())
+			return false
+		}
 		dialTo := relayDialAddr(destination, host, destPort)
 		if dialTo != destination.String() {
 			logLine(fmt.Sprintf("[tun] relay-tcp rewrite dest=%s dial=%s", destination.String(), dialTo))
@@ -725,6 +761,10 @@ func (h *routingHandler) relayUDP(
 		return true
 	}
 
+	if h.client == nil {
+		emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), "hysteria client not ready", 0)
+		return false
+	}
 	hyUDP, err := h.client.UDP()
 	if err != nil {
 		emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), err.Error(), 0)
@@ -965,8 +1005,8 @@ func relayDialAddr(destination M.Socksaddr, host string, destPort int) string {
 var okDiagThrottle sync.Map // key -> time.Time
 
 const (
-	okDiagMinInterval  = 30 * time.Second
-	slowDialThreshold  = 1500 * time.Millisecond
+	okDiagMinInterval = 30 * time.Second
+	slowDialThreshold = 1500 * time.Millisecond
 )
 
 func emitDiag(proto, host, destIP string, destPort int, mode, rule, decisionReason, relayID string, ok bool, d time.Duration, errMsg string, speedKbps int) {

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../build_info.dart';
 import '../theme/app_theme.dart';
 import '../services/vpn_channel.dart';
+import '../services/connection_controller.dart';
 import '../services/connection_log.dart';
 import '../services/native_connect_log.dart';
 import '../services/settings_service.dart';
@@ -53,7 +54,12 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
         }
       });
     });
+    ConnectionController.instance.addListener(_onConn);
     unawaited(_syncNativeStatus());
+  }
+
+  void _onConn() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadSettings() async {
@@ -116,6 +122,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   void dispose() {
     _logSub?.cancel();
     _statusSub?.cancel();
+    ConnectionController.instance.removeListener(_onConn);
     super.dispose();
   }
 
@@ -129,14 +136,24 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final conn = ConnectionController.instance;
     final rows = <_DiagRow>[
       _DiagRow('Статус', _statusLabel(_last?.event)),
+      _DiagRow('Tunnel Connected', _last?.event == VpnEvent.connected ? 'yes' : 'no'),
+      _DiagRow('Traffic Ready', conn.trafficReady ? 'yes' : 'no'),
+      _DiagRow('UI Подключено', conn.showConnected ? 'yes' : 'no'),
       _DiagRow('Relay', _last?.relayName ?? '—'),
       _DiagRow('RTT', _last?.pingMs != null ? '${_last!.pingMs} ms' : '—'),
       _DiagRow('Время соединения', _uptime),
       _DiagRow('Код ошибки', _last?.errorMessage ?? '—'),
       _DiagRow('Версия клиента', BuildInfo.label),
       _DiagRow('ОС', Platform.operatingSystem),
+      if (Platform.isWindows) ...[
+        _DiagRow('IPv6 policy', 'Variant B (не перехватываем)'),
+        _DiagRow('VPN DNS', '198.18.0.1 (HostForIP)'),
+        _DiagRow('TUN adapter', 'StreamPass / Wintun'),
+        _DiagRow('MTU (настройка)', '${_settings.mtu}'),
+      ],
     ];
 
     final entries = _log.entries.reversed.toList();

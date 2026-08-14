@@ -18,7 +18,8 @@
 | BL-026…027 | Regions + go.sum | ✅ |
 | BL-031…033 | Flutter E2E, loadtest, backups | ✅ |
 | BL-004 / 030 | ЮKassa / auto-renew | ⏭ Skipped / Blocked |
-| BL-023…025 | Win / iOS / macOS | ⬜ Open (out of sprint) |
+| BL-023 | Windows client (TASK-WIN-001) | 🔄 In Progress (stages 5–12 verify; live Admin residual) |
+| BL-024…025 | iOS / macOS | ⬜ Open |
 
 ## Progress
 

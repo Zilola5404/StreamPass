@@ -3,6 +3,7 @@ package hyconfig
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"io"
 	"net"
 	"os"
@@ -236,6 +237,58 @@ func TestIntegrationHysteriaHTTPHead(t *testing.T) {
 		t.Logf("warning: non-200 HEAD response: %s", strings.Split(resp, "\n")[0])
 	}
 	_ = net.ParseIP("127.0.0.1") // ensure net imported
+}
+
+// TestIntegrationHysteriaHTTPS proves TLS/HTTPS through the relay TCP data path
+// (TASK-WIN-001 gate: independent Hysteria2 client, not StreamPass TUN).
+func TestIntegrationHysteriaHTTPS(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test skipped in short mode")
+	}
+	if os.Getenv("STREAMPASS_RELAY_TEST") == "0" {
+		t.Skip("STREAMPASS_RELAY_TEST=0")
+	}
+
+	cfg, _, err := BuildClientConfig(integrationConnectionConfig(t), "", 0)
+	if err != nil {
+		t.Fatalf("build config: %v", err)
+	}
+	hy, _, err := client.NewClient(cfg)
+	if err != nil {
+		t.Fatalf("hysteria connect: %v", err)
+	}
+	defer hy.Close()
+
+	targets := []string{"example.com", "github.com", "www.google.com", "www.youtube.com"}
+	for _, host := range targets {
+		host := host
+		t.Run(host, func(t *testing.T) {
+			raw, err := hy.TCP(net.JoinHostPort(host, "443"))
+			if err != nil {
+				t.Fatalf("tcp dial: %v", err)
+			}
+			defer raw.Close()
+			_ = raw.SetDeadline(time.Now().Add(20 * time.Second))
+			tlsConn := tls.Client(raw, &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12})
+			if err := tlsConn.Handshake(); err != nil {
+				t.Fatalf("tls handshake: %v", err)
+			}
+			req := "HEAD / HTTP/1.1\r\nHost: " + host + "\r\nConnection: close\r\n\r\n"
+			if _, err := io.WriteString(tlsConn, req); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+			buf := make([]byte, 1024)
+			n, err := tlsConn.Read(buf)
+			if err != nil && err != io.EOF && n == 0 {
+				t.Fatalf("read: %v", err)
+			}
+			resp := string(buf[:n])
+			if !strings.Contains(resp, "HTTP/") {
+				t.Fatalf("not HTTP over TLS: %q", resp)
+			}
+			t.Logf("HTTPS via relay: %s", strings.Split(resp, "\r\n")[0])
+		})
+	}
 }
 
 // TestIntegrationTCPUnderlayConnect handshakes via framed TCP→UDP bridge (ТЗ §10).

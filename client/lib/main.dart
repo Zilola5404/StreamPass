@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'theme/app_theme.dart';
@@ -5,6 +8,8 @@ import 'services/auth_service.dart';
 import 'services/settings_service.dart';
 import 'services/streampass_api.dart';
 import 'services/vpn_channel.dart';
+import 'services/connection_controller.dart';
+import 'services/windows_traffic_engine.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/main_shell.dart';
 
@@ -17,8 +22,12 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   // Avoid blocking/crashing on first frame when fonts cannot be downloaded.
   GoogleFonts.config.allowRuntimeFetching = false;
-  // Subscribe EventChannel early so native VPN events are not dropped.
+  if (!kIsWeb && Platform.isWindows) {
+    VpnChannel.windowsImpl = WindowsTrafficEngine.instance;
+  }
+  // Subscribe EventChannel / Windows engine before any screen listens.
   VpnChannel.ensureListening();
+  ConnectionController.instance.attach();
 
   final authService = AuthService(baseUrl: _apiBaseUrl);
   final api = StreamPassApi(baseUrl: _apiBaseUrl, authService: authService);

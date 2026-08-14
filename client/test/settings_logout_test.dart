@@ -26,16 +26,23 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: SettingsScreen(api: api, authService: auth),
+        home: Scaffold(
+          body: SettingsScreen(api: api, authService: auth),
+        ),
       ),
     );
-    for (var i = 0; i < 30; i++) {
+    await tester.pump();
+    for (var i = 0; i < 80; i++) {
       await tester.pump(const Duration(milliseconds: 50));
       if (find.text('Автозапуск').evaluate().isNotEmpty) break;
     }
 
     expect(find.text('Автозапуск'), findsOneWidget);
-    await tester.drag(find.byType(ListView), const Offset(0, -400));
+    await tester.scrollUntilVisible(
+      find.text('Выйти'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pump();
     expect(find.text('Выйти'), findsOneWidget);
   });

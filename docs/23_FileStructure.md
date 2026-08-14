@@ -67,14 +67,17 @@ StreamPass/
 │   │       └── NativeSettingsChannel.kt
 │   ├── go_core/                       # Go tunnel core (Hysteria2) — NOT stub
 │   │   ├── mobile/                    # gomobile entry (tunnel, log)
+│   │   ├── desktop/                   # Windows sidecar (Wintun, JSON IPC)
 │   │   ├── internal/
 │   │   │   ├── decision/              # Decision Engine
 │   │   │   ├── dnscache/              # DNS Cache + DoH
 │   │   │   ├── hyconfig/              # hysteria2:// parse + fallback
-│   │   │   ├── protect/               # VpnService.protect
-│   │   │   └── tunbridge/             # sing-tun ↔ hysteria
+│   │   │   ├── protect/               # Android protect + Windows bind-to-IF
+│   │   │   └── tunbridge/             # sing-tun ↔ hysteria (+ Wintun desktop)
 │   │   ├── go.mod, go.sum
 │   │   └── README.md
+│   ├── windows/                       # Flutter desktop + native/
+│   │   └── native/                    # build_core.ps1, streampasscore.exe, wintun.dll
 │   ├── android/app/libs/
 │   │   └── streampasscore.aar
 │   ├── test/                          # Flutter unit + e2e mock
@@ -116,7 +119,8 @@ StreamPass/
 
 | Item | Status |
 |------|--------|
-| iOS/Windows/macOS targets | Not found (BL-023…025 Open) |
+| Windows Flutter target | `client/windows/` + Wintun sidecar (`native/`); device E2E pending |
+| iOS/macOS targets | Not found (BL-024…025 Open) |
 | `client/android_old/` | Gitignored backup |
 | `key.properties` / `*.jks` | Local only (BL-013; not committed) |
 | `client/go_core/streampasscore.aar` | Prefer `android/app/libs/` |

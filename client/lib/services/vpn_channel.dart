@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'connection_log.dart';
 import 'streampass_api.dart';
 
@@ -22,6 +23,25 @@ class VpnConnectException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// Windows native/traffic adapter (TASK-WIN-001). Registered from [main].
+abstract class WindowsVpnAdapter {
+  Stream<VpnStatusUpdate> get statusStream;
+  void ensureStarted();
+  Future<bool> connect(
+    RelayServer server, {
+    String rulesJson = '',
+    String exclusionsJson = '',
+    int mtu = 1400,
+    String networkMode = 'split',
+    bool blockUdp443 = false,
+  });
+  Future<void> disconnect();
+  Future<String?> updateRules({
+    required String rulesJson,
+    required String exclusionsJson,
+  });
 }
 
 /// Bridges Dart <-> native VpnService.
@@ -45,6 +65,12 @@ class VpnChannel {
   static Stream<VpnStatusUpdate>? _statusStream;
   static StreamSubscription<VpnStatusUpdate>? _keepalive;
 
+  /// Injected on Windows so this file does not import the engine (cycle).
+  static WindowsVpnAdapter? windowsImpl;
+
+  static bool get _useWindowsEngine =>
+      !kIsWeb && Platform.isWindows && windowsImpl != null;
+
   /// Last VPN event seen by Flutter (Diagnostics can show this without waiting
   /// for a new EventChannel push).
   static VpnStatusUpdate? lastStatus;
@@ -52,6 +78,11 @@ class VpnChannel {
   /// Ensure the EventChannel is subscribed early so [eventSink] is set before
   /// native connect completes.
   static void ensureListening() {
+    if (_useWindowsEngine) {
+      windowsImpl!.ensureStarted();
+      _keepalive ??= statusStream.listen((_) {});
+      return;
+    }
     _keepalive ??= statusStream.listen((_) {});
   }
 
@@ -73,6 +104,9 @@ class VpnChannel {
 
   /// Query native VpnService for the real current status (AUDIT-003 BUG-004).
   static Future<VpnStatusUpdate?> fetchNativeStatus() async {
+    if (_useWindowsEngine) {
+      return lastStatus;
+    }
     try {
       final raw = await _method.invokeMethod<Map<dynamic, dynamic>>('getStatus');
       final update = _parseStatusMap(raw);
@@ -94,6 +128,14 @@ class VpnChannel {
   }
 
   static Stream<VpnStatusUpdate> get statusStream {
+    if (_useWindowsEngine) {
+      _statusStream ??= windowsImpl!.statusStream.map((update) {
+        lastStatus = update;
+        _logVpnEvent(update);
+        return update;
+      });
+      return _statusStream!;
+    }
     _statusStream ??= _events.receiveBroadcastStream().map((raw) {
       final map = Map<String, dynamic>.from(raw as Map);
       final event = VpnEvent.values.firstWhere(
@@ -155,6 +197,16 @@ class VpnChannel {
             'blockUdp443': blockUdp443 || networkMode == 'tcp_only',
           });
     _log.beginConnectSession(relayId: server.id, host: server.host);
+    if (_useWindowsEngine) {
+      return windowsImpl!.connect(
+        server,
+        rulesJson: rulesJson,
+        exclusionsJson: exclusionsJson,
+        mtu: mtu,
+        networkMode: networkMode,
+        blockUdp443: blockUdp443 || networkMode == 'tcp_only',
+      );
+    }
     _log.info('vpn', 'MethodChannel connect', {
       'relayId': server.id,
       'host': server.host,
@@ -188,6 +240,10 @@ class VpnChannel {
 
   static Future<void> disconnect() async {
     _log.info('vpn', 'disconnect requested');
+    if (_useWindowsEngine) {
+      await windowsImpl!.disconnect();
+      return;
+    }
     try {
       await _method.invokeMethod('disconnect');
     } on PlatformException {
@@ -200,6 +256,12 @@ class VpnChannel {
     required String rulesJson,
     required String exclusionsJson,
   }) async {
+    if (_useWindowsEngine) {
+      return windowsImpl!.updateRules(
+        rulesJson: rulesJson,
+        exclusionsJson: exclusionsJson,
+      );
+    }
     try {
       final err = await _method.invokeMethod<String>('updateRules', {
         'rulesJson': rulesJson,

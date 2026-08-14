@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
@@ -37,12 +38,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _bootstrap() async {
-    final local = await _service.load();
-    if (!mounted) return;
-    setState(() {
-      _settings = local;
-      _loading = false;
-    });
+    try {
+      final local = await _service.load();
+      if (!mounted) return;
+      setState(() {
+        _settings = local;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
     await _pullExclusions();
   }
 
@@ -161,164 +167,181 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return TabPage(
       title: 'Настройки',
       body: ListView(
+        padding: const EdgeInsets.only(bottom: 28),
         children: [
-          _SectionLabel('Подключение'),
-          SwitchListTile(
-            title: const Text('Автозапуск'),
-            subtitle: const Text('Запускать StreamPass при включении устройства'),
-            value: _settings.autostart,
-            activeColor: AppColors.cyan,
-            onChanged: _updateAutostart,
+          _SettingsGroup(
+            title: 'Подключение',
+            children: [
+              SwitchListTile(
+                title: const Text('Автозапуск'),
+                subtitle: const Text('Запускать StreamPass при включении устройства'),
+                value: _settings.autostart,
+                activeColor: AppColors.cyan,
+                onChanged: _updateAutostart,
+              ),
+              SwitchListTile(
+                title: const Text('Автоподключение'),
+                subtitle: const Text('Подключаться автоматически при запуске приложения'),
+                value: _settings.autoConnect,
+                activeColor: AppColors.cyan,
+                onChanged: _updateAutoConnect,
+              ),
+              SwitchListTile(
+                title: const Text('Автовыбор Relay'),
+                subtitle: const Text('Выбирать сервер автоматически по RTT и нагрузке'),
+                value: _settings.autoSelectRelay,
+                activeColor: AppColors.cyan,
+                onChanged: _updateAutoRelay,
+              ),
+              SwitchListTile(
+                title: const Text('Диагностика трафика'),
+                subtitle: const Text('Отправлять маршруты/задержки на сервер (без URL страниц)'),
+                value: _settings.diagnosticsEnabled,
+                activeColor: AppColors.cyan,
+                onChanged: (v) async {
+                  await _service.setDiagnosticsEnabled(v);
+                  setState(() => _settings = _settings.copyWith(diagnosticsEnabled: v));
+                },
+              ),
+            ],
           ),
-          SwitchListTile(
-            title: const Text('Автоподключение'),
-            subtitle: const Text('Подключаться автоматически при запуске приложения'),
-            value: _settings.autoConnect,
-            activeColor: AppColors.cyan,
-            onChanged: _updateAutoConnect,
-          ),
-          SwitchListTile(
-            title: const Text('Автовыбор Relay'),
-            subtitle: const Text('Выбирать сервер автоматически по RTT и нагрузке'),
-            value: _settings.autoSelectRelay,
-            activeColor: AppColors.cyan,
-            onChanged: _updateAutoRelay,
-          ),
-          SwitchListTile(
-            title: const Text('Диагностика трафика'),
-            subtitle: const Text('Отправлять маршруты/задержки на сервер (без URL страниц)'),
-            value: _settings.diagnosticsEnabled,
-            activeColor: AppColors.cyan,
-            onChanged: (v) async {
-              await _service.setDiagnosticsEnabled(v);
-              setState(() => _settings = _settings.copyWith(diagnosticsEnabled: v));
-            },
-          ),
-          const Divider(height: 32),
-          _SectionLabel('Маршрутизация'),
-          ListTile(
-            title: const Text('Исключения'),
-            subtitle: Text(
-              _syncHint ??
-                  (_settings.exclusions.isEmpty
-                      ? 'Нет исключений'
-                      : '${_settings.exclusions.length} домен(ов) всегда напрямую'),
-            ),
-            trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-            onTap: () async {
-              final updated = await Navigator.of(context).push<List<String>>(
-                MaterialPageRoute(
-                  builder: (_) => ExclusionsScreen(initial: _settings.exclusions),
+          _SettingsGroup(
+            title: 'Маршрутизация',
+            children: [
+              ListTile(
+                title: const Text('Исключения'),
+                subtitle: Text(
+                  _syncHint ??
+                      (_settings.exclusions.isEmpty
+                          ? 'Нет исключений'
+                          : '${_settings.exclusions.length} домен(ов) всегда напрямую'),
                 ),
-              );
-              if (updated != null) {
-                await _saveExclusions(updated);
-              }
-            },
-          ),
-          ListTile(
-            title: const Text('Приложения без VPN'),
-            subtitle: Text(
-              _settings.bypassPackages.isEmpty
-                  ? 'Дополнительно к встроенному списку (Госуслуги, банки…)'
-                  : '${_settings.bypassPackages.length} приложений обходят VPN',
-            ),
-            trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-            onTap: () async {
-              final updated = await Navigator.of(context).push<List<String>>(
-                MaterialPageRoute(
-                  builder: (_) =>
-                      AppBypassScreen(initialSelected: _settings.bypassPackages),
-                ),
-              );
-              if (updated != null) {
-                setState(() =>
-                    _settings = _settings.copyWith(bypassPackages: updated));
-                await _service.setBypassPackages(updated);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Список сохранён. Переподключите StreamPass, чтобы применить.',
-                      ),
+                trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                onTap: () async {
+                  final updated = await Navigator.of(context).push<List<String>>(
+                    MaterialPageRoute(
+                      builder: (_) => ExclusionsScreen(initial: _settings.exclusions),
                     ),
                   );
-                }
-              }
-            },
-          ),
-          const Divider(height: 32),
-          _SectionLabel('Оформление'),
-          ListTile(
-            title: const Text('Язык'),
-            subtitle: Text(
-              _settings.languageCode == 'ru' ? 'Русский' : _settings.languageCode,
-            ),
-            trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Пока доступен только русский язык')),
-              );
-            },
-          ),
-          ListTile(
-            title: const Text('Тема'),
-            subtitle: Text(_themeLabel(_settings.themeMode)),
-            trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-            onTap: _pickTheme,
-          ),
-          SwitchListTile(
-            title: const Text('Уведомления о сбоях'),
-            subtitle: const Text('Системное уведомление при обрыве соединения'),
-            value: _settings.failureNotifications,
-            activeColor: AppColors.cyan,
-            onChanged: (v) async {
-              await _service.setFailureNotifications(v);
-              setState(() => _settings = _settings.copyWith(failureNotifications: v));
-            },
-          ),
-          ListTile(
-            title: const Text('О приложении'),
-            subtitle: const Text('Версия, сборка, канал обновлений'),
-            trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const AboutScreen()),
-            ),
-          ),
-          const Divider(height: 32),
-          _SectionLabel('Поддержка'),
-          ListTile(
-            title: const Text('Диагностика'),
-            subtitle: const Text('RTT, потери пакетов, статус relay, версия клиента'),
-            trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const DiagnosticsScreen()),
-            ),
-          ),
-          if (widget.authService != null && widget.api != null) ...[
-            const Divider(height: 32),
-            _SectionLabel('Аккаунт'),
-            ListTile(
-              title: const Text('Профиль'),
-              subtitle: const Text('Email, устройства, смена пароля'),
-              leading: const Icon(Icons.person_outline, color: AppColors.textSecondary),
-              trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ProfileScreen(
-                    authService: widget.authService!,
-                    api: widget.api!,
+                  if (updated != null) {
+                    await _saveExclusions(updated);
+                  }
+                },
+              ),
+              if (defaultTargetPlatform != TargetPlatform.windows)
+                ListTile(
+                  title: const Text('Приложения без VPN'),
+                  subtitle: Text(
+                    _settings.bypassPackages.isEmpty
+                        ? 'Дополнительно к встроенному списку (Госуслуги, банки…)'
+                        : '${_settings.bypassPackages.length} приложений обходят VPN',
                   ),
+                  trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                  onTap: () async {
+                    final updated = await Navigator.of(context).push<List<String>>(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            AppBypassScreen(initialSelected: _settings.bypassPackages),
+                      ),
+                    );
+                    if (updated != null) {
+                      setState(() =>
+                          _settings = _settings.copyWith(bypassPackages: updated));
+                      await _service.setBypassPackages(updated);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Список сохранён. Переподключите StreamPass, чтобы применить.',
+                            ),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                ),
+            ],
+          ),
+          _SettingsGroup(
+            title: 'Оформление',
+            children: [
+              ListTile(
+                title: const Text('Язык'),
+                subtitle: Text(
+                  _settings.languageCode == 'ru' ? 'Русский' : _settings.languageCode,
+                ),
+                trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Пока доступен только русский язык')),
+                  );
+                },
+              ),
+              ListTile(
+                title: const Text('Тема'),
+                subtitle: Text(_themeLabel(_settings.themeMode)),
+                trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                onTap: _pickTheme,
+              ),
+              SwitchListTile(
+                title: const Text('Уведомления о сбоях'),
+                subtitle: const Text('Системное уведомление при обрыве соединения'),
+                value: _settings.failureNotifications,
+                activeColor: AppColors.cyan,
+                onChanged: (v) async {
+                  await _service.setFailureNotifications(v);
+                  setState(() => _settings = _settings.copyWith(failureNotifications: v));
+                },
+              ),
+              ListTile(
+                title: const Text('О приложении'),
+                subtitle: const Text('Версия, сборка, канал обновлений'),
+                trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AboutScreen()),
                 ),
               ),
+            ],
+          ),
+          _SettingsGroup(
+            title: 'Поддержка',
+            children: [
+              ListTile(
+                title: const Text('Диагностика'),
+                subtitle: const Text('RTT, потери пакетов, статус relay, версия клиента'),
+                trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const DiagnosticsScreen()),
+                ),
+              ),
+            ],
+          ),
+          if (widget.authService != null && widget.api != null)
+            _SettingsGroup(
+              title: 'Аккаунт',
+              children: [
+                ListTile(
+                  title: const Text('Профиль'),
+                  subtitle: const Text('Email, устройства, смена пароля'),
+                  leading: const Icon(Icons.person_outline, color: AppColors.textSecondary),
+                  trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ProfileScreen(
+                        authService: widget.authService!,
+                        api: widget.api!,
+                      ),
+                    ),
+                  ),
+                ),
+                ListTile(
+                  title: const Text('Выйти'),
+                  subtitle: const Text('Завершить сеанс на этом устройстве'),
+                  leading: const Icon(Icons.logout, color: AppColors.textSecondary),
+                  onTap: _confirmLogout,
+                ),
+              ],
             ),
-            ListTile(
-              title: const Text('Выйти'),
-              subtitle: const Text('Завершить сеанс на этом устройстве'),
-              leading: const Icon(Icons.logout, color: AppColors.textSecondary),
-              onTap: _confirmLogout,
-            ),
-          ],
         ],
       ),
     );
@@ -368,19 +391,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-class _SectionLabel extends StatelessWidget {
-  final String text;
-  const _SectionLabel(this.text);
+class _SettingsGroup extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
+  const _SettingsGroup({required this.title, required this.children});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: AppColors.textSecondary,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
             ),
+          ),
+          Material(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(18),
+            clipBehavior: Clip.antiAlias,
+            child: Column(children: children),
+          ),
+        ],
       ),
     );
   }

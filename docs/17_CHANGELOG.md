@@ -7,6 +7,9 @@
 
 ## [Unreleased]
 
+### Added
+- **TASK-WIN-001 / BL-023:** Windows TUN — Wintun sidecar (`streampasscore.exe`), physical-NIC `IP_UNICAST_IF` protect, DNS `198.18.0.1`, `traffic_ready` gate. Stages 5–12: Decision/split, Variant B IPv6, MTU UI, adaptive FALLBACK path, `scripts/VerifyWindowsTUN.ps1`.
+
 ### Known Issues
 - См. `docs/18_KnownIssues.md`
 - TUN connect ~6s vs SLA ≤5s (accepted for Android MVP sign-off)

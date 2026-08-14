@@ -1,17 +1,17 @@
 # Last Session
 
-> Updated: 2026-08-06
+> Updated: 2026-08-15
 
 ## Completed
 
-- Pushed **BL-017** TCP underlay (`44cf5e9`)
-- **BL-035** off-site backups:
-  - Fixed `Permission denied` on cron (`chmod +x`)
-  - SSH key primary → secondary; encrypted scp to `212.43.157.167`
-  - Cron 03:00 dump / 03:15 off-site
-  - Operator pull via `PullBackupsOffsite.ps1` → `backups/offsite/`
+- TASK-WIN-001 stages 5–12:
+  - Decision/split + FALLBACK unit tests
+  - traffic_ready UI chip + ConnectionController gate
+  - DNS 198.18.0.1 / IPv6 Variant B contracts
+  - Diagnostics Windows rows (DNS/IPv6/MTU)
+  - `scripts/VerifyWindowsTUN.ps1` + QA report (live TUN skipped without Admin)
 
 ## Residual
 
-- Branded domain, ЮKassa, Windows/iOS/macOS — not started (excluded / needs user)
-- Physical device connect still manual (no adb)
+- Run Verify script elevated for CreateAdapter
+- `insecure=1` still on relay URIs

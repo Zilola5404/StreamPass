@@ -37,7 +37,7 @@
 | BL-020 | Admin Panel UI | Web UI для операторов вместо X-Admin-Key | P2 | Done | — | 2026-08-04 |
 | BL-021 | Prometheus + Grafana | Мониторинг (ТЗ §18) | P2 | Done | — | 2026-08-04 |
 | BL-022 | Auto Update клиента | OTA обновления APK | P2 | Done | BL-003 | 2026-08-04 |
-| BL-023 | Windows клиент | WFP adapter (ТЗ §3) | P2 | Open | BL-001 | TODO |
+| BL-023 | Windows клиент | Flutter Desktop + Wintun/Smart Routing (TASK-WIN-001 stages 5–12); live Admin residual | P0 | In Progress | BL-001 | 2026-08-15 |
 | BL-024 | iOS клиент | Network Extension (ТЗ §3) | P2 | Open | BL-001 | TODO |
 | BL-025 | macOS клиент | Network Extension (ТЗ §3) | P2 | Open | BL-001 | TODO |
 | BL-026 | Несколько relay регионов | Frankfurt, Amsterdam, Warsaw, Helsinki | P2 | Done | — | 2026-08-04 |
