@@ -67,14 +67,21 @@ class WindowsTrafficEngine implements WindowsVpnAdapter {
       );
       return true;
     } on VpnConnectException catch (e) {
+      var msg = e.message;
+      if (msg.contains('администратора') || msg.toLowerCase().contains('access is denied')) {
+        msg =
+            'Запустите StreamPass от имени администратора (нужно для Wintun). '
+            'Если сайты не открывались после прошлого сеанса — отключите адаптер StreamPass '
+            'или выполните: route delete 0.0.0.0 mask 0.0.0.0 10.10.0.2';
+      }
       _emit(VpnStatusUpdate(
         VpnEvent.error,
         relayName: server.id,
-        errorMessage: e.message,
+        errorMessage: msg,
       ));
       await core.dispose();
       _core = null;
-      rethrow;
+      throw VpnConnectException(msg);
     } catch (e) {
       final msg = e.toString();
       _emit(VpnStatusUpdate(

@@ -6,7 +6,10 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"os/exec"
+	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -51,23 +54,134 @@ func BindInterface(ifIndex int) {
 	Set(interfaceProtector{index: ifIndex})
 }
 
+// IsTunnelInterface reports VPN/TAP/TUN adapters that must never host underlay.
+func IsTunnelInterface(name string) bool {
+	n := strings.ToLower(strings.TrimSpace(name))
+	if n == "" {
+		return false
+	}
+	keys := []string{
+		"streampass",
+		"wintun",
+		"wireguard",
+		"outline",
+		"tap-windows",
+		"tap0901",
+		"tun",
+		"utun",
+		"wsl",
+		"vethernet",
+		"hyper-v",
+		"loopback",
+	}
+	for _, k := range keys {
+		if strings.Contains(n, k) {
+			return true
+		}
+	}
+	return false
+}
+
+// BindPhysicalUnderlay finds a real NIC (never StreamPass/Wintun/TAP) and
+// installs the protector. Must run BEFORE Hysteria handshake and before AutoRoute.
+func BindPhysicalUnderlay() (index int, name string, err error) {
+	index, name, err = PhysicalInterfaceIndex()
+	if err != nil {
+		return 0, "", err
+	}
+	BindInterface(index)
+	return index, name, nil
+}
+
+// ClearStaleTunnelDefaultRoute removes a leftover 0.0.0.0/0 via StreamPass
+// (metric 0) from a previous crash so the OS is not stuck on a dead TUN.
+// Best-effort; may require Administrator.
+func ClearStaleTunnelDefaultRoute() error {
+	// StreamPass gateway is Addr().Next() of 10.10.0.1/30 → 10.10.0.2
+	cmd := exec.Command("route", "delete", "0.0.0.0", "mask", "0.0.0.0", "10.10.0.2")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("route delete: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 // PhysicalInterfaceIndex is the IPv4 NIC used for internet *before* TUN routes.
+// Never returns StreamPass / Wintun / TAP — otherwise underlay loops into TUN.
 func PhysicalInterfaceIndex() (index int, name string, err error) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return 0, "", err
+	}
+
+	type cand struct {
+		idx  int
+		name string
+	}
+	var cands []cand
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		if IsTunnelInterface(iface.Name) {
+			continue
+		}
+		addrs, aerr := iface.Addrs()
+		if aerr != nil {
+			continue
+		}
+		hasV4 := false
+		for _, a := range addrs {
+			ipnet, ok := a.(*net.IPNet)
+			if !ok || ipnet.IP == nil || ipnet.IP.To4() == nil || ipnet.IP.IsLoopback() {
+				continue
+			}
+			// Skip link-local / our TUN subnet leftovers mis-assigned
+			ip4 := ipnet.IP.To4()
+			if ip4[0] == 169 && ip4[1] == 254 {
+				continue
+			}
+			if ip4[0] == 10 && ip4[1] == 10 && ip4[2] == 0 {
+				continue
+			}
+			hasV4 = true
+			break
+		}
+		if hasV4 {
+			cands = append(cands, cand{idx: iface.Index, name: iface.Name})
+		}
+	}
+	if len(cands) == 0 {
+		return 0, "", fmt.Errorf("no physical IPv4 interface (all up ifaces look like TUN/TAP)")
+	}
+
+	// Prefer the interface that owns the UDP dial source — but only if not a tunnel.
+	if idx, name, ok := dialOwnerInterface(ifaces); ok && !IsTunnelInterface(name) {
+		return idx, name, nil
+	}
+
+	// Default route is stuck on StreamPass: probe each physical candidate with IP_UNICAST_IF.
+	for _, c := range cands {
+		if probeDialOnInterface(c.idx) {
+			return c.idx, c.name, nil
+		}
+	}
+	// Last resort: first physical candidate (bind may still help once routes are fixed).
+	return cands[0].idx, cands[0].name, nil
+}
+
+func dialOwnerInterface(ifaces []net.Interface) (int, string, bool) {
 	c, err := net.Dial("udp4", "1.1.1.1:53")
 	if err != nil {
 		c, err = net.Dial("udp4", "8.8.8.8:53")
 		if err != nil {
-			return 0, "", fmt.Errorf("probe default interface: %w", err)
+			return 0, "", false
 		}
 	}
 	defer c.Close()
 	local, ok := c.LocalAddr().(*net.UDPAddr)
 	if !ok || local.IP == nil {
-		return 0, "", fmt.Errorf("probe default interface: no local address")
-	}
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return 0, "", err
+		return 0, "", false
 	}
 	for _, iface := range ifaces {
 		addrs, err := iface.Addrs()
@@ -80,11 +194,32 @@ func PhysicalInterfaceIndex() (index int, name string, err error) {
 				continue
 			}
 			if sameIPv4(ipnet.IP, local.IP) {
-				return iface.Index, iface.Name, nil
+				return iface.Index, iface.Name, true
 			}
 		}
 	}
-	return 0, "", fmt.Errorf("no interface owns %s", local.IP)
+	return 0, "", false
+}
+
+func probeDialOnInterface(ifIndex int) bool {
+	d := net.Dialer{
+		Timeout: 2 * time.Second,
+		Control: func(network, address string, c syscall.RawConn) error {
+			var perr error
+			if err := c.Control(func(fd uintptr) {
+				perr = bind4(syscall.Handle(fd), ifIndex)
+			}); err != nil {
+				return err
+			}
+			return perr
+		},
+	}
+	c, err := d.Dial("udp4", "1.1.1.1:53")
+	if err != nil {
+		return false
+	}
+	_ = c.Close()
+	return true
 }
 
 func sameIPv4(a, b net.IP) bool {

@@ -13,6 +13,7 @@ class WindowsCoreClient {
 
   final _log = ConnectionLog.instance;
   Process? _proc;
+  int? _elevatedPid;
   Socket? _socket;
   String _token = '';
   int _nextId = 1;
@@ -52,13 +53,34 @@ class WindowsCoreClient {
       portFile.deleteSync();
     }
 
-    _log.info('vpn', 'CORE_SPAWN', {'exe': exe});
-    _proc = await Process.start(
-      exe,
-      ['--port-file', portFile.path],
-      mode: ProcessStartMode.detached,
-      workingDirectory: File(exe).parent.path,
+    _log.info('vpn', 'CORE_SPAWN', {'exe': exe, 'elevated': 'try'});
+    // Wintun needs Administrator. Launch via UAC (RunAs); no prompt if already elevated.
+    final workDir = File(exe).parent.path;
+    final ps = StringBuffer()
+      ..writeln('\$ErrorActionPreference = "Stop"')
+      ..writeln(
+        '\$p = Start-Process -FilePath ${_psQuote(exe)} '
+        '-ArgumentList @("--port-file", ${_psQuote(portFile.path)}) '
+        '-WorkingDirectory ${_psQuote(workDir)} -Verb RunAs -PassThru -WindowStyle Hidden',
+      )
+      ..writeln('if (\$null -eq \$p) { throw "UAC cancelled or elevation failed" }')
+      ..writeln('Write-Output \$p.Id');
+    final elev = await Process.run(
+      'powershell',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps.toString()],
     );
+    if (elev.exitCode != 0) {
+      final err = '${elev.stderr}\n${elev.stdout}'.trim();
+      throw VpnConnectException(
+        'Нужны права администратора для Wintun (UAC). '
+        'Подтвердите запрос или запустите StreamPass от администратора.\n$err',
+      );
+    }
+    final pid = int.tryParse(elev.stdout.toString().trim().split('\n').last.trim());
+    if (pid != null && pid > 0) {
+      // Detached elevated process — remember pid for dispose().
+      _elevatedPid = pid;
+    }
 
     final meta = await _waitPortFile(portFile);
     _token = meta['token'] as String? ?? '';
@@ -144,11 +166,16 @@ class WindowsCoreClient {
       _socket?.destroy();
     } catch (_) {}
     _socket = null;
-    final pid = _proc?.pid;
+    final pid = _elevatedPid ?? _proc?.pid;
+    _elevatedPid = null;
     _proc = null;
     if (pid != null && pid > 0) {
       Process.killPid(pid);
     }
+  }
+
+  String _psQuote(String value) {
+    return "'${value.replaceAll("'", "''")}'";
   }
 
   String _coreExecutable() {

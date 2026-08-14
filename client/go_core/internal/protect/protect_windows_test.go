@@ -7,39 +7,50 @@ import (
 	"testing"
 )
 
-func TestPhysicalInterfaceIndex(t *testing.T) {
+func TestIsTunnelInterface(t *testing.T) {
+	cases := map[string]bool{
+		"StreamPass":        true,
+		"Wintun":            true,
+		"outline-tap0":      true,
+		"Ethernet":          false,
+		"Wi-Fi":             false,
+		"Беспроводная сеть": false,
+		"vEthernet (WSL)":   true,
+	}
+	for name, want := range cases {
+		if got := IsTunnelInterface(name); got != want {
+			t.Fatalf("%q: got %v want %v", name, got, want)
+		}
+	}
+}
+
+func TestPhysicalInterfaceIndex_skipsStreamPass(t *testing.T) {
 	idx, name, err := PhysicalInterfaceIndex()
 	if err != nil {
-		t.Skipf("no default IPv4 interface: %v", err)
+		t.Skipf("no physical IF: %v", err)
 	}
-	if idx <= 0 {
-		t.Fatalf("index=%d name=%s", idx, name)
+	if IsTunnelInterface(name) {
+		t.Fatalf("picked tunnel iface index=%d name=%s", idx, name)
 	}
 	t.Logf("physical if index=%d name=%s", idx, name)
 }
 
-func TestBindInterface_udpSocket(t *testing.T) {
-	idx, _, err := PhysicalInterfaceIndex()
+func TestBindPhysicalUnderlay(t *testing.T) {
+	idx, name, err := BindPhysicalUnderlay()
+	t.Cleanup(Clear)
 	if err != nil {
 		t.Skip(err)
 	}
-	t.Cleanup(Clear)
-	BindInterface(idx)
-
+	if IsTunnelInterface(name) {
+		t.Fatalf("underlay on tunnel %s", name)
+	}
 	c, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
 	if err != nil {
-		t.Fatalf("ListenUDP: %v", err)
+		t.Fatal(err)
 	}
 	defer c.Close()
 	if err := Conn(c); err != nil {
 		t.Fatalf("protect Conn: %v", err)
 	}
-}
-
-func TestBindInterface_zeroClears(t *testing.T) {
-	BindInterface(1)
-	BindInterface(0)
-	if err := FD(3); err != nil {
-		t.Fatalf("FD after clear: %v", err)
-	}
+	t.Logf("bound underlay if=%d %s", idx, name)
 }
