@@ -7,29 +7,40 @@ import '../services/streampass_api.dart';
 import '../main.dart' show navigateToLogin;
 import '../theme/app_theme.dart';
 
-/// Region / relay picker (BL-026). Groups healthy relays by region and
-/// persists the user's preferred region + server id.
+/// Region / relay picker (BL-026) or tab list (MainShell).
+enum ServersScreenMode { tab, picker }
+
 class ServersScreen extends StatefulWidget {
   final StreamPassApi api;
   final AuthService? authService;
   final String? selectedServerId;
+  final ServersScreenMode mode;
+  final VoidCallback? onSelectionChanged;
 
   const ServersScreen({
     super.key,
     required this.api,
     this.authService,
     this.selectedServerId,
+    this.mode = ServersScreenMode.picker,
+    this.onSelectionChanged,
   });
 
   @override
   State<ServersScreen> createState() => _ServersScreenState();
 }
 
-class _ServersScreenState extends State<ServersScreen> {
+class _ServersScreenState extends State<ServersScreen>
+    with AutomaticKeepAliveClientMixin {
   final _settings = SettingsService();
   List<RelayServer>? _servers;
   AppSettings _prefs = const AppSettings();
   String? _error;
+
+  bool get _isTab => widget.mode == ServersScreenMode.tab;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -42,10 +53,11 @@ class _ServersScreenState extends State<ServersScreen> {
     try {
       final prefs = await _settings.load();
       final servers = await widget.api.fetchServers();
+      final healthy = servers.where((s) => s.healthy).toList();
       if (!mounted) return;
       setState(() {
         _prefs = prefs;
-        _servers = servers;
+        _servers = healthy;
       });
     } on SessionExpiredException catch (e) {
       if (!mounted) return;
@@ -66,6 +78,12 @@ class _ServersScreenState extends State<ServersScreen> {
     await _settings.setPreferredServerId('');
     await _settings.setAutoSelectRelay(true);
     if (!mounted) return;
+    if (_isTab) {
+      _showSaved('Автовыбор relay включён');
+      widget.onSelectionChanged?.call();
+      setState(() {});
+      return;
+    }
     Navigator.of(context).pop(const RelayPickResult(auto: true));
   }
 
@@ -75,6 +93,12 @@ class _ServersScreenState extends State<ServersScreen> {
     await _settings.setPreferredServerId(server.id);
     await _settings.setAutoSelectRelay(false);
     if (!mounted) return;
+    if (_isTab) {
+      _showSaved('Выбран ${server.id}');
+      widget.onSelectionChanged?.call();
+      setState(() {});
+      return;
+    }
     Navigator.of(context).pop(RelayPickResult(server: server));
   }
 
@@ -83,14 +107,27 @@ class _ServersScreenState extends State<ServersScreen> {
     await _settings.setPreferredServerId('');
     await _settings.setAutoSelectRelay(true);
     if (!mounted) return;
+    if (_isTab) {
+      _showSaved('Регион: ${regionLabel(code)}');
+      widget.onSelectionChanged?.call();
+      setState(() {});
+      return;
+    }
     Navigator.of(context).pop(RelayPickResult(regionCode: code));
+  }
+
+  void _showSaved(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Регионы'),
+        title: Text(_isTab ? 'Серверы' : 'Регионы'),
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
@@ -281,8 +318,8 @@ class _ServerTile extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                server.healthy ? Icons.check_circle_rounded : Icons.error_rounded,
-                color: server.healthy ? AppColors.green : AppColors.danger,
+                Icons.check_circle_rounded,
+                color: AppColors.green,
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -292,9 +329,7 @@ class _ServerTile extends StatelessWidget {
                     Text(server.id, style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 4),
                     Text(
-                      server.healthy
-                          ? 'Доступен · ${server.rttMs} ms'
-                          : 'Недоступен',
+                      'Доступен · ${server.rttMs} ms',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],

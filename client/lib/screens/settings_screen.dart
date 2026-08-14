@@ -250,40 +250,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
           const Divider(height: 32),
-          _SectionLabel('Поддержка'),
-          ListTile(
-            title: const Text('Диагностика'),
-            subtitle: const Text('RTT, потери пакетов, статус relay, версия клиента'),
-            trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const DiagnosticsScreen()),
-            ),
-          ),
-          if (widget.authService != null && widget.api != null) ...[
-            const Divider(height: 32),
-            _SectionLabel('Аккаунт'),
-            ListTile(
-              title: const Text('Профиль'),
-              subtitle: const Text('Email, устройства, смена пароля'),
-              leading: const Icon(Icons.person_outline, color: AppColors.textSecondary),
-              trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ProfileScreen(
-                    authService: widget.authService!,
-                    api: widget.api!,
-                  ),
-                ),
-              ),
-            ),
-            ListTile(
-              title: const Text('Выйти'),
-              subtitle: const Text('Завершить сеанс на этом устройстве'),
-              leading: const Icon(Icons.logout, color: AppColors.textSecondary),
-              onTap: _confirmLogout,
-            ),
-          ],
-          const Divider(height: 32),
           _SectionLabel('Оформление'),
           ListTile(
             title: const Text('Язык'),
@@ -321,6 +287,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
               MaterialPageRoute(builder: (_) => const AboutScreen()),
             ),
           ),
+          const Divider(height: 32),
+          _SectionLabel('Поддержка'),
+          ListTile(
+            title: const Text('Диагностика'),
+            subtitle: const Text('RTT, потери пакетов, статус relay, версия клиента'),
+            trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const DiagnosticsScreen()),
+            ),
+          ),
+          if (widget.authService != null && widget.api != null) ...[
+            const Divider(height: 32),
+            _SectionLabel('Аккаунт'),
+            ListTile(
+              title: const Text('Профиль'),
+              subtitle: const Text('Email, устройства, смена пароля'),
+              leading: const Icon(Icons.person_outline, color: AppColors.textSecondary),
+              trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ProfileScreen(
+                    authService: widget.authService!,
+                    api: widget.api!,
+                  ),
+                ),
+              ),
+            ),
+            ListTile(
+              title: const Text('Выйти'),
+              subtitle: const Text('Завершить сеанс на этом устройстве'),
+              leading: const Icon(Icons.logout, color: AppColors.textSecondary),
+              onTap: _confirmLogout,
+            ),
+          ],
         ],
       ),
     );

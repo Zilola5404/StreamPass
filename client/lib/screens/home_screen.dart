@@ -26,20 +26,25 @@ import '../widgets/connect_orb.dart';
 import 'settings_screen.dart';
 import 'subscription_screen.dart';
 import 'servers_screen.dart';
-import 'statistics_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class HomeScreen extends StatefulWidget {
   final StreamPassApi api;
   final AuthService authService;
+  final void Function(int tabIndex)? onNavigateTab;
 
-  const HomeScreen({super.key, required this.api, required this.authService});
+  const HomeScreen({
+    super.key,
+    required this.api,
+    required this.authService,
+    this.onNavigateTab,
+  });
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() => HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMixin {
   ConnState _state = ConnState.disconnected;
   RelayServer? _selectedRelay;
   int? _pingMs;
@@ -60,6 +65,15 @@ class _HomeScreenState extends State<HomeScreen> {
   final _sessionStats = SessionStatsService();
   bool _failoverInFlight = false;
   DiagUploader? _diagUploader;
+  Timer? _statsFlushTimer;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  /// Called when returning to the home tab (relay card refresh).
+  Future<void> refreshRelayDisplay() async {
+    await _loadStartupData(allowAutoConnect: false);
+  }
 
   @override
   void initState() {
@@ -258,6 +272,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openServersPicker() async {
+    if (widget.onNavigateTab != null) {
+      widget.onNavigateTab!(2);
+      return;
+    }
     final wasConnected = _state == ConnState.connected;
     final result = await Navigator.of(context).push<RelayPickResult>(
       MaterialPageRoute(
@@ -339,6 +357,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _diagUploader?.stop();
     _durationTimer?.cancel();
+    _statsFlushTimer?.cancel();
     _healthTimer?.cancel();
     _ruleEngine.stop();
     _sub?.cancel();
@@ -354,7 +373,28 @@ class _HomeScreenState extends State<HomeScreen> {
         _durationLabel = formatConnectionDuration(DateTime.now().difference(since));
       });
     });
+    _startStatsFlushTimer();
     _startHealthPoll();
+  }
+
+  void _startStatsFlushTimer() {
+    _statsFlushTimer?.cancel();
+    _statsFlushTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _flushPartialOnlineStats();
+    });
+  }
+
+  void _flushPartialOnlineStats() {
+    final since = _connectedSince;
+    if (since == null || _state != ConnState.connected) return;
+    final sec = DateTime.now().difference(since).inSeconds;
+    if (sec <= 0) return;
+    unawaited(_sessionStats.addOnlineSeconds(sec));
+    _connectedSince = DateTime.now();
+    final ping = _pingMs;
+    if (ping != null && ping > 0) {
+      unawaited(_sessionStats.recordRtt(ping));
+    }
   }
 
   void _stopDurationTimer() {
@@ -369,6 +409,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _durationTimer = null;
     _connectedSince = null;
     _durationLabel = 'Smart routing';
+    _statsFlushTimer?.cancel();
+    _statsFlushTimer = null;
     _stopHealthPoll();
   }
 
@@ -650,6 +692,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final statusText = switch (_state) {
       ConnState.connected => 'Подключено',
       ConnState.connecting => 'Подключение...',
@@ -665,14 +708,20 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               children: [
                 _TopBar(
-                  onSettings: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => SettingsScreen(
-                        api: widget.api,
-                        authService: widget.authService,
-                      ),
-                    ),
-                  ),
+                  onSettings: () {
+                    if (widget.onNavigateTab != null) {
+                      widget.onNavigateTab!(3);
+                    } else {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => SettingsScreen(
+                            api: widget.api,
+                            authService: widget.authService,
+                          ),
+                        ),
+                      );
+                    }
+                  },
                   onSubscription: _openSubscriptionScreen,
                   subscriptionActive: _subscription?.isActive ?? false,
                 ),
@@ -731,20 +780,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ),
-                _BottomNav(
-                  onTapStatistics: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const StatisticsScreen()),
-                  ),
-                  onTapServers: _openServersPicker,
-                  onTapSettings: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => SettingsScreen(
-                        api: widget.api,
-                        authService: widget.authService,
-                      ),
-                    ),
-                  ),
-                ), 
               ],
             ),
           ),
@@ -1024,74 +1059,6 @@ class _RouteCard extends StatelessWidget {
             activeColor: AppColors.green,
             onChanged: onAutoModeChanged,
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BottomNav extends StatelessWidget {
-  final VoidCallback onTapStatistics;
-  final VoidCallback onTapServers;
-  final VoidCallback onTapSettings;
-
-  const _BottomNav({
-    required this.onTapStatistics,
-    required this.onTapServers,
-    required this.onTapSettings,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final items = [
-      (Icons.home_rounded, 'Главная', true, null),
-      (Icons.bar_chart_rounded, 'Статистика', false, onTapStatistics),
-      (Icons.public_rounded, 'Серверы', false, onTapServers),
-      (Icons.settings_rounded, 'Настройки', false, onTapSettings),
-    ];
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(18, 0, 18, 14),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.surface.withOpacity(0.82),
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          for (final item in items)
-            Expanded(
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: item.$4,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        item.$1,
-                        color: item.$3 ? AppColors.cyan : AppColors.textSecondary,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        item.$2,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: item.$3
-                                  ? AppColors.cyan
-                                  : AppColors.textSecondary,
-                              fontSize: 11,
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
         ],
       ),
     );

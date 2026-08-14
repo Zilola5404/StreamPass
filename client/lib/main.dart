@@ -6,7 +6,7 @@ import 'services/settings_service.dart';
 import 'services/streampass_api.dart';
 import 'services/vpn_channel.dart';
 import 'screens/onboarding_screen.dart';
-import 'screens/home_screen.dart';
+import 'screens/main_shell.dart';
 
 const _apiBaseUrl = String.fromEnvironment(
   'STREAMPASS_API_URL',
@@ -87,7 +87,7 @@ class _StreamPassAppState extends State<StreamPassApp> {
             );
           }
           return snapshot.data!
-              ? HomeScreen(api: widget.api, authService: widget.authService)
+              ? MainShell(api: widget.api, authService: widget.authService)
               : OnboardingScreen(authService: widget.authService, api: widget.api);
         },
       ),

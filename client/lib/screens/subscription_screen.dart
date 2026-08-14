@@ -9,6 +9,12 @@ class SubscriptionScreen extends StatefulWidget {
   final StreamPassApi api;
   const SubscriptionScreen({super.key, required this.api});
 
+  static const fallbackStarsPlans = [
+    PlanInfo(code: 'month', title: '1 месяц', amountRub: 499, periodDays: 30, currency: 'XTR'),
+    PlanInfo(code: 'quarter', title: '3 месяца', amountRub: 1299, periodDays: 90, currency: 'XTR'),
+    PlanInfo(code: 'year', title: '12 месяцев', amountRub: 3999, periodDays: 365, currency: 'XTR'),
+  ];
+
   @override
   State<SubscriptionScreen> createState() => _SubscriptionScreenState();
 }
@@ -59,6 +65,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
       try {
         plans = await widget.api.fetchPlans();
       } catch (_) {}
+      if (plans.isEmpty) {
+        plans = SubscriptionScreen.fallbackStarsPlans;
+      }
       try {
         payments = await widget.api.fetchPayments();
       } catch (_) {}
@@ -170,6 +179,16 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
     }
   }
 
+  String _paymentAmountLabel(PaymentRecord p) {
+    if (p.amountRub == 499 || p.amountRub == 1299 || p.amountRub == 3999) {
+      return '${p.amountRub} ⭐';
+    }
+    if (_plans.isNotEmpty && _plans.first.currency == 'XTR') {
+      return '${p.amountRub} ⭐';
+    }
+    return '${p.amountRub} ₽';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -190,89 +209,91 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
                     const SizedBox(height: 16),
                     Text(_error!, style: const TextStyle(color: AppColors.danger)),
                   ],
-                  if (_info?.isActive != true) ...[
-                    const SizedBox(height: 24),
-                    Text('Тариф', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 12),
-                    if (_plans.isEmpty)
-                      const Text(
-                        'Тарифы временно недоступны',
-                        style: TextStyle(color: AppColors.textSecondary),
-                      )
-                    else
-                      ..._plans.map((p) {
-                        final selected = p.code == _selectedPlan;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Material(
-                            color: selected
-                                ? AppColors.cyan.withOpacity(0.12)
-                                : AppColors.surface,
+                  const SizedBox(height: 24),
+                  Text(
+                    _info?.isActive == true ? 'Продлить подписку' : 'Тариф',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  if (_plans.isEmpty)
+                    const Text(
+                      'Тарифы временно недоступны',
+                      style: TextStyle(color: AppColors.textSecondary),
+                    )
+                  else
+                    ..._plans.map((p) {
+                      final selected = p.code == _selectedPlan;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Material(
+                          color: selected
+                              ? AppColors.cyan.withOpacity(0.12)
+                              : AppColors.surface,
+                          borderRadius: BorderRadius.circular(14),
+                          child: InkWell(
                             borderRadius: BorderRadius.circular(14),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(14),
-                              onTap: () => setState(() => _selectedPlan = p.code),
-                              child: Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: selected
-                                        ? AppColors.cyan
-                                        : Colors.white.withOpacity(0.08),
+                            onTap: () => setState(() => _selectedPlan = p.code),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: selected
+                                      ? AppColors.cyan
+                                      : Colors.white.withOpacity(0.08),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          p.title,
+                                          style: Theme.of(context).textTheme.titleMedium,
+                                        ),
+                                        Text(
+                                          '${p.periodDays} дн.',
+                                          style: Theme.of(context).textTheme.bodyMedium,
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            p.title,
-                                            style: Theme.of(context).textTheme.titleMedium,
-                                          ),
-                                          Text(
-                                            '${p.periodDays} дн.',
-                                            style: Theme.of(context).textTheme.bodyMedium,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Text(
-                                      p.priceLabel,
-                                      style: Theme.of(context).textTheme.titleMedium,
-                                    ),
-                                  ],
-                                ),
+                                  Text(
+                                    p.priceLabel,
+                                    style: Theme.of(context).textTheme.titleMedium,
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                        );
-                      }),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _payLoading ? null : _pay,
-                        child: _payLoading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.bg,
-                                ),
-                              )
-                            : const Text('Оплатить через Telegram'),
-                      ),
+                        ),
+                      );
+                    }),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _payLoading ? null : _pay,
+                      child: _payLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.bg,
+                              ),
+                            )
+                          : const Text('Оплатить через Telegram'),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Счёт откроется в Telegram (Stars). Альтернатива: USDT на сайте оплаты.',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ] else ...[
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Счёт откроется в Telegram (Stars).',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  if (_info?.isActive == true) ...[
                     const SizedBox(height: 24),
                     SizedBox(
                       width: double.infinity,
@@ -286,7 +307,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
                             borderRadius: BorderRadius.circular(18),
                           ),
                         ),
-                        child: const Text('Отменить подписку'),
+                        child: const Text('Отменить автопродление'),
                       ),
                     ),
                   ],
@@ -300,9 +321,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
                     )
                   else
                     ..._payments.map((p) {
+                      final label = _paymentAmountLabel(p);
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: Text('${p.amountRub} ₽ · ${_statusLabel(p.status)}'),
+                        title: Text('$label · ${_statusLabel(p.status)}'),
                         subtitle: Text(
                           p.createdAt != null ? _fmtDate(p.createdAt!) : p.id,
                           style: const TextStyle(color: AppColors.textSecondary),
