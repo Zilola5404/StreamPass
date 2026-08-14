@@ -6,6 +6,7 @@ import '../services/settings_service.dart';
 import '../services/streampass_api.dart';
 import '../main.dart' show navigateToLogin;
 import '../theme/app_theme.dart';
+import '../widgets/tab_page.dart';
 
 /// Region / relay picker (BL-026) or tab list (MainShell).
 enum ServersScreenMode { tab, picker }
@@ -125,13 +126,7 @@ class _ServersScreenState extends State<ServersScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_isTab ? 'Серверы' : 'Регионы'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
-      body: RefreshIndicator(
+    final body = RefreshIndicator(
         onRefresh: _load,
         child: _error != null
             ? ListView(
@@ -145,7 +140,23 @@ class _ServersScreenState extends State<ServersScreen>
             : _servers == null
                 ? const Center(child: CircularProgressIndicator())
                 : _buildList(),
+      );
+
+    if (_isTab) {
+      return TabPage(title: 'Серверы', body: body);
+    }
+
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      appBar: AppBar(
+        title: const Text('Регионы'),
+        backgroundColor: AppColors.bg,
+        foregroundColor: AppColors.textPrimary,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
       ),
+      body: body,
     );
   }
 

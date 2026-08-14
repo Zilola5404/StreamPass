@@ -192,10 +192,14 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.bg,
       appBar: AppBar(
         title: const Text('Подписка'),
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.bg,
+        foregroundColor: AppColors.textPrimary,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

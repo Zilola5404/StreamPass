@@ -12,6 +12,7 @@ import 'app_bypass_screen.dart';
 import 'diagnostics_screen.dart';
 import 'profile_screen.dart';
 import 'about_screen.dart';
+import '../widgets/tab_page.dart';
 
 class SettingsScreen extends StatefulWidget {
   final StreamPassApi? api;
@@ -151,17 +152,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
+      return const TabPage(
+        title: 'Настройки',
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Настройки'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
+    return TabPage(
+      title: 'Настройки',
       body: ListView(
         children: [
           _SectionLabel('Подключение'),

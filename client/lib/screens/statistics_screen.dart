@@ -6,6 +6,7 @@ import '../services/connection_duration.dart';
 import '../services/session_stats.dart';
 import '../services/vpn_channel.dart';
 import '../theme/app_theme.dart';
+import '../widgets/tab_page.dart';
 
 /// Client-local connection statistics (BL-044). No URLs or browsing history.
 class StatisticsScreen extends StatefulWidget {
@@ -109,19 +110,15 @@ class StatisticsScreenState extends State<StatisticsScreen>
   Widget build(BuildContext context) {
     super.build(context);
     final stats = _stats;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Статистика'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        actions: [
-          IconButton(
-            tooltip: 'Обновить',
-            onPressed: _loading ? null : () => _refresh(),
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
+    return TabPage(
+      title: 'Статистика',
+      actions: [
+        IconButton(
+          tooltip: 'Обновить',
+          onPressed: _loading ? null : () => _refresh(),
+          icon: const Icon(Icons.refresh_rounded, color: AppColors.textPrimary),
+        ),
+      ],
       body: _loading && stats == null
           ? const Center(child: CircularProgressIndicator())
           : ListView(

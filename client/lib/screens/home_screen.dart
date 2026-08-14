@@ -700,11 +700,10 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
       ConnState.error => _errorMessage ?? 'Ошибка',
     };
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          const _AmbientBackground(),
-          SafeArea(
+    return Stack(
+      children: [
+        const _AmbientBackground(),
+        SafeArea(
             child: Column(
               children: [
                 _TopBar(
@@ -782,9 +781,8 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
                 ),
               ],
             ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../services/streampass_api.dart';
+import '../theme/app_theme.dart';
 import '../widgets/app_bottom_nav.dart';
 import 'home_screen.dart';
 import 'servers_screen.dart';
@@ -25,33 +26,16 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _index = 0;
-  late final PageController _pageController;
   final _homeKey = GlobalKey<HomeScreenState>();
   final _statsKey = GlobalKey<StatisticsScreenState>();
 
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController(initialPage: 0);
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
   void _goToTab(int index) {
     if (index == _index) return;
-    _pageController.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutCubic,
-    );
+    setState(() => _index = index);
+    _afterTab(index);
   }
 
-  void _onPageChanged(int index) {
-    setState(() => _index = index);
+  void _afterTab(int index) {
     if (index == 0) {
       _homeKey.currentState?.refreshRelayDisplay();
     } else if (index == 1) {
@@ -62,10 +46,10 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: PageView(
-        controller: _pageController,
-        onPageChanged: _onPageChanged,
-        physics: const BouncingScrollPhysics(),
+      backgroundColor: AppColors.bg,
+      body: IndexedStack(
+        index: _index,
+        sizing: StackFit.expand,
         children: [
           HomeScreen(
             key: _homeKey,
@@ -89,14 +73,7 @@ class _MainShellState extends State<MainShell> {
       ),
       bottomNavigationBar: AppBottomNav(
         currentIndex: _index,
-        onTap: (i) {
-          if (i == _index) return;
-          _pageController.animateToPage(
-            i,
-            duration: const Duration(milliseconds: 280),
-            curve: Curves.easeOutCubic,
-          );
-        },
+        onTap: _goToTab,
       ),
     );
   }
