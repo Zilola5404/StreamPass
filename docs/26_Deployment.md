@@ -174,6 +174,44 @@ Deploy to VPS remains manual (`docker compose up -d --build`).
 
 ---
 
+## Windows Client Build (Engineering Validation)
+
+> AUDIT-WIN-001: automated checks ≠ browser E2E. Run both scripts on a physical Windows 10/11 PC **as Administrator**.
+
+### Prerequisites
+
+- Flutter SDK + Visual Studio Build Tools (Desktop development)
+- Go 1.22+
+- Administrator (Wintun CreateAdapter)
+
+### Build sidecar + Flutter Windows
+
+```powershell
+cd client\windows\native
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build_core.ps1
+
+cd ..\..
+flutter build windows --release
+# Artifacts: client\build\windows\x64\runner\Release\streampass.exe + streampasscore.exe + wintun.dll
+```
+
+### Verification (layered — do not merge into single PASS)
+
+```powershell
+# Unit / IPC / optional live TUN (Admin)
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\VerifyWindowsTUN.ps1
+
+# E2E checklist + log capture template (manual browser steps required)
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\VerifyWindowsE2E.ps1 -ReportPath reports\QA\win-e2e-latest.md
+```
+
+### Relay TLS for production
+
+- Register relays with `RELAY_PIN_SHA256=<64hex>` — see `scripts/register-region-relays.sh`
+- Dev only: `RELAY_TLS=insecure_dev` or sidecar `STREAMPASS_ALLOW_INSECURE=1`
+
+---
+
 ## Not Implemented
 
 - Kubernetes deployment

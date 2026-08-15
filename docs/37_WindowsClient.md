@@ -22,17 +22,20 @@
 
 ## Remaining before production ship
 
-- Live Admin run of VerifyWindowsTUN.ps1 (CreateAdapter) on target PC
-- Replace `insecure=1` with TLS pin/cert on relay URIs
+- Physical Windows E2E per `reports/Audit/AUDIT-WIN-001-Windows-Client.md` §12 (`scripts/VerifyWindowsE2E.ps1`)
+- Live Admin run of `VerifyWindowsTUN.ps1` (CreateAdapter) on target PC
+- Relay URIs: **`pinSHA256` required** — `insecure=1` blocked unless `STREAMPASS_ALLOW_INSECURE=1` (dev)
 - Windows installer / OTA (not in MVP scope — no APK path)
 
 ## Architecture locks
 
 ```text
-Unknown → DIRECT rules for *.ru; DefaultMode=RELAY for foreign
+Unknown → DIRECT rules for *.ru; DefaultMode=RELAY for foreign (ADR-018)
 DIRECT works if Relay is down
-Hysteria underlay → physical NIC (never TUN)
-insecure=1 forbidden for Windows production (WARN logged)
+Hysteria underlay → OS default-route NIC (never TUN/Wintun)
+insecure=1 forbidden in production (hard fail; dev: STREAMPASS_ALLOW_INSECURE=1)
+Session-owned route cleanup (not only fixed 10.10.0.2)
 No Cloudflare CIDR → RELAY
 IPv6 MVP: Variant B
+Platform: Wintun sidecar (ADR-019); WFP deferred (ADR-020)
 ```

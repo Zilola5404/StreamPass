@@ -361,7 +361,7 @@ URL: `/admin/` · Auth: `X-Admin-Key`
 | Платформа | Сетевой слой | UI-сценарий |
 |-----------|--------------|-------------|
 | Android 10+ | VpnService | Реализован (MVP) |
-| Windows 10/11 | WFP | Тот же Home/Connect/Servers/Settings (**open**) |
+| Windows 10/11 | Wintun sidecar | Тот же Home/Connect/Servers/Settings (**engineering validation**, AUDIT-WIN-001) |
 | macOS 13+ | Network Extension | То же (**open**) |
 | iOS 17+ | Packet Tunnel | То же + App Store / VPN profile UX (**open**) |
 

@@ -26,7 +26,7 @@
 | Возможность | Статус |
 |-------------|--------|
 | Ускоритель (Hysteria2 + TUN + protect) | ✅ |
-| Decision Engine + Rule polling (`DefaultMode=DIRECT`, routing-policy-v1) | ✅ |
+| Decision Engine + Rule polling (`DefaultMode=RELAY` per ADR-018 / `07.4`, routing-policy-v1) | ✅ |
 | DNS-in-TUN `10.10.0.1` + HostForIP + Google/Meta CIDR safety net | ✅ |
 | IPv6 bypass (`allowFamily(AF_INET6)` — VPN IPv4-only) | ✅ +35 |
 | `[vpn] traffic_ready` after first user-plane byte | ✅ +35 |

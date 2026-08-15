@@ -56,7 +56,7 @@
 
 | Platform | Adapter | Priority | Status |
 |----------|---------|----------|--------|
-| Windows 10/11 | WFP | P1 | Open BL-023 |
+| Windows 10/11 | Wintun sidecar (ADR-019) | P1 | BL-023 in progress |
 | iOS 17+ | Network Extension | P1 | Open BL-024 |
 | macOS 13+ | Network Extension | P2 | Open BL-025 |
 

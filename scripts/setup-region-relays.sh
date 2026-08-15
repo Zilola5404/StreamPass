@@ -87,7 +87,8 @@ EOF
   systemctl --no-pager --full status "$unit" | head -n 8 || true
   ss -ulnp | grep ":${port}" || echo "WARN: port ${port} not listening"
 
-  echo "URI ${code}: hysteria2://${AUTH_PASSWORD}@${HOST_IP}:${port}/?obfs=salamander&obfs-password=${OBFS_PASSWORD}&insecure=1#${city}"
+  echo "URI ${code}: hysteria2://${AUTH_PASSWORD}@${HOST_IP}:${port}/?obfs=salamander&obfs-password=${OBFS_PASSWORD}&pinSHA256=\${RELAY_PIN_SHA256}&sni=${HOST_IP}#${city}"
+  echo "  (dev only: add &insecure=1 — production: use pinSHA256, see docs/RelayServers.md)"
 done
 
 echo "Done. Register with: ADMIN_API_KEY=... bash scripts/register-region-relays.sh"

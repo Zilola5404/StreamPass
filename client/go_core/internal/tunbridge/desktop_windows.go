@@ -95,12 +95,17 @@ func StartDesktop(ctx context.Context, hyClient client.Client, mtu uint32, engin
 			logLine("[vpn] TUN_CREATED name=" + windowsAdapterName + " addr=" + TunIPv4Host() + "/30")
 		},
 		AfterRoute: func() {
-			logLine("[vpn] ROUTES_APPLIED ipv4=0.0.0.0/0 via=" + windowsAdapterName)
+			gw := TunIPv4Prefix().Addr().Next().String()
+			protect.RegisterTunnelSessionGateway(gw)
+			logLine("[vpn] ROUTES_APPLIED ipv4=0.0.0.0/0 via=" + windowsAdapterName + " gateway=" + gw)
 			logLine("[vpn] DNS_READY server=" + TunDNS().String())
 		},
 		AfterStop: func() {
 			_ = ifMon.Close()
 			_ = netMon.Close()
+			if err := protect.ClearSessionTunnelRoutes(); err != nil {
+				logLine("[vpn] session route cleanup: " + err.Error())
+			}
 			protect.Clear()
 			logLine("[vpn] TUN_STOPPED")
 		},

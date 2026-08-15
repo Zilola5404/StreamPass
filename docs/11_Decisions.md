@@ -232,6 +232,18 @@
 
 ---
 
+## ADR-020: Windows MVP = Wintun (WFP отложен)
+
+| | |
+|---|---|
+| **Дата** | 2026-08-15 |
+| **Проблема** | AUDIT-WIN-001: ТЗ §2 описывает WFP, фактическая реализация — Wintun sidecar (ADR-019) |
+| **Решение** | **Вариант A:** утвердить Wintun для Windows MVP / Engineering Validation. WFP — post-MVP, если потребуется per-app interception без full-tunnel |
+| **Причина** | Wintun уже интегрирован с общим Go Core; WFP — отдельный адаптер на месяцы; product split работает через TUN + Decision |
+| **Последствия** | Обновлены TZ/Roadmap/Architecture; QA требует physical Windows E2E (AUDIT-WIN-001 §12) |
+
+---
+
 ## Шаблон для новых ADR
 
 ```

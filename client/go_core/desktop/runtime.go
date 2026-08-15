@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 
@@ -38,7 +39,11 @@ func (r *runtime) start(req Request, emit func(Event)) error {
 	emit(Event{Type: "log", Message: fmt.Sprintf("[vpn] STAGE mtu=%d networkMode=%s", req.MTU, req.NetworkMode)})
 
 	if req.ConnectionConfig != "" && strings.Contains(req.ConnectionConfig, "insecure=1") {
-		emit(Event{Type: "log", Message: "[vpn] WARN insecure=1 in connection_config — forbidden for Windows production (TLS pin required before ship)"})
+		allowInsecure := os.Getenv("STREAMPASS_ALLOW_INSECURE") == "1" || req.NetworkMode == "direct_test"
+		if !allowInsecure {
+			return fmt.Errorf("insecure=1 forbidden in production: use pinSHA256 in connection_config (dev: STREAMPASS_ALLOW_INSECURE=1)")
+		}
+		emit(Event{Type: "log", Message: "[vpn] WARN insecure=1 allowed (dev only — set pinSHA256 before production ship)"})
 	}
 
 	// Leftover StreamPass 0.0.0.0/0 from a crash blackholes everything — clear first.
@@ -81,7 +86,7 @@ func (r *runtime) start(req Request, emit func(Event)) error {
 		mtu = uint32(req.MTU)
 	}
 
-	engine, err := decision.NewAtomicEngineFromJSON(req.RulesJSON, req.ExclusionsJSON)
+	engine, err := decision.NewAtomicEngineFromJSON(req.RulesJSON, req.ExclusionsJSON, req.RelayHost, relayLabel)
 	if err != nil {
 		if hyClient != nil {
 			_ = hyClient.Close()
@@ -152,6 +157,10 @@ func (r *runtime) stop() {
 	}
 	if bridge != nil {
 		bridge.Close()
+	}
+	if err := protect.ClearSessionTunnelRoutes(); err != nil {
+		// best-effort; logged by sidecar caller if needed
+		_ = err
 	}
 	if hy != nil {
 		_ = hy.Close()

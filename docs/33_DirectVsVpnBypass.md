@@ -13,7 +13,7 @@
 | Банки/Госуслуги проверяют VPN-профиль ОС | ✅ Согласен | Нужен `addDisallowedApplication` |
 | Cloudflare DoH для всех доменов ломает RU geo-DNS | ✅ Согласен | Исправлено: split DNS |
 | `FLAG_SYSTEM` пропускал предустановленные банки | ✅ Согласен | Исправлено |
-| Domain rules не матчят IP-only потоки в TUN | ✅ Согласен | DefaultMode=DIRECT + RU `excludeRoute` |
+| Domain rules не матчят IP-only потоки в TUN | ✅ Согласен | DefaultMode=RELAY + DNS PinDirectIP для RU; CIDR safety net для Meta/Google |
 | Kind=APP на backend как обязательный MVP-фикс | ⚠️ Не согласен как блокер | ТЗ §6: Domain/CIDR/User Rules. Список пакетов надёжнее собирать на устройстве; Kind=APP — опционально позже |
 | «Убрать полный VPN» без VpnService | ❌ Нереалистично на Android | Ускоритель foreign-трафика всё равно требует `VpnService`; RU выводится split-tunnel + app-bypass |
 
@@ -40,7 +40,7 @@
 ## Что исправлено в `0.1.1+34` (TASK-02 / QA)
 
 - VPN DNS в TUN: `10.10.0.1` (не внешний Yandex как VPN DNS) → queries через Go `dnscache` → `HostForIP` для IP-only flows
-- `DefaultMode=DIRECT`; Google/Meta CDN CIDR — IP-only RELAY safety net (без Cloudflare `/12`)
+- `DefaultMode=RELAY` (ADR-018); RU/`*.ru`/2ip — DIRECT via PinDirectIP + split-tunnel; Google/Meta CDN CIDR — IP-only RELAY safety net (без Cloudflare `/12`)
 - Политика: `docs/07.4_RoutingPolicy.md`; Known Issues: `docs/18_KnownIssues.md`
 - APK/OTA: `StreamPass-v0.1.1+34-signed-arm64.apk`
 

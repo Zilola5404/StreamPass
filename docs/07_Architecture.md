@@ -253,7 +253,7 @@ Client → GET /api/v1/subscription → active_until
 
 Остаётся вне текущего MVP-закрытия:
 
-- Platform Adapters: WFP (Windows), Network Extension (macOS/iOS) — BL-023…025
+- Platform Adapters: **Wintun sidecar** (Windows, ADR-019), Network Extension (macOS/iOS) — BL-023…025. WFP из исходного ТЗ отложен (ADR-020).
 - TCP underlay fallback Done (BL-017): framed TCP→UDP on VPS + client candidates
 - Off-site backup copy Done (BL-035): encrypt → second host + PC pull
 - ЮKassa live payment verification (BL-004 Skipped; BL-030 Blocked)

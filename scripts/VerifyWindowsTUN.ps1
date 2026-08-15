@@ -96,7 +96,18 @@ Remove-Item $portFile -Force -ErrorAction SilentlyContinue
 if ($resp -notmatch '"ok"\s*:\s*true') { Fail ("IPC ping: {0}" -f $resp) }
 Ok 'IPC ping'
 
-$lines.Add('## Automated')
+$lines.Add('## Test levels (AUDIT-WIN-001 section 10 — do not merge)')
+$lines.Add('')
+$lines.Add('| Level | Result |')
+$lines.Add('|-------|--------|')
+$lines.Add('| Unit PASS (decision/tunbridge/protect) | PASS |')
+$lines.Add('| Integration PASS (IPC ping) | PASS |')
+$lines.Add('| Build PASS (streampasscore + wintun.dll) | PASS |')
+$lines.Add('| Live Device (Wintun Admin) | see Live Wintun section |')
+$lines.Add('| Browser E2E | NOT RUN — use scripts/VerifyWindowsE2E.ps1 |')
+$lines.Add('| Relay E2E | NOT RUN — manual + relay-down scenario |')
+$lines.Add('')
+$lines.Add('## Automated details')
 $lines.Add('- Stage 5/8/11 Decision matrix: PASS')
 $lines.Add('- Stage 6 ConnectionController traffic_ready: PASS')
 $lines.Add('- Stage 7 DNS 198.18.0.1 + TunDNS: PASS')

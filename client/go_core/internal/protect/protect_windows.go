@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
-	"os/exec"
 	"strings"
 	"syscall"
 	"time"
@@ -93,22 +92,20 @@ func BindPhysicalUnderlay() (index int, name string, err error) {
 	return index, name, nil
 }
 
-// ClearStaleTunnelDefaultRoute removes a leftover 0.0.0.0/0 via StreamPass
-// (metric 0) from a previous crash so the OS is not stuck on a dead TUN.
-// Best-effort; may require Administrator.
+// ClearStaleTunnelDefaultRoute removes leftover 0.0.0.0/0 via StreamPass from a
+// previous crash so the OS is not stuck on a dead TUN. See route_windows.go.
 func ClearStaleTunnelDefaultRoute() error {
-	// StreamPass gateway is Addr().Next() of 10.10.0.1/30 → 10.10.0.2
-	cmd := exec.Command("route", "delete", "0.0.0.0", "mask", "0.0.0.0", "10.10.0.2")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("route delete: %w (%s)", err, strings.TrimSpace(string(out)))
-	}
-	return nil
+	return clearStaleTunnelDefaultRouteImpl()
 }
 
 // PhysicalInterfaceIndex is the IPv4 NIC used for internet *before* TUN routes.
 // Never returns StreamPass / Wintun / TAP — otherwise underlay loops into TUN.
 func PhysicalInterfaceIndex() (index int, name string, err error) {
+	// Prefer the OS default-route interface (audit P1), then dial-owner, then probe.
+	if idx, n, ok := defaultRouteInterfaceIndex(); ok {
+		return idx, n, nil
+	}
+
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return 0, "", err
