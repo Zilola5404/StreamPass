@@ -3,6 +3,7 @@
 package protect
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -95,7 +97,9 @@ func deleteDefaultRouteViaGateway(gateway string) error {
 var staleGatewayRE = regexp.MustCompile(`^\s*0\.0\.0\.0\s+0\.0\.0\.0\s+(10\.10\.0\.\d+)\s+`)
 
 func findStaleStreamPassGateways() []string {
-	out, err := exec.Command("route", "print", "-4").CombinedOutput()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "route", "print", "-4").CombinedOutput()
 	if err != nil {
 		return []string{"10.10.0.2"}
 	}
@@ -121,7 +125,9 @@ func findStaleStreamPassGateways() []string {
 
 // defaultRouteInterfaceIndex returns the Windows default-route NIC before TUN.
 func defaultRouteInterfaceIndex() (index int, name string, ok bool) {
-	out, err := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command",
 		`$r = Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Sort-Object RouteMetric | Select-Object -First 1; if (-not $r) { exit 1 }; $alias = (Get-NetIPInterface -InterfaceIndex $r.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).InterfaceAlias; Write-Output ("{0}|{1}" -f $r.InterfaceIndex, $alias)`,
 	).CombinedOutput()
 	if err != nil {

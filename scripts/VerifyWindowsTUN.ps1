@@ -96,7 +96,7 @@ Remove-Item $portFile -Force -ErrorAction SilentlyContinue
 if ($resp -notmatch '"ok"\s*:\s*true') { Fail ("IPC ping: {0}" -f $resp) }
 Ok 'IPC ping'
 
-$lines.Add('## Test levels (AUDIT-WIN-001 section 10 — do not merge)')
+$lines.Add('## Test levels (AUDIT-WIN-001 section 10 - do not merge)')
 $lines.Add('')
 $lines.Add('| Level | Result |')
 $lines.Add('|-------|--------|')
@@ -104,8 +104,8 @@ $lines.Add('| Unit PASS (decision/tunbridge/protect) | PASS |')
 $lines.Add('| Integration PASS (IPC ping) | PASS |')
 $lines.Add('| Build PASS (streampasscore + wintun.dll) | PASS |')
 $lines.Add('| Live Device (Wintun Admin) | see Live Wintun section |')
-$lines.Add('| Browser E2E | NOT RUN — use scripts/VerifyWindowsE2E.ps1 |')
-$lines.Add('| Relay E2E | NOT RUN — manual + relay-down scenario |')
+$lines.Add('| Browser E2E | NOT RUN - use scripts/VerifyWindowsE2E.ps1 |')
+$lines.Add('| Relay E2E | NOT RUN - manual + relay-down scenario |')
 $lines.Add('')
 $lines.Add('## Automated details')
 $lines.Add('- Stage 5/8/11 Decision matrix: PASS')
@@ -143,7 +143,7 @@ if ($IsAdmin) {
     token            = $meta2.token
     networkMode      = 'direct_test'
     mtu              = 1400
-    rulesJson        = '[]'
+    rulesJson        = '{"version":1,"rules":[]}'
     exclusionsJson   = '[]'
     connectionConfig = ''
     relayHost        = ''
@@ -151,31 +151,46 @@ if ($IsAdmin) {
   } | ConvertTo-Json -Compress
   $b = [Text.Encoding]::UTF8.GetBytes($start + "`n")
   $s2.Write($b, 0, $b.Length)
-  $reader = New-Object System.IO.StreamReader($s2)
+  $reader = New-Object System.IO.StreamReader($s2, [Text.Encoding]::UTF8)
   $gotTun = $false
   $gotErr = $null
-  $until = (Get-Date).AddSeconds(25)
+  $gotOk = $false
+  $until = (Get-Date).AddSeconds(60)
   while ((Get-Date) -lt $until) {
-    if ($s2.DataAvailable) {
-      $line = $reader.ReadLine()
-      if ($null -eq $line) { break }
+    $line = $null
+    try {
+      if ($reader.Peek() -ge 0) {
+        $line = $reader.ReadLine()
+      }
+    } catch {}
+    if ($line) {
       Write-Host ("  core: {0}" -f $line)
-      if ($line -match 'TUN_CREATED|ROUTES_APPLIED') { $gotTun = $true }
-      if ($line -match '"event"\s*:\s*"error"' -or $line -match '"ok"\s*:\s*false') {
+      if ($line -match 'TUN_CREATED|ROUTES_APPLIED|traffic_ready') { $gotTun = $true }
+      if ($line -match '"event"\s*:\s*"error"' -or ($line -match '"ok"\s*:\s*false' -and $line -match '"id"\s*:\s*2')) {
         try {
           $j = $line | ConvertFrom-Json
           if ($j.error) { $gotErr = [string]$j.error }
         } catch {}
+        if ($line -match '"error"\s*:') { $gotErr = $line }
       }
-      if ($line -match '"ok"\s*:\s*true' -and $line -match '"id"\s*:\s*2') { break }
-      if ($line -match '"ok"\s*:\s*false' -and $line -match '"id"\s*:\s*2') { break }
+      if ($line -match '"ok"\s*:\s*true' -and $line -match '"id"\s*:\s*2') {
+        $gotOk = $true
+        if ($line -match 'TUN_CREATED|ROUTES_APPLIED|"event"\s*:\s*"connected"') { $gotTun = $true }
+        break
+      }
     } else {
-      Start-Sleep -Milliseconds 100
+      if ($gotOk) { break }
+      Start-Sleep -Milliseconds 50
     }
   }
   $stop = (@{ id = 3; cmd = 'stop'; token = $meta2.token } | ConvertTo-Json -Compress) + "`n"
   $sb = [Text.Encoding]::UTF8.GetBytes($stop)
   try { $s2.Write($sb, 0, $sb.Length) } catch {}
+  Start-Sleep -Seconds 2
+  while ($reader.Peek() -ge 0) {
+    $extra = $reader.ReadLine()
+    if ($extra) { Write-Host ("  core: {0}" -f $extra) }
+  }
   $c2.Close()
   Stop-Process -Id $p2.Id -Force -ErrorAction SilentlyContinue
   Remove-Item $portFile2 -Force -ErrorAction SilentlyContinue

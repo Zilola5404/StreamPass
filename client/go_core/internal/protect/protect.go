@@ -27,6 +27,7 @@ func Set(p Protector) {
 
 // Clear removes the active protector.
 func Clear() {
+	resetUnderlaySession()
 	Set(nil)
 }
 

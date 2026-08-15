@@ -93,13 +93,16 @@ func serve(conn net.Conn, token string, rt *runtime) {
 		authed = true
 		switch req.Cmd {
 		case "start":
-			err := rt.start(req, emit)
-			if err != nil {
-				emit(Event{Type: "status", Event: "error", Error: err.Error()})
-				emitReply(conn, &writeMu, Reply{ID: req.ID, Type: "reply", Error: err.Error()})
-			} else {
-				emitReply(conn, &writeMu, Reply{ID: req.ID, Type: "reply", OK: true})
-			}
+			reqCopy := req
+			go func() {
+				err := rt.start(reqCopy, emit)
+				if err != nil {
+					emit(Event{Type: "status", Event: "error", Error: err.Error()})
+					emitReply(conn, &writeMu, Reply{ID: reqCopy.ID, Type: "reply", Error: err.Error()})
+				} else {
+					emitReply(conn, &writeMu, Reply{ID: reqCopy.ID, Type: "reply", OK: true})
+				}
+			}()
 		case "stop":
 			rt.stop()
 			emit(Event{Type: "status", Event: "disconnected"})

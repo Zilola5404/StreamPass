@@ -10,7 +10,6 @@ import (
 
 	"github.com/apernet/hysteria/core/v2/client"
 	tun "github.com/sagernet/sing-tun"
-	"github.com/sagernet/sing/common/control"
 	"github.com/sagernet/sing/common/logger"
 
 	"streampass/go_core/internal/decision"
@@ -44,39 +43,22 @@ func StartDesktop(ctx context.Context, hyClient client.Client, mtu uint32, engin
 		engine = decision.NewAtomicEngine(decision.NewEngine(nil, nil, decision.DefaultMode), 0)
 	}
 
-	ifIdx, ifName, err := protect.BindPhysicalUnderlay()
-	if err != nil {
-		return nil, fmt.Errorf("physical interface: %w", err)
-	}
-	if protect.IsTunnelInterface(ifName) {
-		protect.Clear()
-		return nil, fmt.Errorf("refusing underlay on tunnel iface %s", ifName)
-	}
-	logLine(fmt.Sprintf("[vpn] UNDERLAY_IF index=%d name=%s", ifIdx, ifName))
-
-	finder := control.NewDefaultInterfaceFinder()
-	netMon, err := tun.NewNetworkUpdateMonitor(wintunLogger{})
-	if err != nil {
-		protect.Clear()
-		return nil, fmt.Errorf("network monitor: %w", err)
-	}
-	ifMon, err := tun.NewDefaultInterfaceMonitor(netMon, wintunLogger{}, tun.DefaultInterfaceMonitorOptions{
-		InterfaceFinder: finder,
-	})
-	if err != nil {
-		protect.Clear()
-		return nil, fmt.Errorf("interface monitor: %w", err)
-	}
-	if err := netMon.Start(); err != nil {
-		protect.Clear()
-		return nil, fmt.Errorf("network monitor start: %w", err)
-	}
-	if err := ifMon.Start(); err != nil {
-		_ = netMon.Close()
-		protect.Clear()
-		return nil, fmt.Errorf("interface monitor start: %w", err)
+	if !protect.HasUnderlay() {
+		ifIdx, ifName, err := protect.BindPhysicalUnderlay()
+		if err != nil {
+			return nil, fmt.Errorf("physical interface: %w", err)
+		}
+		if protect.IsTunnelInterface(ifName) {
+			protect.Clear()
+			return nil, fmt.Errorf("refusing underlay on tunnel iface %s", ifName)
+		}
+		logLine(fmt.Sprintf("[vpn] UNDERLAY_IF index=%d name=%q", ifIdx, ifName))
+	} else {
+		logLine("[vpn] UNDERLAY_REUSE session bind (skip second Get-NetRoute probe)")
 	}
 
+	// Do not attach sing-tun InterfaceMonitor on Windows desktop: Start() can
+	// block forever waiting for a network-update event (VerifyWindowsTUN live hang).
 	tunOptions := tun.Options{
 		Name:                 windowsAdapterName,
 		MTU:                  mtu,
@@ -84,12 +66,11 @@ func StartDesktop(ctx context.Context, hyClient client.Client, mtu uint32, engin
 		StrictRoute:          false,
 		Inet4Address:         []netip.Prefix{TunIPv4Prefix()},
 		DNSServers:           []netip.Addr{TunDNS()},
-		InterfaceMonitor:     ifMon,
-		InterfaceFinder:      finder,
 		Logger:               wintunLogger{},
 		EXP_DisableDNSHijack: false,
 	}
 
+	logLine("[vpn] WINTUN_CREATE begin")
 	sess, err := startStack(ctx, tunOptions, hyClient, engine, relayID, opts, stackHooks{
 		AfterCreate: func() {
 			logLine("[vpn] TUN_CREATED name=" + windowsAdapterName + " addr=" + TunIPv4Host() + "/30")
@@ -101,8 +82,6 @@ func StartDesktop(ctx context.Context, hyClient client.Client, mtu uint32, engin
 			logLine("[vpn] DNS_READY server=" + TunDNS().String())
 		},
 		AfterStop: func() {
-			_ = ifMon.Close()
-			_ = netMon.Close()
 			if err := protect.ClearSessionTunnelRoutes(); err != nil {
 				logLine("[vpn] session route cleanup: " + err.Error())
 			}
@@ -111,8 +90,6 @@ func StartDesktop(ctx context.Context, hyClient client.Client, mtu uint32, engin
 		},
 	})
 	if err != nil {
-		_ = ifMon.Close()
-		_ = netMon.Close()
 		protect.Clear()
 		return nil, wrapWintunErr(err)
 	}

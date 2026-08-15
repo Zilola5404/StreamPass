@@ -43,7 +43,7 @@ func (r *runtime) start(req Request, emit func(Event)) error {
 		if !allowInsecure {
 			return fmt.Errorf("insecure=1 forbidden in production: use pinSHA256 in connection_config (dev: STREAMPASS_ALLOW_INSECURE=1)")
 		}
-		emit(Event{Type: "log", Message: "[vpn] WARN insecure=1 allowed (dev only — set pinSHA256 before production ship)"})
+		emit(Event{Type: "log", Message: "[vpn] WARN insecure=1 allowed (dev only - set pinSHA256 before production ship)"})
 	}
 
 	// Leftover StreamPass 0.0.0.0/0 from a crash blackholes everything — clear first.
@@ -58,7 +58,7 @@ func (r *runtime) start(req Request, emit func(Event)) error {
 	if err != nil {
 		return fmt.Errorf("underlay interface: %w", err)
 	}
-	emit(Event{Type: "log", Message: fmt.Sprintf("[vpn] UNDERLAY_IF index=%d name=%s (before relay)", ifIdx, ifName)})
+	emit(Event{Type: "log", Message: fmt.Sprintf("[vpn] UNDERLAY_IF index=%d name=%q (before relay)", ifIdx, ifName)})
 
 	var hyClient client.Client
 	var pingMs int
@@ -68,7 +68,7 @@ func (r *runtime) start(req Request, emit func(Event)) error {
 		emit(Event{Type: "log", Message: fmt.Sprintf("[vpn] RELAY_CONNECTING host=%s port=%d", req.RelayHost, req.RelayPort)})
 		result, err := hyconfig.ConnectWithFallback(req.ConnectionConfig, req.RelayHost, req.RelayPort)
 		if err != nil {
-			emit(Event{Type: "log", Message: fmt.Sprintf("[vpn] RELAY_CONNECT failed: %v — continuing DIRECT-only", err)})
+			emit(Event{Type: "log", Message: fmt.Sprintf("[vpn] RELAY_CONNECT failed: %v - continuing DIRECT-only", err)})
 		} else {
 			hyClient = result.Client
 			pingMs = result.PingMs

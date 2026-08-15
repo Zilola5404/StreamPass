@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -15,6 +16,13 @@ import (
 const (
 	ipUnicastIF   = 31
 	ipv6UnicastIF = 31
+)
+
+var (
+	underlayMu     sync.Mutex
+	underlayCached bool
+	underlayIdx    int
+	underlayName   string
 )
 
 type interfaceProtector struct {
@@ -83,13 +91,43 @@ func IsTunnelInterface(name string) bool {
 
 // BindPhysicalUnderlay finds a real NIC (never StreamPass/Wintun/TAP) and
 // installs the protector. Must run BEFORE Hysteria handshake and before AutoRoute.
+// Result is cached for the session (StartDesktop must not re-probe — PowerShell
+// Get-NetRoute can hang on repeated calls).
 func BindPhysicalUnderlay() (index int, name string, err error) {
+	underlayMu.Lock()
+	if underlayCached {
+		idx, n := underlayIdx, underlayName
+		underlayMu.Unlock()
+		BindInterface(idx)
+		return idx, n, nil
+	}
+	underlayMu.Unlock()
+
 	index, name, err = PhysicalInterfaceIndex()
 	if err != nil {
 		return 0, "", err
 	}
 	BindInterface(index)
+	underlayMu.Lock()
+	underlayIdx, underlayName = index, name
+	underlayCached = true
+	underlayMu.Unlock()
 	return index, name, nil
+}
+
+// HasUnderlay reports whether BindPhysicalUnderlay succeeded this session.
+func HasUnderlay() bool {
+	underlayMu.Lock()
+	defer underlayMu.Unlock()
+	return underlayCached
+}
+
+func resetUnderlaySession() {
+	underlayMu.Lock()
+	underlayCached = false
+	underlayIdx = 0
+	underlayName = ""
+	underlayMu.Unlock()
 }
 
 // ClearStaleTunnelDefaultRoute removes leftover 0.0.0.0/0 via StreamPass from a
