@@ -271,6 +271,26 @@ func (h *routingHandler) targetFrom(destination M.Socksaddr) decision.Target {
 
 // decideDest evaluates routing with DNS pins and anycast-safe host sets.
 func (h *routingHandler) decideDest(destination M.Socksaddr) decision.Decision {
+	t := h.targetFrom(destination)
+	host := strings.ToLower(strings.TrimSuffix(t.Host, "."))
+	destIP := ""
+	if destination.Addr.IsValid() {
+		destIP = destination.Addr.String()
+	}
+	if isControlPlaneDest(host, destIP, h.relayID) {
+		rule := "relay_endpoint"
+		reason := controlPlaneReason(host, destIP, h.relayID)
+		if reason == "private_network_bypass" {
+			rule = "private_network"
+		}
+		return decision.Decision{
+			Mode:   decision.ModeDirect,
+			Rule:   rule,
+			Source: "system",
+			Reason: reason,
+		}
+	}
+
 	if destination.Addr.IsValid() {
 		ipStr := destination.Addr.String()
 		if dh := dnscache.DirectHostNearIP(ipStr); dh != "" {
@@ -289,7 +309,6 @@ func (h *routingHandler) decideDest(destination M.Socksaddr) decision.Decision {
 			}
 		}
 	}
-	t := h.targetFrom(destination)
 	dec := h.engine.DecideDetailed(t)
 	if dec.Mode == decision.ModeRelay || dec.Mode == decision.ModeFallback {
 		return dec
@@ -372,6 +391,11 @@ func (h *routingHandler) NewConnectionEx(
 	logLine(fmt.Sprintf("[decision] host=%s ip=%s rule=%s action=%s reason=%s", host, destIP, dec.Rule, mode, dec.Reason))
 	switch mode {
 	case decision.ModeDirect:
+		// System bypass (relay endpoint / private): DIRECT only — never hairpin via RELAY.
+		if dec.Source == "system" {
+			h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, true, false)
+			return
+		}
 		// Product safety net (audit traffic-path-p0): DIRECT dial/data fail → one
 		// marked RELAY retry. Skipped under diagnostic forceMode (direct_test).
 		if !h.pipeTCP(ctx, conn, destination, host, destIP, destPort, dec, true, false) {
@@ -431,16 +455,16 @@ func (h *routingHandler) pipeTCP(
 		remote, err = dialer.DialContext(ctx, "tcp", destination.String())
 		if err != nil {
 			logLine(fmt.Sprintf("[tun] direct-tcp fail dest=%s err=%v", destination.String(), err))
-			emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), err.Error(), 0)
-			emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, dec.Reason, dnscache.LastResolveMS(host), time.Since(start), 0, 0, err.Error())
+			emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "stream_failed", h.relayID, false, time.Since(start), err.Error(), 0, 0, 0)
+			emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, dec.Reason, dnscache.LastResolveMS(host), time.Since(start), 0, 0, 0, 0, err.Error())
 			return false
 		}
 	} else {
 		if h.client == nil {
 			err := fmt.Errorf("hysteria client not ready")
 			logLine(fmt.Sprintf("[tun] relay-tcp fail dest=%s err=%v", destination.String(), err))
-			emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), err.Error(), 0)
-			emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, dec.Reason, dnscache.LastResolveMS(host), time.Since(start), 0, 0, err.Error())
+			emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "stream_failed", h.relayID, false, time.Since(start), err.Error(), 0, 0, 0)
+			emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, dec.Reason, dnscache.LastResolveMS(host), time.Since(start), 0, 0, 0, 0, err.Error())
 			return false
 		}
 		dialTo := relayDialAddr(destination, host, destPort)
@@ -450,16 +474,18 @@ func (h *routingHandler) pipeTCP(
 		remote, err = h.client.TCP(dialTo)
 		if err != nil {
 			logLine(fmt.Sprintf("[tun] relay-tcp fail dest=%s dial=%s err=%v", destination.String(), dialTo, err))
-			emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), err.Error(), 0)
-			emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, dec.Reason, dnscache.LastResolveMS(host), time.Since(start), 0, 0, err.Error())
+			emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "stream_failed", h.relayID, false, time.Since(start), err.Error(), 0, 0, 0)
+			emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, dec.Reason, dnscache.LastResolveMS(host), time.Since(start), 0, 0, 0, 0, err.Error())
 			return false
 		}
 	}
 	dialDur := time.Since(start)
-	emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, true, dialDur, "", 0)
+	// Dial success ≠ traffic success. STREAM_OPENED only.
+	emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "stream_opened", h.relayID, true, dialDur, "", 0, 0, 0)
 
-	var bytes atomic.Int64
+	var bytesTx, bytesRx atomic.Int64
 	var firstByte atomic.Int64 // nanoseconds; 0 = none yet
+	var firstByteLogged atomic.Bool
 	xferStart := time.Now()
 	counted := &countingConn{
 		Conn: remote,
@@ -467,15 +493,22 @@ func (h *routingHandler) pipeTCP(
 			if n <= 0 {
 				return
 			}
-			bytes.Add(int64(n))
-			if fromRemote && firstByte.Load() == 0 {
-				firstByte.Store(time.Since(xferStart).Nanoseconds())
-				markTrafficReady(modeLabel)
+			if fromRemote {
+				bytesRx.Add(int64(n))
+				if firstByte.Load() == 0 {
+					firstByte.Store(time.Since(xferStart).Nanoseconds())
+					markTrafficReady(modeLabel)
+					if firstByteLogged.CompareAndSwap(false, true) {
+						emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "first_byte", h.relayID, true, time.Since(xferStart), "", 0, bytesTx.Load(), bytesRx.Load())
+					}
+				}
+			} else {
+				bytesTx.Add(int64(n))
 			}
 		},
 	}
 
-	// Always watch the blind spot: dial ok but no bytes either way (audit Этап 0).
+	// Blind spot: dial ok but incomplete exchange for several seconds (P0).
 	xferCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	go func() {
@@ -506,21 +539,24 @@ loop:
 				_ = remote.Close()
 				<-done
 				failed = true
-				logLine(fmt.Sprintf("[tun] relay blackhole (no first_byte in 3s) dest=%s", destination.String()))
-				emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "relay_blackhole", h.relayID, false, 3*time.Second, "relay_blackhole", 0)
-				emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, "relay_blackhole", dnscache.LastResolveMS(host), dialDur, 0, 0, "relay_blackhole")
+				tx, rx := bytesTx.Load(), bytesRx.Load()
+				logLine(fmt.Sprintf("[tun] relay blackhole (no first_byte in 3s) dest=%s bytes_tx=%d bytes_rx=%d", destination.String(), tx, rx))
+				emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "relay_blackhole", h.relayID, false, 3*time.Second, "relay_blackhole", 0, tx, rx)
+				emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, "relay_blackhole", dnscache.LastResolveMS(host), dialDur, 0, 0, tx, rx, "relay_blackhole")
 				break loop
 			}
 		case <-noDataC:
 			noDataC = nil
-			if bytes.Load() == 0 {
+			tx, rx := bytesTx.Load(), bytesRx.Load()
+			// P0: stream lives ≥4s without both directions → STREAM_OPEN_NO_DATA.
+			if tx == 0 || rx == 0 {
 				cancel()
 				_ = remote.Close()
 				<-done
 				failed = true
-				logLine(fmt.Sprintf("[tun] stream_open_no_data (4s) dest=%s mode=%s", destination.String(), modeLabel))
-				emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "stream_open_no_data", h.relayID, false, 4*time.Second, "stream_open_no_data", 0)
-				emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, "stream_open_no_data", dnscache.LastResolveMS(host), dialDur, 0, 0, "stream_open_no_data")
+				logLine(fmt.Sprintf("[tun] stream_open_no_data (4s) dest=%s mode=%s bytes_tx=%d bytes_rx=%d", destination.String(), modeLabel, tx, rx))
+				emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "stream_open_no_data", h.relayID, false, 4*time.Second, "stream_open_no_data", 0, tx, rx)
+				emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, "stream_open_no_data", dnscache.LastResolveMS(host), dialDur, time.Duration(firstByte.Load()), 0, tx, rx, "stream_open_no_data")
 				break loop
 			}
 		case <-ctx.Done():
@@ -536,15 +572,22 @@ loop:
 	}
 
 	xferDur := time.Since(xferStart)
-	total := bytes.Load()
+	tx, rx := bytesTx.Load(), bytesRx.Load()
+	total := tx + rx
 	fb := time.Duration(firstByte.Load())
 	kbps := 0
-	if total >= 32*1024 && xferDur > 500*time.Millisecond {
+	if total > 0 && xferDur > 0 {
 		kbps = int(float64(total*8/1024) / xferDur.Seconds())
-		emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "transfer_done", h.relayID, true, xferDur, "", kbps)
 	}
 	dnsMS := dnscache.LastResolveMS(host)
-	emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, dec.Reason, dnsMS, dialDur, fb, kbps, "")
+	if tx > 0 && rx > 0 {
+		emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "transfer_done", h.relayID, true, xferDur, "", kbps, tx, rx)
+		emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, "transfer_done", dnsMS, dialDur, fb, kbps, tx, rx, "")
+		return true
+	}
+	// Short close without bidirectional bytes — not a hard fail, not a traffic proof.
+	emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "stream_closed_partial", h.relayID, true, xferDur, "", kbps, tx, rx)
+	emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, "stream_closed_partial", dnsMS, dialDur, fb, kbps, tx, rx, "")
 	return true
 }
 
@@ -604,7 +647,7 @@ func (h *routingHandler) NewPacketConnectionEx(
 	if h.blockUDP443 && destination.Port == 443 {
 		host, destIP, destPort := splitDest(destination)
 		logLine(fmt.Sprintf("[vpn] drop udp/443 host=%s ip=%s (tcp_only)", host, destIP))
-		emitDiag("udp", host, destIP, destPort, "DROP", "udp443", "udp443_blocked", h.relayID, false, 0, "udp443_blocked", 0)
+		emitDiag("udp", host, destIP, destPort, "DROP", "udp443", "udp443_blocked", h.relayID, false, 0, "udp443_blocked", 0, 0, 0)
 		return
 	}
 
@@ -618,6 +661,10 @@ func (h *routingHandler) NewPacketConnectionEx(
 
 	switch mode {
 	case decision.ModeDirect:
+		if dec.Source == "system" {
+			h.relayUDP(ctx, conn, destination, true, host, destIP, destPort, dec)
+			return
+		}
 		if !h.relayUDP(ctx, conn, destination, true, host, destIP, destPort, dec) {
 			if h.engine != nil && h.engine.ForceMode() == "" {
 				dec.Reason = "direct_failed_retry_relay"
@@ -742,36 +789,36 @@ func (h *routingHandler) relayUDP(
 		lc.Control = protect.Control
 		packetConn, err := lc.ListenPacket(ctx, "udp", "")
 		if err != nil {
-			emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), err.Error(), 0)
+			emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, "stream_failed", h.relayID, false, time.Since(start), err.Error(), 0, 0, 0)
 			return false
 		}
 		defer packetConn.Close()
 		udpRemote, ok := packetConn.(*net.UDPConn)
 		if !ok {
-			emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), "not_udp", 0)
+			emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, "stream_failed", h.relayID, false, time.Since(start), "not_udp", 0, 0, 0)
 			return false
 		}
 		raddr, err := net.ResolveUDPAddr("udp", destAddr)
 		if err != nil {
-			emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), err.Error(), 0)
+			emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, "stream_failed", h.relayID, false, time.Since(start), err.Error(), 0, 0, 0)
 			return false
 		}
-		emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, true, time.Since(start), "", 0)
+		emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, "stream_opened", h.relayID, true, time.Since(start), "", 0, 0, 0)
 		h.copyUDPToAddr(ctx, conn, udpRemote, destination, raddr)
 		return true
 	}
 
 	if h.client == nil {
-		emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), "hysteria client not ready", 0)
+		emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, "stream_failed", h.relayID, false, time.Since(start), "hysteria client not ready", 0, 0, 0)
 		return false
 	}
 	hyUDP, err := h.client.UDP()
 	if err != nil {
-		emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, false, time.Since(start), err.Error(), 0)
+		emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, "stream_failed", h.relayID, false, time.Since(start), err.Error(), 0, 0, 0)
 		return false
 	}
 	defer hyUDP.Close()
-	emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, dec.Reason, h.relayID, true, time.Since(start), "", 0)
+	emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, "stream_opened", h.relayID, true, time.Since(start), "", 0, 0, 0)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -1009,34 +1056,56 @@ const (
 	slowDialThreshold = 1500 * time.Millisecond
 )
 
-func emitDiag(proto, host, destIP string, destPort int, mode, rule, decisionReason, relayID string, ok bool, d time.Duration, errMsg string, speedKbps int) {
+func emitDiag(proto, host, destIP string, destPort int, mode, rule, decisionReason, relayID string, ok bool, d time.Duration, errMsg string, speedKbps int, bytesTx, bytesRx int64) {
 	if host == "" && destIP != "" {
 		host = dnscache.HostForIP(destIP)
 	}
 	site := siteLabel(host, destIP)
 	via := strings.ToUpper(mode)
-	result := "ok"
+	result := "stream_opened"
 	reason := decisionReason
 	if reason == "" {
-		reason = reasonOK(via)
+		reason = "stream_opened"
 	}
 	slow := 0
-	if speedKbps > 0 && decisionReason == "transfer_done" {
-		result = "xfer"
-		reason = "transfer_done"
-	} else if !ok {
+	switch {
+	case !ok || errMsg != "":
 		result, reason = classifyFail(via, errMsg)
-	} else if d >= slowDialThreshold {
+		if decisionReason == "stream_open_no_data" {
+			result = "stream_open_no_data"
+			reason = "stream_open_no_data"
+		} else if decisionReason == "relay_blackhole" {
+			result = "stream_failed"
+			reason = "relay_blackhole"
+		} else if decisionReason == "stream_failed" || result == "ok" {
+			result = "stream_failed"
+		}
+	case decisionReason == "transfer_done":
+		result = "transfer_done"
+		reason = "transfer_done"
+	case decisionReason == "first_byte":
+		result = "first_byte"
+		reason = "first_byte"
+	case decisionReason == "stream_closed_partial":
+		result = "stream_closed_partial"
+		reason = "stream_closed_partial"
+	case decisionReason == "stream_opened":
+		result = "stream_opened"
+		reason = "stream_opened"
+	case d >= slowDialThreshold:
 		result = "slow"
 		slow = 1
-		if reason == "" || strings.HasPrefix(reason, "ok_") || strings.HasPrefix(reason, "rule_") ||
-			strings.HasPrefix(reason, "russian_") || strings.HasPrefix(reason, "global_") ||
-			strings.HasPrefix(reason, "international_") || strings.HasPrefix(reason, "default_") ||
-			strings.HasPrefix(reason, "user_") || strings.HasPrefix(reason, "critical_") {
-			reason = "slow_dial_" + strings.ToLower(via)
+		reason = "slow_dial_" + strings.ToLower(via)
+	default:
+		// Never emit result=ok — dial/open is stream_opened at most.
+		result = "stream_opened"
+		if decisionReason != "" {
+			reason = decisionReason
 		}
-	} else if speedKbps == 0 {
-		key := proto + "|" + via + "|" + host + "|" + destIP + "|" + fmt.Sprintf("%d", destPort) + "|" + rule
+	}
+	// Throttle noisy stream_opened / first_byte lines (same key within 30s).
+	if result == "stream_opened" || result == "first_byte" {
+		key := proto + "|" + via + "|" + host + "|" + destIP + "|" + fmt.Sprintf("%d", destPort) + "|" + rule + "|" + result
 		if prev, loaded := okDiagThrottle.Load(key); loaded {
 			if t, okT := prev.(time.Time); okT && time.Since(t) < okDiagMinInterval {
 				return
@@ -1053,24 +1122,41 @@ func emitDiag(proto, host, destIP string, destPort int, mode, rule, decisionReas
 	}
 	reason = sanitizeErr(reason)
 	logLine(fmt.Sprintf(
-		"[diag] proto=%s site=%s host=%s dest_ip=%s dest_port=%d mode=%s via=%s rule=%s decision=%s relay_id=%s result=%s latency_ms=%d slow=%d speed_kbps=%d reason=%s error=%s",
-		proto, site, host, destIP, destPort, via, via, rule, decisionReason, relayID, result, d.Milliseconds(), slow, speedKbps, reason, errCode,
+		"[diag] proto=%s site=%s host=%s dest_ip=%s dest_port=%d mode=%s via=%s rule=%s decision=%s relay_id=%s result=%s latency_ms=%d slow=%d speed_kbps=%d bytes_tx=%d bytes_rx=%d reason=%s error=%s",
+		proto, site, host, destIP, destPort, via, via, rule, decisionReason, relayID, result, d.Milliseconds(), slow, speedKbps, bytesTx, bytesRx, reason, errCode,
 	))
 	logLine(fmt.Sprintf(
-		"[route] %s ip=%s:%d via=%s rule=%s → %s (%dms, %dkbps) %s",
-		siteOrDash(site), destIP, destPort, via, rule, result, d.Milliseconds(), speedKbps, reason,
+		"[route] %s ip=%s:%d via=%s rule=%s → %s (%dms, %dkbps, tx=%d rx=%d) %s",
+		siteOrDash(site), destIP, destPort, via, rule, result, d.Milliseconds(), speedKbps, bytesTx, bytesRx, reason,
 	))
 }
 
 // emitConnLog writes the human-readable connection sample requested for network diagnostics.
-func emitConnLog(host, destIP, protocol string, port int, route, rule, reason string, dnsMS int64, connect, firstByte time.Duration, speedKbps int, errMsg string) {
-	result := "success"
-	if errMsg != "" {
-		result = "fail"
+// result=success only when both bytes_tx and bytes_rx are > 0 (real transfer proof).
+func emitConnLog(host, destIP, protocol string, port int, route, rule, reason string, dnsMS int64, connect, firstByte time.Duration, speedKbps int, bytesTx, bytesRx int64, errMsg string) {
+	result := "stream_opened"
+	switch {
+	case errMsg != "" || reason == "stream_open_no_data" || reason == "relay_blackhole":
+		if reason == "stream_open_no_data" {
+			result = "stream_open_no_data"
+		} else if errMsg != "" {
+			result = "fail"
+		} else {
+			result = "stream_failed"
+		}
+	case bytesTx > 0 && bytesRx > 0:
+		result = "transfer_done"
+		if reason == "" || reason == "stream_opened" {
+			reason = "transfer_done"
+		}
+	case reason == "stream_closed_partial":
+		result = "stream_closed_partial"
+	case firstByte > 0:
+		result = "first_byte"
 	}
 	logLine(fmt.Sprintf(
-		"[conn] app=- host=%s ip=%s protocol=%s port=%d route=%s rule=%s reason=%s dns=%dms connect=%dms tls=- first_byte=%dms speed=%dkbps result=%s error=%s",
-		host, destIP, protocol, port, route, rule, reason, dnsMS, connect.Milliseconds(), firstByte.Milliseconds(), speedKbps, result, sanitizeErr(errMsg),
+		"[conn] app=- host=%s ip=%s protocol=%s port=%d route=%s rule=%s reason=%s dns=%dms connect=%dms tls=- first_byte=%dms speed=%dkbps bytes_tx=%d bytes_rx=%d result=%s error=%s",
+		host, destIP, protocol, port, route, rule, reason, dnsMS, connect.Milliseconds(), firstByte.Milliseconds(), speedKbps, bytesTx, bytesRx, result, sanitizeErr(errMsg),
 	))
 }
 

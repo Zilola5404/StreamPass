@@ -13,6 +13,7 @@ class WindowsCoreClient {
 
   final _log = ConnectionLog.instance;
   Process? _proc;
+  int? _elevatedPid;
   Socket? _socket;
   String _token = '';
   int _nextId = 1;
@@ -21,13 +22,20 @@ class WindowsCoreClient {
   StreamSubscription<List<int>>? _sub;
   bool _closed = false;
 
-  bool get isAttached => _socket != null;
+  bool get isAttached => _socket != null && !_closed;
 
   Future<void> ensureStarted({
     required void Function(VpnStatusUpdate update) onStatus,
     required void Function(String line) onLog,
   }) async {
-    if (_socket != null) return;
+    if (isAttached) return;
+    // Stale handle after process death — drop before respawn.
+    if (_socket != null) {
+      try {
+        _socket!.destroy();
+      } catch (_) {}
+      _socket = null;
+    }
     _closed = false;
     _lineBuf.clear();
 
@@ -52,13 +60,40 @@ class WindowsCoreClient {
       portFile.deleteSync();
     }
 
-    _log.info('vpn', 'CORE_SPAWN', {'exe': exe});
-    _proc = await Process.start(
-      exe,
-      ['--port-file', portFile.path],
-      mode: ProcessStartMode.detached,
-      workingDirectory: File(exe).parent.path,
+    // Wintun CreateAdapter needs Administrator. Always spawn via UAC RunAs
+    // (no prompt if the parent is already elevated).
+    final workDir = File(exe).parent.path;
+    _log.info('vpn', 'CORE_SPAWN', {'exe': exe, 'elevated': 'RunAs'});
+    final ps = StringBuffer()
+      ..writeln('\$ErrorActionPreference = "Stop"')
+      ..writeln(
+        '\$p = Start-Process -FilePath ${_psQuote(exe)} '
+        '-ArgumentList @("--port-file", ${_psQuote(portFile.path)}) '
+        '-WorkingDirectory ${_psQuote(workDir)} '
+        '-Verb RunAs -PassThru -WindowStyle Hidden',
+      )
+      ..writeln(
+        'if (\$null -eq \$p) { throw "UAC cancelled or elevation failed" }',
+      )
+      ..writeln('Write-Output \$p.Id');
+    final elev = await Process.run(
+      'powershell',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps.toString()],
     );
+    if (elev.exitCode != 0) {
+      final err = '${elev.stderr}\n${elev.stdout}'.trim();
+      throw VpnConnectException(
+        'Нужны права администратора для Wintun (UAC). '
+        'Подтвердите запрос или запустите StreamPass от администратора.'
+        '${err.isEmpty ? '' : '\n$err'}',
+      );
+    }
+    final pid = int.tryParse(
+      elev.stdout.toString().trim().split(RegExp(r'\r?\n')).last.trim(),
+    );
+    if (pid != null && pid > 0) {
+      _elevatedPid = pid;
+    }
 
     final meta = await _waitPortFile(portFile);
     _token = meta['token'] as String? ?? '';
@@ -72,9 +107,25 @@ class WindowsCoreClient {
     _sub = _socket!.listen(
       (data) => _onBytes(data, onStatus, onLog),
       onDone: () {
+        _sub = null;
+        _socket = null;
+        for (final c in _pending.values) {
+          if (!c.isCompleted) {
+            c.completeError(StateError('core socket closed'));
+          }
+        }
+        _pending.clear();
         onStatus(VpnStatusUpdate(VpnEvent.disconnected));
       },
       onError: (Object e) {
+        _sub = null;
+        _socket = null;
+        for (final c in _pending.values) {
+          if (!c.isCompleted) {
+            c.completeError(e);
+          }
+        }
+        _pending.clear();
         onStatus(VpnStatusUpdate(
           VpnEvent.error,
           errorMessage: e.toString(),
@@ -91,21 +142,30 @@ class WindowsCoreClient {
     required int mtu,
     required bool blockUdp443,
   }) async {
-    final reply = await _rpc({
-      'cmd': 'start',
-      'relayHost': server.host,
-      'relayPort': server.port,
-      'connectionConfig': server.connectionConfig,
-      'rulesJson': rulesJson,
-      'exclusionsJson': exclusionsJson,
-      'networkMode': networkMode,
-      'mtu': mtu,
-      'blockUdp443': blockUdp443,
-    });
-    if (reply['ok'] != true) {
-      throw VpnConnectException(
-        reply['error'] as String? ?? 'Не удалось поднять Windows TUN',
-      );
+    try {
+      final reply = await _rpc({
+        'cmd': 'start',
+        'relayHost': server.host,
+        'relayPort': server.port,
+        'connectionConfig': server.connectionConfig,
+        'rulesJson': rulesJson,
+        'exclusionsJson': exclusionsJson,
+        'networkMode': networkMode,
+        'mtu': mtu,
+        'blockUdp443': blockUdp443,
+      });
+      if (reply['ok'] != true) {
+        throw VpnConnectException(
+          reply['error'] as String? ?? 'Не удалось поднять Windows TUN',
+        );
+      }
+    } on VpnConnectException catch (e) {
+      // Half-open / hung start: drop core so the next Connect respawns cleanly.
+      if (e.message.contains('TimeoutException') ||
+          e.message.contains('cmd=start')) {
+        await dispose();
+      }
+      rethrow;
     }
   }
 
@@ -144,12 +204,17 @@ class WindowsCoreClient {
       _socket?.destroy();
     } catch (_) {}
     _socket = null;
-    final pid = _proc?.pid;
+    final pid = _elevatedPid ?? _proc?.pid;
+    _elevatedPid = null;
     _proc = null;
     if (pid != null && pid > 0) {
+      // Elevated core may outlive unelevated killPid — best-effort.
       Process.killPid(pid);
+      unawaited(Process.run('taskkill', ['/F', '/PID', '$pid']));
     }
   }
+
+  String _psQuote(String value) => "'${value.replaceAll("'", "''")}'";
 
   String _coreExecutable() {
     final dir = File(Platform.resolvedExecutable).parent.path;
@@ -157,7 +222,8 @@ class WindowsCoreClient {
   }
 
   Future<Map<String, dynamic>> _waitPortFile(File file) async {
-    final deadline = DateTime.now().add(const Duration(seconds: 12));
+    // Allow time for the UAC consent dialog.
+    final deadline = DateTime.now().add(const Duration(seconds: 90));
     while (DateTime.now().isBefore(deadline)) {
       if (file.existsSync()) {
         try {
@@ -173,7 +239,8 @@ class WindowsCoreClient {
       await Future<void>.delayed(const Duration(milliseconds: 50));
     }
     throw VpnConnectException(
-      'streampasscore не запустился (нет port-file). Нужны права администратора для Wintun?',
+      'streampasscore не запустился (нет port-file). '
+      'Подтвердите UAC или запустите StreamPass от администратора.',
     );
   }
 
@@ -187,8 +254,34 @@ class WindowsCoreClient {
     _pending[id] = c;
     body['id'] = id;
     body['token'] = _token;
-    socket.add(utf8.encode('${jsonEncode(body)}\n'));
-    return c.future.timeout(const Duration(seconds: 45));
+    try {
+      socket.add(utf8.encode('${jsonEncode(body)}\n'));
+    } catch (e) {
+      _pending.remove(id);
+      _socket = null;
+      throw VpnConnectException('ядро TUN недоступно: $e');
+    }
+    try {
+      return await c.future.timeout(const Duration(seconds: 45));
+    } on TimeoutException {
+      _pending.remove(id);
+      if (!c.isCompleted) {
+        c.completeError(StateError('rpc timeout'));
+      }
+      final cmd = body['cmd'] as String? ?? 'rpc';
+      throw VpnConnectException(
+        'TimeoutException after 0:00:45.000000: Future not completed '
+        '(cmd=$cmd). Подключение прервано — повторите Connect.',
+      );
+    }
+  }
+
+  /// Lightweight liveness check for soft core reuse.
+  Future<void> ping() async {
+    final reply = await _rpc({'cmd': 'ping'});
+    if (reply['ok'] != true) {
+      throw StateError('ping failed');
+    }
   }
 
   void _onBytes(

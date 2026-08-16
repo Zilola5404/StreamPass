@@ -702,14 +702,26 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
         optionsJson: optionsJson,
       );
       if (!accepted && mounted) {
-        setState(() => _state = ConnState.disconnected);
+        setState(() {
+          _state = ConnState.disconnected;
+          _errorMessage = null;
+        });
       }
+      // accepted=true: statusStream drives connected / traffic_ready.
     } on VpnConnectException catch (e) {
       _connectLog.error('connect', 'VpnConnectException', {'message': e.message});
       if (!mounted) return;
       setState(() {
         _state = ConnState.error;
         _errorMessage = e.message;
+      });
+    } catch (e) {
+      // TimeoutException / unexpected — never leave UI stuck in connecting.
+      _connectLog.error('connect', 'connect failed', {'error': '$e'});
+      if (!mounted) return;
+      setState(() {
+        _state = ConnState.error;
+        _errorMessage = e.toString();
       });
     }
   }

@@ -372,14 +372,16 @@ func routeHint() RouteHint {
 }
 
 func emitDNSDiag(host, via string, rttMS int64, errMsg string) {
-	result := "ok"
+	result := "dns_resolved"
 	reason := "dns_" + via
 	if via == "fail" || errMsg != "" {
-		result = "fail"
+		result = "dns_fail"
 		reason = "dns_fail"
 		if errMsg != "" {
 			reason = "dns_fail:" + sanitizeDNSErr(errMsg)
 		}
+	} else if via == "cache" || via == "aaaa-suppress" {
+		result = "dns_" + strings.ReplaceAll(via, "-", "_")
 	}
 	site := ""
 	if host != "" {

@@ -34,7 +34,8 @@ var _ logger.Logger = wintunLogger{}
 // StartDesktop creates a Wintun adapter (no Android fd) and installs IPv4
 // default routes via AutoRoute. IPv6 is not captured (Variant B).
 //
-// Caller must BindInterface to the physical NIC *before* this returns routes.
+// Caller should already have called protect.BindPhysicalUnderlay before the
+// Hysteria handshake. StartDesktop re-asserts that bind and never picks StreamPass.
 func StartDesktop(ctx context.Context, hyClient client.Client, mtu uint32, engine *decision.AtomicEngine, relayID string, opts Options) (*Session, error) {
 	if mtu == 0 {
 		mtu = 1400
@@ -43,11 +44,14 @@ func StartDesktop(ctx context.Context, hyClient client.Client, mtu uint32, engin
 		engine = decision.NewAtomicEngine(decision.NewEngine(nil, nil, decision.DefaultMode), 0)
 	}
 
-	ifIdx, ifName, err := protect.PhysicalInterfaceIndex()
+	ifIdx, ifName, err := protect.BindPhysicalUnderlay()
 	if err != nil {
 		return nil, fmt.Errorf("physical interface: %w", err)
 	}
-	protect.BindInterface(ifIdx)
+	if protect.IsTunnelInterface(ifName) {
+		protect.Clear()
+		return nil, fmt.Errorf("refusing underlay on tunnel iface %s", ifName)
+	}
 	logLine(fmt.Sprintf("[vpn] UNDERLAY_IF index=%d name=%s", ifIdx, ifName))
 
 	finder := control.NewDefaultInterfaceFinder()

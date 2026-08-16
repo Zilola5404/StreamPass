@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'vpn_channel.dart';
@@ -21,7 +23,9 @@ class ConnectionController extends ChangeNotifier {
 
   VpnStatusUpdate _status = VpnStatusUpdate(VpnEvent.disconnected);
   bool _trafficReady = false;
+  bool _pendingTrafficReady = false;
   bool _attached = false;
+  StreamSubscription<VpnStatusUpdate>? _sub;
   ConnectedUiPolicy policy = ConnectedUiPolicy.nativeConnectedMeansReady;
 
   VpnStatusUpdate get status => _status;
@@ -42,24 +46,34 @@ class ConnectionController extends ChangeNotifier {
       policy = ConnectedUiPolicy.requireTrafficReady;
     }
     VpnChannel.ensureListening();
-    VpnChannel.statusStream.listen(_onUpdate);
+    // Single subscription — avoid duplicate handlers if attach() is called again.
+    _sub ??= VpnChannel.statusStream.listen(_onUpdate);
   }
 
   void _onUpdate(VpnStatusUpdate update) {
     _status = update;
     if (update.event != VpnEvent.connected) {
       _trafficReady = false;
+      _pendingTrafficReady = false;
     } else if (policy == ConnectedUiPolicy.nativeConnectedMeansReady) {
       _trafficReady = true;
+    } else if (_pendingTrafficReady) {
+      _trafficReady = true;
+      _pendingTrafficReady = false;
     }
     notifyListeners();
   }
 
   /// Called by the traffic engine after first_byte / health test — never from handshake alone.
   void markTrafficReady() {
-    if (_status.event != VpnEvent.connected) return;
     if (_trafficReady) return;
+    if (_status.event != VpnEvent.connected) {
+      // first_byte may arrive before status=connected is applied — latch it.
+      _pendingTrafficReady = true;
+      return;
+    }
     _trafficReady = true;
+    _pendingTrafficReady = false;
     notifyListeners();
   }
 
@@ -73,7 +87,10 @@ class ConnectionController extends ChangeNotifier {
   void debugReset() {
     _status = VpnStatusUpdate(VpnEvent.disconnected);
     _trafficReady = false;
+    _pendingTrafficReady = false;
     _attached = false;
+    unawaited(_sub?.cancel());
+    _sub = null;
     policy = ConnectedUiPolicy.nativeConnectedMeansReady;
   }
 

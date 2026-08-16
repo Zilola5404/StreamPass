@@ -13,6 +13,7 @@ import (
 	"streampass/go_core/internal/decision"
 	"streampass/go_core/internal/dnscache"
 	"streampass/go_core/internal/hyconfig"
+	"streampass/go_core/internal/protect"
 	"streampass/go_core/internal/tunbridge"
 )
 
@@ -39,6 +40,20 @@ func (r *runtime) start(req Request, emit func(Event)) error {
 	if req.ConnectionConfig != "" && strings.Contains(req.ConnectionConfig, "insecure=1") {
 		emit(Event{Type: "log", Message: "[vpn] WARN insecure=1 in connection_config — forbidden for Windows production (TLS pin required before ship)"})
 	}
+
+	// Leftover StreamPass 0.0.0.0/0 from a crash blackholes everything — clear first.
+	if err := protect.ClearStaleTunnelDefaultRoute(); err != nil {
+		emit(Event{Type: "log", Message: fmt.Sprintf("[vpn] stale route cleanup: %v (need Admin if sites still broken)", err)})
+	} else {
+		emit(Event{Type: "log", Message: "[vpn] stale StreamPass default route cleared"})
+	}
+
+	// Bind underlay to Wi‑Fi/Ethernet BEFORE Hysteria dial (Android: protect before PrepareRelay).
+	ifIdx, ifName, err := protect.BindPhysicalUnderlay()
+	if err != nil {
+		return fmt.Errorf("underlay interface: %w", err)
+	}
+	emit(Event{Type: "log", Message: fmt.Sprintf("[vpn] UNDERLAY_IF index=%d name=%s (before relay)", ifIdx, ifName)})
 
 	var hyClient client.Client
 	var pingMs int

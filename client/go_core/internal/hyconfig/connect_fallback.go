@@ -10,6 +10,12 @@ import (
 	"github.com/apernet/hysteria/core/v2/client"
 )
 
+// Handshake budgets keep Windows RPC start() under Flutter's 45s timeout.
+const (
+	handshakePerCandidate = 8 * time.Second
+	handshakeOverall      = 32 * time.Second
+)
+
 // ConnectResult is a successful Hysteria handshake after optional port fallback.
 type ConnectResult struct {
 	Client    client.Client
@@ -46,9 +52,19 @@ func ConnectWithFallback(connectionConfig, relayHost string, relayPort int) (*Co
 		}
 	}
 
+	deadline := time.Now().Add(handshakeOverall)
 	var failures []string
 	for _, c := range FallbackCandidates(hostOnly, primary) {
-		result, err := dialCandidate(baseCfg, parsed, hostOnly, c)
+		remain := time.Until(deadline)
+		if remain <= 0 {
+			failures = append(failures, "overall handshake budget exhausted")
+			break
+		}
+		budget := handshakePerCandidate
+		if remain < budget {
+			budget = remain
+		}
+		result, err := dialCandidate(baseCfg, parsed, hostOnly, c, budget)
 		if err != nil {
 			failures = append(failures, fmt.Sprintf("%s: %v", c, err))
 			continue
@@ -62,7 +78,7 @@ func ConnectWithFallback(connectionConfig, relayHost string, relayPort int) (*Co
 	return nil, fmt.Errorf("all fallback endpoints failed: %s", strings.Join(failures, "; "))
 }
 
-func dialCandidate(baseCfg *client.Config, parsed *Parsed, hostOnly string, c DialCandidate) (*ConnectResult, error) {
+func dialCandidate(baseCfg *client.Config, parsed *Parsed, hostOnly string, c DialCandidate, budget time.Duration) (*ConnectResult, error) {
 	// QUIC peer identity for TCP underlay is always the main Hysteria UDP/443:
 	// the VPS bridge listens on TCP/8443+/24443 and forwards to 127.0.0.1:443.
 	quicPort := c.Port
@@ -76,6 +92,16 @@ func dialCandidate(baseCfg *client.Config, parsed *Parsed, hostOnly string, c Di
 
 	cfg := cloneClientConfig(baseCfg)
 	cfg.ServerAddr = udpRemote
+	// Keep idle timeout within hysteria bounds but short enough for fallback.
+	idle := budget
+	if idle < 4*time.Second {
+		idle = 4 * time.Second
+	}
+	if idle > 30*time.Second {
+		idle = 30 * time.Second
+	}
+	cfg.QUICConfig.MaxIdleTimeout = idle
+	cfg.QUICConfig.KeepAlivePeriod = 2 * time.Second
 
 	switch c.Network {
 	case "tcp":
@@ -95,20 +121,41 @@ func dialCandidate(baseCfg *client.Config, parsed *Parsed, hostOnly string, c Di
 		}
 	}
 
-	start := time.Now()
-	hy, _, err := client.NewClient(cfg)
-	if err != nil {
-		return nil, err
+	type dialOut struct {
+		hy  client.Client
+		err error
 	}
+	ch := make(chan dialOut, 1)
+	start := time.Now()
+	go func() {
+		hy, _, err := client.NewClient(cfg)
+		ch <- dialOut{hy: hy, err: err}
+	}()
 
-	out := *parsed
-	out.ServerHost = c.Host
-	return &ConnectResult{
-		Client:    hy,
-		Parsed:    &out,
-		PingMs:    int(time.Since(start).Milliseconds()),
-		Candidate: c,
-	}, nil
+	timer := time.NewTimer(budget)
+	defer timer.Stop()
+	select {
+	case out := <-ch:
+		if out.err != nil {
+			return nil, out.err
+		}
+		copied := *parsed
+		copied.ServerHost = c.Host
+		return &ConnectResult{
+			Client:    out.hy,
+			Parsed:    &copied,
+			PingMs:    int(time.Since(start).Milliseconds()),
+			Candidate: c,
+		}, nil
+	case <-timer.C:
+		// Late success must not leak a live client.
+		go func() {
+			if out := <-ch; out.hy != nil {
+				_ = out.hy.Close()
+			}
+		}()
+		return nil, fmt.Errorf("handshake timeout after %s", budget)
+	}
 }
 
 func cloneClientConfig(in *client.Config) *client.Config {
