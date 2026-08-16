@@ -61,6 +61,9 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
   late final RuleEngineService _ruleEngine = RuleEngineService(api: widget.api);
   int _pendingRulesVersion = 0;
   DateTime? _connectedSince;
+  /// Last moment already credited to [SessionStatsService] (partial flush).
+  /// Must not reset [_connectedSince] — that drives the UI session timer.
+  DateTime? _statsAccruedUntil;
   Timer? _durationTimer;
   Timer? _healthTimer;
   String _durationLabel = 'Smart routing';
@@ -109,11 +112,9 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
       if (!ConnectionController.instance.showConnected) return;
       setState(() {
         _state = ConnState.connected;
-        _connectedSince = DateTime.now();
-        _durationLabel = formatConnectionDuration(Duration.zero);
         _pingMs = _effectivePing(native.pingMs);
       });
-      _startDurationTimer();
+      _beginConnectedSession();
       unawaited(_ruleEngine.start(initialVersion: _pendingRulesVersion));
     } catch (_) {
       // Non-fatal — UI stays on disconnected until user connects.
@@ -390,12 +391,15 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
   }
 
   void _flushPartialOnlineStats() {
-    final since = _connectedSince;
-    if (since == null || _state != ConnState.connected) return;
-    final sec = DateTime.now().difference(since).inSeconds;
+    final sessionStart = _connectedSince;
+    if (sessionStart == null || _state != ConnState.connected) return;
+    final from = _statsAccruedUntil ?? sessionStart;
+    final now = DateTime.now();
+    final sec = now.difference(from).inSeconds;
     if (sec <= 0) return;
     unawaited(_sessionStats.addOnlineSeconds(sec));
-    _connectedSince = DateTime.now();
+    // Move stats cursor only — UI timer keeps counting from sessionStart.
+    _statsAccruedUntil = now;
     final ping = _pingMs;
     if (ping != null && ping > 0) {
       unawaited(_sessionStats.recordRtt(ping));
@@ -403,9 +407,10 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
   }
 
   void _stopDurationTimer() {
-    final since = _connectedSince;
-    if (since != null) {
-      final sec = DateTime.now().difference(since).inSeconds;
+    final sessionStart = _connectedSince;
+    if (sessionStart != null) {
+      final from = _statsAccruedUntil ?? sessionStart;
+      final sec = DateTime.now().difference(from).inSeconds;
       if (sec > 0) {
         unawaited(_sessionStats.addOnlineSeconds(sec));
       }
@@ -413,10 +418,22 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
     _durationTimer?.cancel();
     _durationTimer = null;
     _connectedSince = null;
+    _statsAccruedUntil = null;
     _durationLabel = 'Smart routing';
     _statsFlushTimer?.cancel();
     _statsFlushTimer = null;
     _stopHealthPoll();
+  }
+
+  /// Marks the start of a user-visible connected session (once per connect).
+  void _beginConnectedSession() {
+    final first = _connectedSince == null;
+    _connectedSince ??= DateTime.now();
+    _statsAccruedUntil ??= _connectedSince;
+    if (first) {
+      _durationLabel = formatConnectionDuration(Duration.zero);
+      _startDurationTimer();
+    }
   }
 
   void _startHealthPoll() {
@@ -512,10 +529,8 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
     if (c.showConnected && _state == ConnState.connecting) {
       setState(() {
         _state = ConnState.connected;
-        _connectedSince ??= DateTime.now();
-        _durationLabel = formatConnectionDuration(Duration.zero);
-        _startDurationTimer();
       });
+      _beginConnectedSession();
       return;
     }
     _onStatus(c.status);
@@ -538,6 +553,12 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
     setState(() {
       switch (update.event) {
         case VpnEvent.connecting:
+          // Ignore transient connecting while already user-visible connected
+          // (e.g. async relay attach must not reset the session timer).
+          if (_state == ConnState.connected &&
+              ConnectionController.instance.showConnected) {
+            break;
+          }
           _state = ConnState.connecting;
           _stopDurationTimer();
         case VpnEvent.connected:
@@ -545,9 +566,6 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
             _state = ConnState.connecting;
           } else {
             _state = ConnState.connected;
-            _connectedSince = DateTime.now();
-            _durationLabel = formatConnectionDuration(Duration.zero);
-            _startDurationTimer();
             _pingMs = _effectivePing(update.pingMs);
             final ping = _pingMs;
             if (ping != null && ping > 0) {
@@ -577,6 +595,10 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
           }
       }
     });
+    if (update.event == VpnEvent.connected &&
+        ConnectionController.instance.showConnected) {
+      _beginConnectedSession();
+    }
   }
 
   Future<void> _tryFailoverAfterError() async {
