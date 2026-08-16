@@ -28,9 +28,22 @@ class ConnectionController extends ChangeNotifier {
   StreamSubscription<VpnStatusUpdate>? _sub;
   ConnectedUiPolicy policy = ConnectedUiPolicy.nativeConnectedMeansReady;
 
+  /// Wall-clock start of the user-visible connected session.
+  /// Set once when [showConnected] becomes true; cleared only on real disconnect.
+  DateTime? _sessionStartedAt;
+
   VpnStatusUpdate get status => _status;
   VpnEvent get event => _status.event;
   bool get trafficReady => _trafficReady;
+
+  /// Shared by Home orb timer and Statistics «Сейчас подключено».
+  DateTime? get sessionStartedAt => _sessionStartedAt;
+
+  Duration get liveSessionDuration {
+    final since = _sessionStartedAt;
+    if (since == null || !showConnected) return Duration.zero;
+    return DateTime.now().difference(since);
+  }
 
   /// User-visible "Подключено" only when tunnel is up **and** data path proven.
   bool get showConnected {
@@ -61,6 +74,7 @@ class ConnectionController extends ChangeNotifier {
       _trafficReady = true;
       _pendingTrafficReady = false;
     }
+    _syncSessionClock();
     notifyListeners();
   }
 
@@ -74,13 +88,34 @@ class ConnectionController extends ChangeNotifier {
     }
     _trafficReady = true;
     _pendingTrafficReady = false;
+    _syncSessionClock();
     notifyListeners();
   }
 
   void clearTrafficReady() {
     if (!_trafficReady) return;
     _trafficReady = false;
+    // Keep [_sessionStartedAt] while native event is still connected — only
+    // a real disconnect clears the session clock.
     notifyListeners();
+  }
+
+  /// Starts the shared session clock at most once per connected period.
+  void _syncSessionClock() {
+    if (showConnected) {
+      _sessionStartedAt ??= DateTime.now();
+      return;
+    }
+    switch (_status.event) {
+      case VpnEvent.disconnected:
+      case VpnEvent.error:
+      case VpnEvent.permissionDenied:
+      case VpnEvent.connecting:
+        _sessionStartedAt = null;
+      case VpnEvent.connected:
+        // Connected but not yet traffic-ready (Windows): wait.
+        break;
+    }
   }
 
   @visibleForTesting
@@ -88,6 +123,7 @@ class ConnectionController extends ChangeNotifier {
     _status = VpnStatusUpdate(VpnEvent.disconnected);
     _trafficReady = false;
     _pendingTrafficReady = false;
+    _sessionStartedAt = null;
     _attached = false;
     unawaited(_sub?.cancel());
     _sub = null;

@@ -49,6 +49,25 @@ void main() {
     c.debugApply(VpnStatusUpdate(VpnEvent.disconnected));
     expect(c.showConnected, isFalse);
     expect(c.trafficReady, isFalse);
+    expect(c.sessionStartedAt, isNull);
+  });
+
+  test('session clock starts once and survives repeat connected events', () async {
+    final c = ConnectionController.instance;
+    c.policy = ConnectedUiPolicy.requireTrafficReady;
+    c.debugApply(VpnStatusUpdate(VpnEvent.connected, relayName: 'nl-1'));
+    expect(c.sessionStartedAt, isNull);
+    c.markTrafficReady();
+    final started = c.sessionStartedAt;
+    expect(started, isNotNull);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    c.debugApply(VpnStatusUpdate(
+      VpnEvent.connected,
+      relayName: 'nl-1',
+      pingMs: 42,
+    ));
+    expect(c.sessionStartedAt, started);
+    expect(c.liveSessionDuration.inMilliseconds, greaterThanOrEqualTo(20));
   });
 
   test('WindowsTrafficEngine starts disconnected', () async {

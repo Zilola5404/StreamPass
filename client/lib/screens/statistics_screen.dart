@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../services/connection_controller.dart';
 import '../services/connection_duration.dart';
 import '../services/session_stats.dart';
 import '../services/vpn_channel.dart';
@@ -21,25 +22,43 @@ class StatisticsScreenState extends State<StatisticsScreen>
   final _service = SessionStatsService();
   SessionStatsSnapshot? _stats;
   bool _loading = true;
-  bool _vpnConnected = false;
   Duration _liveSession = Duration.zero;
   int? _liveRttMs;
   StreamSubscription<VpnStatusUpdate>? _vpnSub;
   Timer? _refreshTimer;
-  DateTime? _connectedSince;
 
   @override
   bool get wantKeepAlive => true;
 
+  bool get _vpnConnected => ConnectionController.instance.showConnected;
+
   @override
   void initState() {
     super.initState();
+    ConnectionController.instance.addListener(_onController);
     _vpnSub = VpnChannel.statusStream.listen(_onVpnStatus);
-    _refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (mounted) _refresh(silent: true);
+    _refreshTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      if (!_vpnConnected) return;
+      setState(() {
+        _liveSession = ConnectionController.instance.liveSessionDuration;
+      });
     });
     unawaited(_refresh());
     unawaited(_syncNativeVpnState());
+  }
+
+  void _onController() {
+    if (!mounted) return;
+    setState(() {
+      _liveSession = ConnectionController.instance.liveSessionDuration;
+      if (_vpnConnected) {
+        _liveRttMs = ConnectionController.instance.status.pingMs ?? _liveRttMs;
+      } else {
+        _liveRttMs = null;
+        _liveSession = Duration.zero;
+      }
+    });
   }
 
   Future<void> _syncNativeVpnState() async {
@@ -48,9 +67,8 @@ class StatisticsScreenState extends State<StatisticsScreen>
       if (!mounted || native == null) return;
       if (native.event == VpnEvent.connected) {
         setState(() {
-          _vpnConnected = true;
-          _connectedSince ??= DateTime.now();
           _liveRttMs = native.pingMs;
+          _liveSession = ConnectionController.instance.liveSessionDuration;
         });
       }
     } catch (_) {}
@@ -58,23 +76,19 @@ class StatisticsScreenState extends State<StatisticsScreen>
 
   void _onVpnStatus(VpnStatusUpdate update) {
     if (!mounted) return;
+    // Session clock lives in ConnectionController — do not reset on repeat
+    // connected events (async RELAY attach, pingMs update, etc.).
     setState(() {
-      switch (update.event) {
-        case VpnEvent.connected:
-          _vpnConnected = true;
-          _connectedSince = DateTime.now();
-          _liveRttMs = update.pingMs;
-        case VpnEvent.connecting:
-          _vpnConnected = false;
-          _connectedSince = null;
-          _liveSession = Duration.zero;
-        case VpnEvent.disconnected:
-        case VpnEvent.error:
-        case VpnEvent.permissionDenied:
-          _vpnConnected = false;
-          _connectedSince = null;
-          _liveSession = Duration.zero;
-          _liveRttMs = null;
+      if (update.pingMs != null && update.pingMs! > 0) {
+        _liveRttMs = update.pingMs;
+      }
+      if (update.event == VpnEvent.disconnected ||
+          update.event == VpnEvent.error ||
+          update.event == VpnEvent.permissionDenied) {
+        _liveRttMs = null;
+        _liveSession = Duration.zero;
+      } else {
+        _liveSession = ConnectionController.instance.liveSessionDuration;
       }
     });
     if (update.event == VpnEvent.disconnected) {
@@ -88,19 +102,16 @@ class StatisticsScreenState extends State<StatisticsScreen>
     if (!silent) setState(() => _loading = true);
     final snap = await _service.load();
     if (!mounted) return;
-    Duration live = Duration.zero;
-    if (_vpnConnected && _connectedSince != null) {
-      live = DateTime.now().difference(_connectedSince!);
-    }
     setState(() {
       _stats = snap;
-      _liveSession = live;
+      _liveSession = ConnectionController.instance.liveSessionDuration;
       _loading = false;
     });
   }
 
   @override
   void dispose() {
+    ConnectionController.instance.removeListener(_onController);
     _vpnSub?.cancel();
     _refreshTimer?.cancel();
     super.dispose();

@@ -60,9 +60,7 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
   final _connectLog = ConnectionLog.instance;
   late final RuleEngineService _ruleEngine = RuleEngineService(api: widget.api);
   int _pendingRulesVersion = 0;
-  DateTime? _connectedSince;
-  /// Last moment already credited to [SessionStatsService] (partial flush).
-  /// Must not reset [_connectedSince] — that drives the UI session timer.
+  /// Cursor for partial online-stats flush (not the UI session clock).
   DateTime? _statsAccruedUntil;
   Timer? _durationTimer;
   Timer? _healthTimer;
@@ -373,10 +371,11 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
   void _startDurationTimer() {
     _durationTimer?.cancel();
     _durationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      final since = _connectedSince;
-      if (!mounted || since == null) return;
+      if (!mounted) return;
+      final c = ConnectionController.instance;
+      if (!c.showConnected) return;
       setState(() {
-        _durationLabel = formatConnectionDuration(DateTime.now().difference(since));
+        _durationLabel = formatConnectionDuration(c.liveSessionDuration);
       });
     });
     _startStatsFlushTimer();
@@ -391,14 +390,13 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
   }
 
   void _flushPartialOnlineStats() {
-    final sessionStart = _connectedSince;
+    final sessionStart = ConnectionController.instance.sessionStartedAt;
     if (sessionStart == null || _state != ConnState.connected) return;
     final from = _statsAccruedUntil ?? sessionStart;
     final now = DateTime.now();
     final sec = now.difference(from).inSeconds;
     if (sec <= 0) return;
     unawaited(_sessionStats.addOnlineSeconds(sec));
-    // Move stats cursor only — UI timer keeps counting from sessionStart.
     _statsAccruedUntil = now;
     final ping = _pingMs;
     if (ping != null && ping > 0) {
@@ -407,9 +405,10 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
   }
 
   void _stopDurationTimer() {
-    final sessionStart = _connectedSince;
-    if (sessionStart != null) {
-      final from = _statsAccruedUntil ?? sessionStart;
+    final sessionStart = ConnectionController.instance.sessionStartedAt;
+    // Prefer local accrued cursor; session clock may already be cleared on disconnect.
+    final from = _statsAccruedUntil ?? sessionStart;
+    if (from != null) {
       final sec = DateTime.now().difference(from).inSeconds;
       if (sec > 0) {
         unawaited(_sessionStats.addOnlineSeconds(sec));
@@ -417,7 +416,6 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
     }
     _durationTimer?.cancel();
     _durationTimer = null;
-    _connectedSince = null;
     _statsAccruedUntil = null;
     _durationLabel = 'Smart routing';
     _statsFlushTimer?.cancel();
@@ -425,13 +423,16 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
     _stopHealthPoll();
   }
 
-  /// Marks the start of a user-visible connected session (once per connect).
+  /// Arms UI timers once per user-visible connected session (shared clock).
   void _beginConnectedSession() {
-    final first = _connectedSince == null;
-    _connectedSince ??= DateTime.now();
-    _statsAccruedUntil ??= _connectedSince;
+    final c = ConnectionController.instance;
+    if (!c.showConnected) return;
+    final since = c.sessionStartedAt;
+    if (since == null) return;
+    final first = _durationTimer == null;
+    _statsAccruedUntil ??= since;
     if (first) {
-      _durationLabel = formatConnectionDuration(Duration.zero);
+      _durationLabel = formatConnectionDuration(c.liveSessionDuration);
       _startDurationTimer();
     }
   }
