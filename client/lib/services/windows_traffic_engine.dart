@@ -83,9 +83,8 @@ class WindowsTrafficEngine implements WindowsVpnAdapter {
     _cancelTrafficWatchdog();
     ConnectionController.instance.clearTrafficReady();
 
-    _log.info('vpn', 'CONNECT_REQUESTED', {
+    _log.info('vpn', '[CONNECT] session=$session', {
       'platform': 'windows',
-      'session': '$session',
       'relayId': server.id,
       'host': server.host,
       'mtu': '$mtu',
@@ -107,7 +106,7 @@ class WindowsTrafficEngine implements WindowsVpnAdapter {
         throw VpnConnectException('connect superseded by newer session');
       }
       _connecting = false;
-      // Native should already have emitted connected; ensure terminal state.
+      // ENGINE_STARTED / connected — traffic_ready is a separate lifecycle.
       if (_last.event != VpnEvent.connected) {
         _emit(VpnStatusUpdate(
           VpnEvent.connected,
@@ -118,14 +117,13 @@ class WindowsTrafficEngine implements WindowsVpnAdapter {
       return true;
     } on VpnConnectException catch (e) {
       await _failSession(session, server.id, e.message);
-      // Timeout / hung start disposed the core — drop soft-reuse handle.
       if (_core != null && !_core!.isAttached) {
         _core = null;
       }
       rethrow;
     } on TimeoutException catch (e) {
       final msg =
-          'Подключение не завершилось вовремя (${e.duration ?? const Duration(seconds: 45)}). '
+          'Подключение не завершилось вовремя (${e.duration ?? const Duration(seconds: 30)}). '
           'Проверьте UAC / Wintun и повторите.';
       await _failSession(session, server.id, msg);
       throw VpnConnectException(msg);
@@ -142,20 +140,25 @@ class WindowsTrafficEngine implements WindowsVpnAdapter {
 
   Future<WindowsCoreClient> _ensureCore(int session) async {
     final existing = _core;
+    _log.info('vpn', '[CORE] reuse_check', {
+      'session': '$session',
+      'attached': '${existing?.isAttached ?? false}',
+    });
     if (existing != null && existing.isAttached) {
-      // Soft ping: dead elevated core leaves a stale socket that never replies.
       try {
         await existing.ping().timeout(const Duration(seconds: 2));
+        _log.info('vpn', '[CORE] ping=ok — reuse');
         return existing;
       } catch (_) {
-        _log.warn('vpn', 'CORE_STALE — respawning after ping fail');
+        _log.warn('vpn', '[CORE] ping=failed — cleanup then respawn');
         await existing.dispose();
         if (identical(_core, existing)) {
           _core = null;
         }
       }
-    } else {
-      await existing?.dispose();
+    } else if (existing != null) {
+      _log.info('vpn', '[CORE] stale_session_cleanup');
+      await existing.dispose();
       if (identical(_core, existing)) {
         _core = null;
       }
@@ -201,10 +204,13 @@ class WindowsTrafficEngine implements WindowsVpnAdapter {
       relayName: relayId,
       errorMessage: msg,
     ));
-    // Soft fail: keep elevated core for retry without a second UAC when possible.
+    // Soft fail: reset tunnel session; keep elevated core to avoid UAC churn.
     try {
-      await _core?.stopTunnel();
+      await _core?.resetConnectionSession(killCoreIfUnresponsive: true);
     } catch (_) {}
+    if (_core != null && !_core!.isAttached) {
+      _core = null;
+    }
   }
 
   void _armTrafficWatchdog(int session, String relayId) {

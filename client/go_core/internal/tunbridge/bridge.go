@@ -75,9 +75,10 @@ func logLine(msg string) {
 }
 
 type Session struct {
-	cancel context.CancelFunc
-	stop   func()
-	engine *decision.AtomicEngine
+	cancel  context.CancelFunc
+	stop    func()
+	engine  *decision.AtomicEngine
+	handler *routingHandler
 }
 
 // UpdateEngine hot-reloads routing rules on an active tunnel (BL-006).
@@ -229,14 +230,44 @@ func startStack(ctx context.Context, tunOptions tun.Options, hyClient client.Cli
 			hooks.AfterStop()
 		}
 	}
-	return &Session{cancel: cancel, stop: stop, engine: engine}, nil
+	return &Session{cancel: cancel, stop: stop, engine: engine, handler: handler}, nil
 }
 
 type routingHandler struct {
+	mu          sync.RWMutex
 	client      client.Client
 	engine      *decision.AtomicEngine
 	relayID     string
 	blockUDP443 bool
+}
+
+// SetHysteriaClient hot-attaches a relay client after ENGINE_STARTED (async handshake).
+func (s *Session) SetHysteriaClient(c client.Client, relayID string) {
+	if s == nil || s.handler == nil {
+		return
+	}
+	s.handler.setClient(c, relayID)
+}
+
+func (h *routingHandler) setClient(c client.Client, relayID string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.client = c
+	if relayID != "" {
+		h.relayID = relayID
+	}
+}
+
+func (h *routingHandler) hyClient() client.Client {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.client
+}
+
+func (h *routingHandler) hyRelayID() string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.relayID
 }
 
 func (h *routingHandler) PrepareConnection(
@@ -277,9 +308,9 @@ func (h *routingHandler) decideDest(destination M.Socksaddr) decision.Decision {
 	if destination.Addr.IsValid() {
 		destIP = destination.Addr.String()
 	}
-	if isControlPlaneDest(host, destIP, h.relayID) {
+	if isControlPlaneDest(host, destIP, h.hyRelayID()) {
 		rule := "relay_endpoint"
-		reason := controlPlaneReason(host, destIP, h.relayID)
+		reason := controlPlaneReason(host, destIP, h.hyRelayID())
 		if reason == "private_network_bypass" {
 			rule = "private_network"
 		}
@@ -460,10 +491,10 @@ func (h *routingHandler) pipeTCP(
 			return false
 		}
 	} else {
-		if h.client == nil {
+		if h.hyClient() == nil {
 			err := fmt.Errorf("hysteria client not ready")
 			logLine(fmt.Sprintf("[tun] relay-tcp fail dest=%s err=%v", destination.String(), err))
-			emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "stream_failed", h.relayID, false, time.Since(start), err.Error(), 0, 0, 0)
+			emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "stream_failed", h.hyRelayID(), false, time.Since(start), err.Error(), 0, 0, 0)
 			emitConnLog(host, destIP, "TCP", destPort, modeLabel, dec.Rule, dec.Reason, dnscache.LastResolveMS(host), time.Since(start), 0, 0, 0, 0, err.Error())
 			return false
 		}
@@ -471,7 +502,7 @@ func (h *routingHandler) pipeTCP(
 		if dialTo != destination.String() {
 			logLine(fmt.Sprintf("[tun] relay-tcp rewrite dest=%s dial=%s", destination.String(), dialTo))
 		}
-		remote, err = h.client.TCP(dialTo)
+		remote, err = h.hyClient().TCP(dialTo)
 		if err != nil {
 			logLine(fmt.Sprintf("[tun] relay-tcp fail dest=%s dial=%s err=%v", destination.String(), dialTo, err))
 			emitDiag("tcp", host, destIP, destPort, modeLabel, dec.Rule, "stream_failed", h.relayID, false, time.Since(start), err.Error(), 0, 0, 0)
@@ -808,11 +839,11 @@ func (h *routingHandler) relayUDP(
 		return true
 	}
 
-	if h.client == nil {
-		emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, "stream_failed", h.relayID, false, time.Since(start), "hysteria client not ready", 0, 0, 0)
+	if h.hyClient() == nil {
+		emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, "stream_failed", h.hyRelayID(), false, time.Since(start), "hysteria client not ready", 0, 0, 0)
 		return false
 	}
-	hyUDP, err := h.client.UDP()
+	hyUDP, err := h.hyClient().UDP()
 	if err != nil {
 		emitDiag("udp", host, destIP, destPort, modeLabel, dec.Rule, "stream_failed", h.relayID, false, time.Since(start), err.Error(), 0, 0, 0)
 		return false

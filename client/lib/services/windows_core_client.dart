@@ -8,6 +8,10 @@ import 'streampass_api.dart';
 import 'vpn_channel.dart';
 
 /// Spawns `streampasscore.exe` and speaks newline JSON on 127.0.0.1.
+///
+/// Ownership split:
+/// - **core process** — lives for the app session (one UAC);
+/// - **connection session** — start/stop tunnel without killing the process.
 class WindowsCoreClient {
   WindowsCoreClient();
 
@@ -21,6 +25,7 @@ class WindowsCoreClient {
   final _lineBuf = StringBuffer();
   StreamSubscription<List<int>>? _sub;
   bool _closed = false;
+  String lastStage = 'idle';
 
   bool get isAttached => _socket != null && !_closed;
 
@@ -29,7 +34,6 @@ class WindowsCoreClient {
     required void Function(String line) onLog,
   }) async {
     if (isAttached) return;
-    // Stale handle after process death — drop before respawn.
     if (_socket != null) {
       try {
         _socket!.destroy();
@@ -38,6 +42,7 @@ class WindowsCoreClient {
     }
     _closed = false;
     _lineBuf.clear();
+    lastStage = 'core_spawn';
 
     final exe = _coreExecutable();
     if (!File(exe).existsSync()) {
@@ -60,10 +65,8 @@ class WindowsCoreClient {
       portFile.deleteSync();
     }
 
-    // Wintun CreateAdapter needs Administrator. Always spawn via UAC RunAs
-    // (no prompt if the parent is already elevated).
     final workDir = File(exe).parent.path;
-    _log.info('vpn', 'CORE_SPAWN', {'exe': exe, 'elevated': 'RunAs'});
+    _log.info('vpn', '[CORE] spawn', {'exe': exe, 'elevated': 'RunAs'});
     final ps = StringBuffer()
       ..writeln('\$ErrorActionPreference = "Stop"')
       ..writeln(
@@ -95,6 +98,7 @@ class WindowsCoreClient {
       _elevatedPid = pid;
     }
 
+    lastStage = 'wait_port_file';
     final meta = await _waitPortFile(portFile);
     _token = meta['token'] as String? ?? '';
     final port = meta['port'] as int? ?? 0;
@@ -103,35 +107,41 @@ class WindowsCoreClient {
       throw VpnConnectException('streampasscore не опубликовал порт/token');
     }
 
+    lastStage = 'ipc_connect';
     _socket = await Socket.connect('127.0.0.1', port);
+    lastStage = 'ipc_ready';
+    _log.info('vpn', '[CORE] ipc_ready', {'port': '$port', 'pid': '${_elevatedPid ?? 0}'});
     _sub = _socket!.listen(
       (data) => _onBytes(data, onStatus, onLog),
-      onDone: () {
-        _sub = null;
-        _socket = null;
-        for (final c in _pending.values) {
-          if (!c.isCompleted) {
-            c.completeError(StateError('core socket closed'));
-          }
-        }
-        _pending.clear();
-        onStatus(VpnStatusUpdate(VpnEvent.disconnected));
-      },
+      onDone: () => _onSocketClosed(onStatus),
       onError: (Object e) {
-        _sub = null;
+        _failPending(e);
         _socket = null;
-        for (final c in _pending.values) {
-          if (!c.isCompleted) {
-            c.completeError(e);
-          }
-        }
-        _pending.clear();
+        _sub = null;
         onStatus(VpnStatusUpdate(
           VpnEvent.error,
           errorMessage: e.toString(),
         ));
       },
     );
+  }
+
+  void _onSocketClosed(void Function(VpnStatusUpdate update) onStatus) {
+    _sub = null;
+    _socket = null;
+    _failPending(StateError('core socket closed'));
+    lastStage = 'ipc_closed';
+    _log.warn('vpn', '[CORE] ipc_closed — invalidate session');
+    onStatus(VpnStatusUpdate(VpnEvent.disconnected));
+  }
+
+  void _failPending(Object error) {
+    for (final c in _pending.values) {
+      if (!c.isCompleted) {
+        c.completeError(error);
+      }
+    }
+    _pending.clear();
   }
 
   Future<void> startTunnel({
@@ -142,30 +152,71 @@ class WindowsCoreClient {
     required int mtu,
     required bool blockUdp443,
   }) async {
+    lastStage = 'start_rpc';
+    _log.info('vpn', '[START] command_sent', {
+      'host': server.host,
+      'networkMode': networkMode,
+    });
+    final started = DateTime.now();
     try {
-      final reply = await _rpc({
-        'cmd': 'start',
-        'relayHost': server.host,
-        'relayPort': server.port,
-        'connectionConfig': server.connectionConfig,
-        'rulesJson': rulesJson,
-        'exclusionsJson': exclusionsJson,
-        'networkMode': networkMode,
-        'mtu': mtu,
-        'blockUdp443': blockUdp443,
-      });
+      // Engine start budget is ~20s on core; leave headroom under 45s wall.
+      final reply = await _rpc(
+        {
+          'cmd': 'start',
+          'relayHost': server.host,
+          'relayPort': server.port,
+          'connectionConfig': server.connectionConfig,
+          'rulesJson': rulesJson,
+          'exclusionsJson': exclusionsJson,
+          'networkMode': networkMode,
+          'mtu': mtu,
+          'blockUdp443': blockUdp443,
+        },
+        timeout: const Duration(seconds: 30),
+      );
       if (reply['ok'] != true) {
         throw VpnConnectException(
           reply['error'] as String? ?? 'Не удалось поднять Windows TUN',
         );
       }
+      lastStage = 'engine_started';
+      _log.info('vpn', '[RPC] start_response_received', {
+        'elapsed_ms': '${DateTime.now().difference(started).inMilliseconds}',
+        'result': 'ENGINE_STARTED',
+      });
     } on VpnConnectException catch (e) {
-      // Half-open / hung start: drop core so the next Connect respawns cleanly.
       if (e.message.contains('TimeoutException') ||
           e.message.contains('cmd=start')) {
-        await dispose();
+        _log.error('vpn', '[START_TIMEOUT]', {
+          'last_stage': lastStage,
+          'elapsed_ms': '${DateTime.now().difference(started).inMilliseconds}',
+        });
+        // Prefer session reset over killing elevated core (avoid UAC churn).
+        await resetConnectionSession(killCoreIfUnresponsive: true);
       }
       rethrow;
+    }
+  }
+
+  /// Clears tunnel session state; keeps the elevated process when IPC is alive.
+  Future<void> resetConnectionSession({
+    bool killCoreIfUnresponsive = false,
+  }) async {
+    _log.info('vpn', '[CORE] stale_session_cleanup', {
+      'last_stage': lastStage,
+      'kill_if_needed': '$killCoreIfUnresponsive',
+    });
+    _failPending(StateError('session reset'));
+    try {
+      await stopTunnel();
+    } catch (_) {}
+    if (!killCoreIfUnresponsive) return;
+    try {
+      await ping().timeout(const Duration(seconds: 2));
+      _log.info('vpn', '[CORE] kept_alive_after_cleanup');
+    } catch (_) {
+      _log.warn('vpn', '[CORE] unresponsive after cleanup — dispose');
+      await dispose();
     }
   }
 
@@ -185,19 +236,16 @@ class WindowsCoreClient {
 
   Future<void> stopTunnel() async {
     if (_socket == null) return;
+    lastStage = 'stop';
     try {
-      await _rpc({'cmd': 'stop'}).timeout(const Duration(seconds: 4));
+      await _rpc({'cmd': 'stop'}, timeout: const Duration(seconds: 4));
     } catch (_) {}
   }
 
   Future<void> dispose() async {
     _closed = true;
-    for (final c in _pending.values) {
-      if (!c.isCompleted) {
-        c.completeError(StateError('core disposed'));
-      }
-    }
-    _pending.clear();
+    lastStage = 'dispose';
+    _failPending(StateError('core disposed'));
     await _sub?.cancel();
     _sub = null;
     try {
@@ -208,9 +256,21 @@ class WindowsCoreClient {
     _elevatedPid = null;
     _proc = null;
     if (pid != null && pid > 0) {
-      // Elevated core may outlive unelevated killPid — best-effort.
       Process.killPid(pid);
-      unawaited(Process.run('taskkill', ['/F', '/PID', '$pid']));
+      try {
+        await Process.run('taskkill', ['/F', '/PID', '$pid'])
+            .timeout(const Duration(seconds: 3));
+      } catch (_) {}
+      // Best-effort wait so the next spawn does not race a dying process.
+      for (var i = 0; i < 10; i++) {
+        final check = await Process.run(
+          'tasklist',
+          ['/FI', 'PID eq $pid', '/NH'],
+        );
+        final out = check.stdout.toString();
+        if (!out.contains('$pid')) break;
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
     }
   }
 
@@ -222,7 +282,6 @@ class WindowsCoreClient {
   }
 
   Future<Map<String, dynamic>> _waitPortFile(File file) async {
-    // Allow time for the UAC consent dialog.
     final deadline = DateTime.now().add(const Duration(seconds: 90));
     while (DateTime.now().isBefore(deadline)) {
       if (file.existsSync()) {
@@ -244,7 +303,10 @@ class WindowsCoreClient {
     );
   }
 
-  Future<Map<String, dynamic>> _rpc(Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> _rpc(
+    Map<String, dynamic> body, {
+    Duration timeout = const Duration(seconds: 45),
+  }) async {
     final socket = _socket;
     if (socket == null) {
       throw VpnConnectException('ядро TUN не подключено');
@@ -262,7 +324,7 @@ class WindowsCoreClient {
       throw VpnConnectException('ядро TUN недоступно: $e');
     }
     try {
-      return await c.future.timeout(const Duration(seconds: 45));
+      return await c.future.timeout(timeout);
     } on TimeoutException {
       _pending.remove(id);
       if (!c.isCompleted) {
@@ -270,15 +332,17 @@ class WindowsCoreClient {
       }
       final cmd = body['cmd'] as String? ?? 'rpc';
       throw VpnConnectException(
-        'TimeoutException after 0:00:45.000000: Future not completed '
+        'TimeoutException after ${timeout.inSeconds}s: Future not completed '
         '(cmd=$cmd). Подключение прервано — повторите Connect.',
       );
     }
   }
 
-  /// Lightweight liveness check for soft core reuse.
   Future<void> ping() async {
-    final reply = await _rpc({'cmd': 'ping'});
+    final reply = await _rpc(
+      {'cmd': 'ping'},
+      timeout: const Duration(seconds: 2),
+    );
     if (reply['ok'] != true) {
       throw StateError('ping failed');
     }
@@ -312,6 +376,7 @@ class WindowsCoreClient {
       msg = jsonDecode(line) as Map<String, dynamic>;
     } catch (_) {
       onLog(line);
+      _noteStageFromLog(line);
       return;
     }
     final type = msg['type'] as String? ?? '';
@@ -324,6 +389,7 @@ class WindowsCoreClient {
     if (type == 'log') {
       final message = msg['message'] as String? ?? '';
       onLog(message);
+      _noteStageFromLog(message);
       if (message.contains('traffic_ready')) {
         ConnectionController.instance.markTrafficReady();
       }
@@ -341,6 +407,25 @@ class WindowsCoreClient {
         pingMs: msg['pingMs'] as int?,
         errorMessage: msg['error'] as String?,
       ));
+    }
+  }
+
+  void _noteStageFromLog(String message) {
+    final m = message.toLowerCase();
+    if (m.contains('[engine] started') || m.contains('engine_started')) {
+      lastStage = 'engine_started';
+    } else if (m.contains('[start] command_received')) {
+      lastStage = 'start_received';
+    } else if (m.contains('underlay_if')) {
+      lastStage = 'underlay_bind';
+    } else if (m.contains('tun_created') || m.contains('wintun')) {
+      lastStage = 'wintun';
+    } else if (m.contains('[relay] handshake')) {
+      lastStage = 'relay_handshake';
+    } else if (m.contains('[relay] connected')) {
+      lastStage = 'relay_connected';
+    } else if (m.contains('traffic_failed')) {
+      lastStage = 'traffic_failed';
     }
   }
 }
