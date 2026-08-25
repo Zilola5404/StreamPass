@@ -2,7 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
-enum ConnState { disconnected, connecting, connected, error }
+enum ConnState { disconnected, connecting, connected, disconnecting, error }
 
 class ConnectOrb extends StatefulWidget {
   final ConnState state;
@@ -42,11 +42,12 @@ class _ConnectOrbState extends State<ConnectOrb>
       label: switch (widget.state) {
         ConnState.connected => 'Disconnect',
         ConnState.connecting => 'Connecting',
+        ConnState.disconnecting => 'Disconnecting',
         ConnState.disconnected => 'Connect',
         ConnState.error => 'Retry connection',
       },
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: widget.state == ConnState.disconnecting ? null : widget.onTap,
         child: AnimatedBuilder(
           animation: _controller,
           builder: (context, _) {
@@ -111,7 +112,7 @@ class _OrbPainter extends CustomPainter {
     final center = size.center(Offset.zero);
     final baseRadius = size.width / 2.6;
 
-    final pulse = state == ConnState.connecting
+    final pulse = state == ConnState.connecting || state == ConnState.disconnecting
         ? 1 + 0.06 * sin(t * 2 * pi)
         : state == ConnState.connected
             ? 1 + 0.015 * sin(t * 2 * pi)
@@ -120,6 +121,7 @@ class _OrbPainter extends CustomPainter {
     final glowColor = switch (state) {
       ConnState.connected => AppColors.green,
       ConnState.connecting => AppColors.amber,
+      ConnState.disconnecting => AppColors.amber,
       ConnState.error => AppColors.danger,
       ConnState.disconnected => AppColors.cyan,
     };

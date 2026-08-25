@@ -57,6 +57,7 @@ void main() {
 
     expect(find.text('StreamPass'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('Подключить'), findsWidgets);
   });
 
   testWidgets('HomeScreen shows relay error instead of crashing when servers empty',

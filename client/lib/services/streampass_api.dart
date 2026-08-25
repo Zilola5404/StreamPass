@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'api_timeouts.dart';
 import 'connection_log.dart';
 import 'auth_errors.dart';
 import 'auth_service.dart';
@@ -18,7 +19,7 @@ class StreamPassApi {
     required this.baseUrl,
     required this.authService,
     http.Client? client,
-  }) : _client = client ?? http.Client();
+  }) : _client = client ?? TimedHttpClient();
 
   static final _log = ConnectionLog.instance;
 

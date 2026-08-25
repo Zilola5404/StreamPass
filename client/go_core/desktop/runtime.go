@@ -177,8 +177,10 @@ func (r *runtime) attachRelayAsync(ctx context.Context, req Request, emit func(E
 	case res := <-ch:
 		if res.err != nil {
 			emit(Event{Type: "log", Message: fmt.Sprintf("[TRAFFIC_FAILED] reason=relay_unavailable error=%v", res.err)})
-			emit(Event{Type: "log", Message: "[lifecycle] RELAY_FAILED — DIRECT path remains for DIRECT rules only"})
 			emit(Event{Type: "status", Event: "error", Relay: relayLabel, Error: "relay_unavailable"})
+			// Issue #4: do not leave TUN/default route as a blackhole when relay
+			// handshake fails. Tear down immediately; Flutter maps the error.
+			r.stop()
 			return
 		}
 		if ctx.Err() != nil {

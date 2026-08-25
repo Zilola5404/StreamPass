@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'connection_controller.dart';
 import 'connection_log.dart';
+import 'api_timeouts.dart';
 import 'native_vpn_log_level.dart';
 import 'streampass_api.dart';
+import 'user_facing_errors.dart';
 import 'vpn_channel.dart';
 import 'windows_core_client.dart';
 
@@ -121,14 +123,12 @@ class WindowsTrafficEngine implements WindowsVpnAdapter {
         _core = null;
       }
       rethrow;
-    } on TimeoutException catch (e) {
-      final msg =
-          'Подключение не завершилось вовремя (${e.duration ?? const Duration(seconds: 30)}). '
-          'Проверьте UAC / Wintun и повторите.';
+    } on TimeoutException {
+      final msg = UserFacingErrors.connectFailed;
       await _failSession(session, server.id, msg);
       throw VpnConnectException(msg);
     } catch (e) {
-      final msg = e.toString();
+      final msg = UserFacingErrors.map(e, fallback: UserFacingErrors.connectFailed);
       await _failSession(session, server.id, msg);
       throw VpnConnectException(msg);
     } finally {
@@ -183,6 +183,15 @@ class WindowsTrafficEngine implements WindowsVpnAdapter {
             update.event == VpnEvent.connecting)) {
       return;
     }
+    // Issue #4: async relay handshake failure must tear TUN (no blackhole).
+    if (update.event == VpnEvent.error) {
+      final mapped = UserFacingErrors.map(
+        update.errorMessage,
+        fallback: UserFacingErrors.connectFailed,
+      );
+      unawaited(_failSession(session, update.relayName ?? '', mapped));
+      return;
+    }
     _emit(update);
   }
 
@@ -191,9 +200,9 @@ class WindowsTrafficEngine implements WindowsVpnAdapter {
     _connecting = false;
     _cancelTrafficWatchdog();
     ConnectionController.instance.clearTrafficReady();
-    var msg = message;
-    if (msg.contains('администратора') ||
-        msg.toLowerCase().contains('access is denied')) {
+    var msg = UserFacingErrors.map(message, fallback: UserFacingErrors.connectFailed);
+    if (message.contains('администратора') ||
+        message.toLowerCase().contains('access is denied')) {
       msg =
           'Нужны права администратора для Wintun (подтвердите UAC). '
           'Если сайты не открывались после прошлого сеанса: '
@@ -214,18 +223,24 @@ class WindowsTrafficEngine implements WindowsVpnAdapter {
   }
 
   void _armTrafficWatchdog(int session, String relayId) {
-    // Issue #2: never mark traffic_ready without first_byte.
-    // Optional UI hint only — CONNECTED stays gated on trafficReady.
+    // Issue #4: if traffic never becomes ready, tear down — no blackhole UI.
     _cancelTrafficWatchdog();
-    _trafficWatchdog = Timer(const Duration(seconds: 45), () {
+    _trafficWatchdog = Timer(ApiTimeouts.trafficReady, () {
       if (session != _session) return;
       final c = ConnectionController.instance;
-      if (c.event != VpnEvent.connected) return;
+      if (c.event != VpnEvent.connected && c.event != VpnEvent.connecting) {
+        return;
+      }
       if (c.trafficReady) return;
-      _log.warn('vpn', 'traffic_ready still pending after 45s (not forcing ready)', {
+      _log.warn('vpn', 'traffic_ready timeout — tearing down', {
         'session': '$session',
         'relayId': relayId,
       });
+      unawaited(_failSession(
+        session,
+        relayId,
+        UserFacingErrors.connectFailed,
+      ));
     });
   }
 

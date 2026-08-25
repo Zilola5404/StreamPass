@@ -1,10 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show SocketException;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
 import '../main.dart' show navigateToLogin;
 import '../build_info.dart';
@@ -14,6 +11,8 @@ import '../services/auth_service.dart';
 import '../services/rule_engine_service.dart';
 import '../services/settings_service.dart';
 import '../services/streampass_api.dart';
+import '../services/api_timeouts.dart';
+import '../services/user_facing_errors.dart';
 import '../services/vpn_channel.dart';
 import '../services/connection_controller.dart';
 import '../services/client_update.dart';
@@ -69,6 +68,9 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
   bool _failoverInFlight = false;
   DiagUploader? _diagUploader;
   Timer? _statsFlushTimer;
+  /// Issue #4: autoConnect must not loop forever when server is offline.
+  int _autoConnectFailures = 0;
+  static const _maxAutoConnectFailures = 2;
 
   @override
   bool get wantKeepAlive => true;
@@ -136,7 +138,7 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
       if (!entitled) {
         _errorMessage = null;
       } else if (!relayOk) {
-        _errorMessage = 'Нет доступных серверов. Попробуйте позже';
+        _errorMessage = UserFacingErrors.serverUnavailable;
         _selectedRelay = null;
       }
     });
@@ -179,14 +181,11 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
     } catch (e) {
       if (!mounted) return false;
       _connectLog.error('connect', 'prerequisites refresh failed', {'error': '$e'});
+      final mapped = UserFacingErrors.map(e, fallback: UserFacingErrors.serverUnavailable);
       setState(() {
-        _subscriptionCheckFailed = _isNetworkError(e);
-        if (!_subscriptionCheckFailed) {
-          _errorMessage = e is ApiException
-              ? e.message
-              : 'Не удалось проверить подписку и серверы';
-          _state = ConnState.error;
-        }
+        _subscriptionCheckFailed = UserFacingErrors.isNetworkOrServer(e);
+        _errorMessage = mapped;
+        _state = ConnState.error;
       });
       return false;
     }
@@ -293,24 +292,13 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
       if (!mounted) return;
       _connectLog.error('api', 'subscription fetch failed', {'error': '$e'});
       setState(() {
-        _subscriptionCheckFailed = _isNetworkError(e);
+        _subscriptionCheckFailed = UserFacingErrors.isNetworkOrServer(e);
         _subscription = _subscriptionCheckFailed
             ? null
             : const SubscriptionInfo(isActive: false);
         _loadingSubscription = false;
       });
     }
-  }
-
-  bool _isNetworkError(Object e) {
-    if (e is SocketException) return true;
-    if (e is http.ClientException) return true;
-    if (e is ApiException && e.statusCode >= 500) return true;
-    final msg = e.toString().toLowerCase();
-    return msg.contains('failed host lookup') ||
-        msg.contains('connection timed out') ||
-        msg.contains('connection refused') ||
-        msg.contains('network is unreachable');
   }
 
   Future<void> _openSubscriptionScreen() async {
@@ -352,7 +340,7 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
     } catch (e) {
       if (!mounted) return;
       _connectLog.error('api', 'fetchServers failed', {'error': '$e'});
-      final network = _isNetworkError(e);
+      final network = UserFacingErrors.isNetworkOrServer(e);
       setState(() {
         _loadingRelay = false;
         if (network) {
@@ -360,7 +348,10 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
           _errorMessage = null;
           _state = ConnState.disconnected;
         } else {
-          _errorMessage = e is ApiException ? e.message : 'Не удалось загрузить список серверов';
+          _errorMessage = UserFacingErrors.map(
+            e,
+            fallback: UserFacingErrors.serverUnavailable,
+          );
           _state = ConnState.error;
         }
       });
@@ -443,10 +434,28 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
 
   Future<void> _maybeAutoConnect() async {
     if (_subscription?.isActive != true) return;
+    if (_autoConnectFailures >= _maxAutoConnectFailures) {
+      _connectLog.warn('connect', 'autoConnect stopped after failures', {
+        'failures': '$_autoConnectFailures',
+      });
+      return;
+    }
     final settings = await SettingsService().load();
     if (settings.autoConnect && _state == ConnState.disconnected) {
-      await _toggleConnection();
+      await _toggleConnection(fromAuto: true);
     }
+  }
+
+  void _noteAutoConnectFailure({bool fromAuto = false}) {
+    if (!fromAuto) return;
+    _autoConnectFailures++;
+    _connectLog.warn('connect', 'autoConnect failure counted', {
+      'failures': '$_autoConnectFailures',
+    });
+  }
+
+  void _resetAutoConnectFailures() {
+    _autoConnectFailures = 0;
   }
 
   @override
@@ -623,7 +632,9 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
     if (c.showConnected && _state == ConnState.connecting) {
       setState(() {
         _state = ConnState.connected;
+        _errorMessage = null;
       });
+      _resetAutoConnectFailures();
       _beginConnectedSession();
       return;
     }
@@ -653,6 +664,7 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
               ConnectionController.instance.showConnected) {
             break;
           }
+          if (_state == ConnState.disconnecting) break;
           _state = ConnState.connecting;
           _stopDurationTimer();
         case VpnEvent.connected:
@@ -660,6 +672,8 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
             _state = ConnState.connecting;
           } else {
             _state = ConnState.connected;
+            _errorMessage = null;
+            _resetAutoConnectFailures();
             _pingMs = _effectivePing(update.pingMs);
             final ping = _pingMs;
             if (ping != null && ping > 0) {
@@ -667,23 +681,33 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
             }
           }
         case VpnEvent.disconnected:
-          _state = ConnState.disconnected;
+          if (_state == ConnState.disconnecting) {
+            _state = ConnState.disconnected;
+          } else if (_state != ConnState.error) {
+            _state = ConnState.disconnected;
+          }
           _stopDurationTimer();
           _pingMs = _effectivePing(_selectedRelay?.rttMs);
         case VpnEvent.permissionDenied:
           _state = ConnState.error;
           _stopDurationTimer();
-          _errorMessage = 'Нужно разрешение на VPN-соединение';
+          _errorMessage = UserFacingErrors.permissionDenied;
         case VpnEvent.error:
           _state = ConnState.error;
           _stopDurationTimer();
-          final msg = update.errorMessage ?? 'Ошибка подключения';
-          if (AuthErrorCodes.isExpiredMessage(msg)) {
-            _errorMessage = 'Сессия истекла. Войдите снова';
+          final raw = update.errorMessage ?? '';
+          if (AuthErrorCodes.isExpiredMessage(raw)) {
+            _errorMessage = UserFacingErrors.sessionExpired;
             navigateToLogin(context, widget.authService, widget.api);
           } else {
-            _errorMessage = msg;
-            if (_autoMode) {
+            _errorMessage = UserFacingErrors.map(
+              raw,
+              fallback: UserFacingErrors.connectFailed,
+            );
+            // Tear down any half-open tunnel (esp. Windows async relay fail).
+            unawaited(_safeDisconnectAfterError());
+            if (_autoMode &&
+                !UserFacingErrors.isServerUnavailableMessage(_errorMessage)) {
               unawaited(_tryFailoverAfterError());
             }
           }
@@ -695,8 +719,16 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
     }
   }
 
+  Future<void> _safeDisconnectAfterError() async {
+    try {
+      await VpnChannel.disconnect();
+    } catch (_) {}
+  }
+
   Future<void> _tryFailoverAfterError() async {
     if (_failoverInFlight || !_autoMode) return;
+    if (_autoConnectFailures >= _maxAutoConnectFailures) return;
+    if (UserFacingErrors.isServerUnavailableMessage(_errorMessage)) return;
     try {
       final settings = await SettingsService().load();
       if (!settings.autoSelectRelay) return;
@@ -715,28 +747,38 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
     } catch (_) {}
   }
 
-  Future<void> _toggleConnection() async {
+  Future<void> _toggleConnection({bool fromAuto = false}) async {
+    if (_state == ConnState.disconnecting) return;
+
     if (_state == ConnState.connected || _state == ConnState.connecting) {
       setState(() {
-        _state = ConnState.disconnected;
+        _state = ConnState.disconnecting;
         _stopDurationTimer();
       });
       try {
         await VpnChannel.disconnect();
-      } catch (_) {
-        if (mounted) {
-          setState(() => _state = ConnState.disconnected);
-        }
+      } catch (_) {}
+      if (mounted) {
+        setState(() => _state = ConnState.disconnected);
       }
       return;
     }
 
-    setState(() => _state = ConnState.connecting);
+    // Manual retry clears autoConnect budget.
+    if (!fromAuto) {
+      _resetAutoConnectFailures();
+    }
+
+    setState(() {
+      _state = ConnState.connecting;
+      _errorMessage = null;
+    });
     final allowed = await _refreshConnectPrerequisites();
     if (!allowed) {
-      if (_subscription?.isActive != true) {
+      if (_subscription?.isActive != true && !_subscriptionCheckFailed) {
         _connectLog.warn('connect', 'blocked: subscription inactive');
         if (mounted) {
+          setState(() => _state = ConnState.disconnected);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Для подключения нужна активная подписка'),
@@ -746,20 +788,14 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
         }
         await _openSubscriptionScreen();
       } else {
-        _connectLog.warn('connect', 'blocked: no healthy servers');
+        _connectLog.warn('connect', 'blocked: no healthy servers / api');
         if (mounted) {
           setState(() {
             _state = ConnState.error;
-            _errorMessage =
-                'Нет доступных серверов. Попробуйте позже или обновите список';
+            _errorMessage ??= UserFacingErrors.serverUnavailable;
           });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Нет активных серверов — подключение недоступно'),
-              duration: Duration(seconds: 3),
-            ),
-          );
         }
+        _noteAutoConnectFailure(fromAuto: fromAuto);
       }
       if (mounted && _state == ConnState.connecting) {
         setState(() => _state = ConnState.disconnected);
@@ -783,7 +819,7 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
       var blockUdp443 = false;
       var optionsJson = '';
       try {
-        final ruleSet = await widget.api.fetchRules();
+        final ruleSet = await widget.api.fetchRules().timeout(ApiTimeouts.http);
         rulesJson = jsonEncode(ruleSet.toJson());
         final settings = await SettingsService().load();
         exclusionsJson = jsonEncode(settings.exclusions);
@@ -832,9 +868,10 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
       );
       if (!accepted && mounted) {
         setState(() {
-          _state = ConnState.disconnected;
-          _errorMessage = null;
+          _state = ConnState.error;
+          _errorMessage = UserFacingErrors.connectFailed;
         });
+        _noteAutoConnectFailure(fromAuto: fromAuto);
       }
       // accepted=true: statusStream drives connected / traffic_ready.
     } on VpnConnectException catch (e) {
@@ -842,16 +879,26 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
       if (!mounted) return;
       setState(() {
         _state = ConnState.error;
-        _errorMessage = e.message;
+        _errorMessage = UserFacingErrors.map(
+          e.message,
+          fallback: UserFacingErrors.connectFailed,
+        );
       });
+      _noteAutoConnectFailure(fromAuto: fromAuto);
+      unawaited(_safeDisconnectAfterError());
     } catch (e) {
       // TimeoutException / unexpected — never leave UI stuck in connecting.
       _connectLog.error('connect', 'connect failed', {'error': '$e'});
       if (!mounted) return;
       setState(() {
         _state = ConnState.error;
-        _errorMessage = e.toString();
+        _errorMessage = UserFacingErrors.map(
+          e,
+          fallback: UserFacingErrors.connectFailed,
+        );
       });
+      _noteAutoConnectFailure(fromAuto: fromAuto);
+      unawaited(_safeDisconnectAfterError());
     }
   }
 
@@ -859,10 +906,12 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
   Widget build(BuildContext context) {
     super.build(context);
     final statusText = switch (_state) {
-      ConnState.connected => 'Подключено',
-      ConnState.connecting => 'Подключение...',
-      ConnState.disconnected => 'Готов к подключению',
-      ConnState.error => _errorMessage ?? 'Ошибка',
+      ConnState.connected => UserFacingErrors.connected,
+      ConnState.connecting => UserFacingErrors.connecting,
+      ConnState.disconnecting => UserFacingErrors.disconnecting,
+      ConnState.disconnected => UserFacingErrors.connectCta,
+      ConnState.error =>
+        _errorMessage ?? UserFacingErrors.connectFailed,
     };
 
     return Stack(
@@ -909,14 +958,11 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
                         child: _StatusChip(
                           label: _state == ConnState.connected
                               ? 'Система активна'
-                              : (_state == ConnState.connecting &&
-                                      !kIsWeb &&
-                                      defaultTargetPlatform ==
-                                          TargetPlatform.windows &&
-                                      !ConnectionController
-                                          .instance.trafficReady)
-                                  ? 'Ожидание traffic_ready…'
-                                  : 'Авто-маршрут готов',
+                              : _state == ConnState.connecting
+                                  ? UserFacingErrors.connecting
+                                  : _state == ConnState.disconnecting
+                                      ? UserFacingErrors.disconnecting
+                                      : 'Авто-маршрут готов',
                           active: _state != ConnState.error,
                         ),
                       ),
@@ -1080,12 +1126,12 @@ class _BackendUnreachableBanner extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Нет связи с сервером',
+                Text(UserFacingErrors.serverUnavailable,
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 4),
                 Text(
-                  'Список серверов и подписка не загрузились. '
-                  'Проверьте интернет или отключите VPN и нажмите «Повторить».',
+                  'Не удалось загрузить серверы и подписку. '
+                  'Проверьте интернет и нажмите «Повторить».',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 10),

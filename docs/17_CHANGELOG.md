@@ -8,6 +8,7 @@
 ## [Unreleased]
 
 ### Fixed
+- **Issue #4:** Server Unavailable UX — HTTP timeouts, Home CTA «Подключить», русские ошибки, autoConnect limit, Windows TUN teardown on relay fail.
 - **Android VPN notification:** тап по foreground/failure-уведомлению открывает `MainActivity` (`setContentIntent` + `PendingIntent`).
 - **Android Connect / gVisor:** `streampasscore.aar` пересобран с `-tags with_gvisor` (ошибка `gVisor is not included in this build`). Команды сборки AAR в README обновлены.
 

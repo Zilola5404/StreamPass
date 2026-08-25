@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'api_timeouts.dart';
 import 'auth_errors.dart';
 import 'connection_log.dart';
 import 'device_identity.dart';
@@ -21,10 +22,9 @@ class AuthService {
     http.Client? client,
     TokenStorage? tokenStorage,
     DeviceIdentity? deviceIdentity,
-  })  : _client = client ?? http.Client(),
+  })  : _client = client ?? TimedHttpClient(),
         _tokens = tokenStorage ?? TokenStorage.secure(),
         _device = deviceIdentity ?? DeviceIdentity(storage: tokenStorage);
-
   static final _log = ConnectionLog.instance;
 
   String get apiBaseUrl => baseUrl.endsWith('/api/v1') ? baseUrl : '$baseUrl/api/v1';

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'theme/app_theme.dart';
+import 'services/api_timeouts.dart';
 import 'services/auth_service.dart';
 import 'services/settings_service.dart';
 import 'services/streampass_api.dart';
@@ -85,7 +86,8 @@ class _StreamPassAppState extends State<StreamPassApp> {
       darkTheme: buildAppTheme(),
       themeMode: _themeMode,
       home: FutureBuilder<bool>(
-        future: widget.authService.isLoggedIn.catchError((_) => false),
+        // Issue #4: never block splash forever on hung /refresh.
+        future: _resolveLoggedIn(widget.authService),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return OnboardingScreen(authService: widget.authService, api: widget.api);
@@ -110,4 +112,17 @@ void navigateToLogin(BuildContext context, AuthService authService, StreamPassAp
     MaterialPageRoute(builder: (_) => OnboardingScreen(authService: authService, api: api)),
     (_) => false,
   );
+}
+
+/// Bound auth gate: local session wins over hung refresh (Issue #4).
+Future<bool> _resolveLoggedIn(AuthService auth) async {
+  try {
+    return await auth.isLoggedIn.timeout(ApiTimeouts.authGate);
+  } catch (_) {
+    try {
+      return await auth.hasSession;
+    } catch (_) {
+      return false;
+    }
+  }
 }
