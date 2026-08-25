@@ -90,6 +90,20 @@ func StartDesktop(ctx context.Context, hyClient client.Client, mtu uint32, engin
 		EXP_DisableDNSHijack: false,
 	}
 
+	// Product split: RU IPv4 bypasses TUN (not a full VPN). Issue architect P0-3/4.
+	if opts.SplitRU {
+		if excludes, err := LoadRUExcludes(); err != nil {
+			logLine(fmt.Sprintf("[vpn] ru-exclude load failed: %v — full IPv4 capture", err))
+		} else if len(excludes) == 0 {
+			logLine("[vpn] ru-exclude empty — full IPv4 capture (looks like VPN)")
+		} else {
+			tunOptions.Inet4RouteExcludeAddress = excludes
+			logLine(fmt.Sprintf("[vpn] split-tunnel mode=exclude-ru ruExcludes=%d", len(excludes)))
+		}
+	} else {
+		logLine("[vpn] split-tunnel mode=full (no RU exclude)")
+	}
+
 	sess, err := startStack(ctx, tunOptions, hyClient, engine, relayID, opts, stackHooks{
 		AfterCreate: func() {
 			logLine("[vpn] TUN_CREATED name=" + windowsAdapterName + " addr=" + TunIPv4Host() + "/30")

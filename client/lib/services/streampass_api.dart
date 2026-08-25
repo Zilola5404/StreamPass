@@ -341,21 +341,44 @@ class TelemetryPayload {
 class SubscriptionInfo {
   final bool isActive;
   final DateTime? activeUntil;
+  final DateTime? trialEndsAt;
+  final String status;
+  final String source;
+  final int daysLeft;
 
-  const SubscriptionInfo({required this.isActive, this.activeUntil});
+  const SubscriptionInfo({
+    required this.isActive,
+    this.activeUntil,
+    this.trialEndsAt,
+    this.status = '',
+    this.source = '',
+    this.daysLeft = 0,
+  });
 
-  /// The exact status string the backend uses is matched tolerantly
-  /// (case-insensitive "ACTIVE" substring, or an active_until timestamp
-  /// still in the future) rather than a single hardcoded literal — this
-  /// degrades safely (reports "inactive") instead of silently misreading
-  /// a paid user as unpaid if the exact wording ever changes.
+  bool get isTrial => status.toUpperCase() == 'TRIAL' || source == 'trial';
+  bool get isExpired =>
+      status.toUpperCase() == 'EXPIRED' ||
+      (!isActive && (activeUntil != null || trialEndsAt != null));
+
   factory SubscriptionInfo.fromJson(Map<String, dynamic> json) {
     final statusStr = (json['status'] as String? ?? '').toUpperCase();
     final untilRaw = json['active_until'] as String?;
     final until = untilRaw != null ? DateTime.tryParse(untilRaw) : null;
+    final trialRaw = json['trial_ends_at'] as String?;
+    final trialUntil = trialRaw != null ? DateTime.tryParse(trialRaw) : null;
+    final source = (json['source'] as String? ?? '').toLowerCase();
+    final daysLeft = (json['days_left'] as num?)?.toInt() ?? 0;
     final active = statusStr == 'ACTIVE' ||
+        statusStr == 'TRIAL' ||
         (until != null && until.isAfter(DateTime.now()));
-    return SubscriptionInfo(isActive: active, activeUntil: until);
+    return SubscriptionInfo(
+      isActive: active,
+      activeUntil: until,
+      trialEndsAt: trialUntil,
+      status: statusStr,
+      source: source,
+      daysLeft: daysLeft,
+    );
   }
 }
 

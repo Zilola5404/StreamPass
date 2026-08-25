@@ -80,6 +80,7 @@ func New(d Deps) http.Handler {
 	mux.HandleFunc(v1("GET /config"), d.Config.GetLatest)
 	mux.HandleFunc(v1("GET /regions"), d.Relay.ListRegions)
 	mux.Handle(v1("POST /payments/webhook"), strictLimiter.Middleware()(http.HandlerFunc(d.Billing.HandleWebhook)))
+	mux.Handle(v1("POST /payments/platega/webhook"), strictLimiter.Middleware()(http.HandlerFunc(d.Billing.HandlePlategaWebhook)))
 	if d.Payments != nil {
 		mux.Handle(v1("POST /payments/telegram/webhook"), strictLimiter.Middleware()(http.HandlerFunc(d.Payments.HandleTelegramWebhook)))
 		mux.Handle(v1("GET /payments/usdt/address"), strictLimiter.Middleware()(http.HandlerFunc(d.Payments.USDTAddress)))

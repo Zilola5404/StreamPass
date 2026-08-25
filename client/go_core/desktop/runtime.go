@@ -113,11 +113,12 @@ func (r *runtime) start(req Request, emit func(Event)) error {
 	relayLabel := req.RelayHost
 	ctx, cancel := context.WithCancel(context.Background())
 	blockUDP443 := req.BlockUDP443 || req.NetworkMode == "tcp_only"
-
+	splitRU := req.NetworkMode == "" || req.NetworkMode == "split" || req.NetworkMode == "tcp_only"
 	// ENGINE_STARTED first — Hysteria handshake is NOT part of cmd=start.
 	stage = "wintun"
 	bridge, err := tunbridge.StartDesktop(ctx, nil, mtu, engine, relayLabel, tunbridge.Options{
 		BlockUDP443: blockUDP443,
+		SplitRU:     splitRU,
 	})
 	if err != nil {
 		cancel()

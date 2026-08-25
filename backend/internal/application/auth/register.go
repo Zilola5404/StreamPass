@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"time"
 
 	"streampass/backend/internal/domain/user"
 	apperrors "streampass/shared/errors"
@@ -18,21 +19,36 @@ type IDGenerator interface {
 // RegisterUseCase implements "POST /register" business logic (spec section
 // 13/22: user registration).
 type RegisterUseCase struct {
-	repo   user.Repository
-	hasher PasswordHasher
-	ids    IDGenerator
-	clock  Clock
-	log    *logger.Logger
+	repo      user.Repository
+	hasher    PasswordHasher
+	ids       IDGenerator
+	clock     Clock
+	log       *logger.Logger
+	trialDays int
 }
+
+// DefaultTrialDays is the architect-approved free trial length.
+const DefaultTrialDays = 3
 
 // NewRegisterUseCase wires the use case via constructor injection — every
 // dependency is an interface (Dependency Injection / Interface First).
 func NewRegisterUseCase(repo user.Repository, hasher PasswordHasher, ids IDGenerator, clock Clock, log *logger.Logger) *RegisterUseCase {
-	return &RegisterUseCase{repo: repo, hasher: hasher, ids: ids, clock: clock, log: log.With("register")}
+	return &RegisterUseCase{
+		repo: repo, hasher: hasher, ids: ids, clock: clock,
+		log: log.With("register"), trialDays: DefaultTrialDays,
+	}
+}
+
+// WithTrialDays overrides the free-trial length (tests / config).
+func (uc *RegisterUseCase) WithTrialDays(days int) *RegisterUseCase {
+	if days > 0 {
+		uc.trialDays = days
+	}
+	return uc
 }
 
 // Execute validates input, ensures the email is not taken, hashes the
-// password and persists a new User.
+// password and persists a new User with a server-side free trial.
 func (uc *RegisterUseCase) Execute(ctx context.Context, email, password string) (*user.User, error) {
 	if err := validateCredentials(email, password); err != nil {
 		return nil, err
@@ -55,7 +71,14 @@ func (uc *RegisterUseCase) Execute(ctx context.Context, email, password string) 
 		return nil, apperrors.Wrap(apperrors.CodeInternal, "failed to hash password", err)
 	}
 
-	u := user.NewUser(uc.ids.NewID(), email, hash, uc.clock.Now())
+	now := uc.clock.Now()
+	u := user.NewUser(uc.ids.NewID(), email, hash, now)
+	trialEnd := now.Add(time.Duration(uc.trialDays) * 24 * time.Hour)
+	u.TrialStartedAt = &now
+	u.TrialEndsAt = &trialEnd
+	u.SubscriptionActiveUntil = &trialEnd
+	u.EntitlementSource = "trial"
+
 	if err := uc.repo.Create(ctx, u); err != nil {
 		uc.log.Error(ctx, err)
 		return nil, apperrors.Wrap(apperrors.CodeInternal, "failed to create user", err)

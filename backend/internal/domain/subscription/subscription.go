@@ -8,11 +8,13 @@ package subscription
 
 import "time"
 
-// Status is the coarse state of a user's subscription.
+// Status is the coarse state of a user's subscription / trial.
 type Status string
 
 const (
+	StatusTrial    Status = "TRIAL"
 	StatusActive   Status = "ACTIVE"
+	StatusExpired  Status = "EXPIRED"
 	StatusInactive Status = "INACTIVE"
 )
 
@@ -20,14 +22,44 @@ const (
 type Info struct {
 	Status      Status
 	ActiveUntil *time.Time
+	// TrialEndsAt is set when the user is (or was) on a free trial.
+	TrialEndsAt *time.Time
+	// Source: trial | paid | admin | ""
+	Source string
+	// DaysLeft is remaining whole days of access (0 if expired).
+	DaysLeft int
 }
 
-// NewInfo derives subscription Info from a raw expiry timestamp.
+// NewInfo derives subscription Info from expiry + optional trial metadata.
 func NewInfo(activeUntil *time.Time, now time.Time) Info {
-	if activeUntil != nil && activeUntil.After(now) {
-		return Info{Status: StatusActive, ActiveUntil: activeUntil}
+	return NewInfoWithTrial(activeUntil, nil, "", now)
+}
+
+// NewInfoWithTrial builds Info including trial / source fields.
+func NewInfoWithTrial(activeUntil, trialEndsAt *time.Time, source string, now time.Time) Info {
+	info := Info{
+		ActiveUntil: activeUntil,
+		TrialEndsAt: trialEndsAt,
+		Source:      source,
 	}
-	return Info{Status: StatusInactive, ActiveUntil: activeUntil}
+	if activeUntil != nil && activeUntil.After(now) {
+		info.DaysLeft = int(activeUntil.Sub(now).Hours() / 24)
+		if info.DaysLeft < 0 {
+			info.DaysLeft = 0
+		}
+		if source == "trial" || (trialEndsAt != nil && !trialEndsAt.Before(*activeUntil) && source != "paid" && source != "admin") {
+			info.Status = StatusTrial
+			return info
+		}
+		info.Status = StatusActive
+		return info
+	}
+	if activeUntil != nil || trialEndsAt != nil {
+		info.Status = StatusExpired
+		return info
+	}
+	info.Status = StatusInactive
+	return info
 }
 
 // Payment records one payment-provider transaction, used for
@@ -40,7 +72,7 @@ type Payment struct {
 	PeriodDays     int
 	Status         PaymentStatus
 	CreatedAt      time.Time
-	Provider       string // yookassa | telegram | usdt
+	Provider       string // yookassa | telegram | usdt | platega
 	Currency       string // RUB | XTR | USDT
 	TelegramUserID *int64
 	Tariff         string

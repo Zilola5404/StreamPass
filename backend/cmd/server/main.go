@@ -30,6 +30,7 @@ import (
 	"streampass/backend/internal/domain/user"
 	"streampass/backend/internal/infrastructure/http/handler"
 	"streampass/backend/internal/infrastructure/http/router"
+	"streampass/backend/internal/infrastructure/payment/platega"
 	"streampass/backend/internal/infrastructure/payment/telegram"
 	"streampass/backend/internal/infrastructure/payment/yookassa"
 	"streampass/backend/internal/infrastructure/postgres"
@@ -127,11 +128,31 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 	sessions := redisclient.NewSessionStore(redis)
 	resetTokens := redisclient.NewResetTokenStore(redis)
 
-	paymentProvider := yookassa.New(yookassa.Config{
+	paymentProvider := billingsvc.PaymentProvider(yookassa.New(yookassa.Config{
 		ShopID:    cfg.StringOr("billing.yookassa_shop_id", ""),
 		SecretKey: cfg.StringOr("billing.yookassa_secret_key", ""),
 		ReturnURL: cfg.StringOr("billing.yookassa_return_url", ""),
-	})
+	}))
+	var plategaProv *platega.Provider
+	defaultProvider := strings.ToLower(cfg.StringOr("billing.default_provider", "yookassa"))
+	if defaultProvider == "platega" {
+		plategaProv = platega.New(platega.Config{
+			MerchantID:    cfg.StringOr("billing.platega_merchant_id", ""),
+			Secret:        cfg.StringOr("billing.platega_secret", ""),
+			ReturnURL:     cfg.StringOr("billing.platega_return_url", ""),
+			FailedURL:     cfg.StringOr("billing.platega_failed_url", ""),
+			PaymentMethod: cfg.IntOr("billing.platega_payment_method", platega.PaymentMethodSBPQR),
+		})
+		paymentProvider = plategaProv
+	} else if mid := cfg.StringOr("billing.platega_merchant_id", ""); mid != "" {
+		// Keep Platega configured for webhook verification even when default is YooKassa.
+		plategaProv = platega.New(platega.Config{
+			MerchantID: mid,
+			Secret:     cfg.StringOr("billing.platega_secret", ""),
+			ReturnURL:  cfg.StringOr("billing.platega_return_url", ""),
+			FailedURL:  cfg.StringOr("billing.platega_failed_url", ""),
+		})
+	}
 
 	tgBot := telegram.New(cfg.StringOr("billing.telegram_bot_token", ""))
 	starsPlans := telegram.DefaultStarsPlans()
@@ -182,13 +203,19 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 			})
 		}
 	} else {
-		monthAmount := int64(cfg.IntOr("billing.plan_amount_rub", 299))
+		basicAmount := int64(cfg.IntOr("billing.plan_basic_rub", cfg.IntOr("billing.plan_amount_rub", 299)))
+		proAmount := int64(cfg.IntOr("billing.plan_pro_rub", 499))
+		bizAmount := int64(cfg.IntOr("billing.plan_business_rub", 1490))
 		monthDays := cfg.IntOr("billing.plan_period_days", 30)
-		yearAmount := int64(cfg.IntOr("billing.yearly_amount_rub", int(monthAmount*10)))
+		yearAmount := int64(cfg.IntOr("billing.yearly_amount_rub", int(basicAmount*10)))
 		yearDays := cfg.IntOr("billing.yearly_period_days", 365)
 		billingPlans = []billingsvc.Plan{
-			{Code: "month", Title: "Месяц", AmountRUB: monthAmount, PeriodDays: monthDays, Currency: "RUB"},
-			{Code: "year", Title: "Год", AmountRUB: yearAmount, PeriodDays: yearDays, Currency: "RUB"},
+			{Code: "basic", Title: "Basic", AmountRUB: basicAmount, PeriodDays: monthDays, Currency: "RUB"},
+			{Code: "pro", Title: "Pro", AmountRUB: proAmount, PeriodDays: monthDays, Currency: "RUB"},
+			{Code: "business", Title: "Business", AmountRUB: bizAmount, PeriodDays: monthDays, Currency: "RUB"},
+			// Aliases for older clients
+			{Code: "month", Title: "Месяц (Basic)", AmountRUB: basicAmount, PeriodDays: monthDays, Currency: "RUB"},
+			{Code: "year", Title: "Год (Basic)", AmountRUB: yearAmount, PeriodDays: yearDays, Currency: "RUB"},
 		}
 	}
 	billingService := billingsvc.NewService(userRepo, paymentRepo, paymentProvider, billingPlans, billingsvc.SystemClock{}, log)
@@ -203,13 +230,18 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 	exclusionService := exclusionsvc.NewService(exclusionRepo, log)
 	diagService := diagsvc.NewService(diagRepo, diagsvc.SystemClock{}, log)
 
+	billingHandler := handler.NewBillingHandler(billingService, cfg.StringOr("billing.webhook_secret", ""))
+	if plategaProv != nil {
+		billingHandler.SetPlategaAuth(plategaProv.VerifyCallbackHeaders)
+	}
+
 	return router.Deps{
 		Auth:            handler.NewAuthHandler(authService),
 		Rule:            handler.NewRuleHandler(ruleService),
 		Relay:           handler.NewRelayHandler(relayService),
 		Telemetry:       handler.NewTelemetryHandler(telemetryService),
 		Config:          handler.NewConfigHandler(configService),
-		Billing:         handler.NewBillingHandler(billingService, cfg.StringOr("billing.webhook_secret", "")),
+		Billing:         billingHandler,
 		Payments:        handler.NewPaymentsHandler(paymentsService, cfg.StringOr("billing.telegram_webhook_secret", "")),
 		Exclusion:       handler.NewExclusionHandler(exclusionService),
 		Health:          handler.NewHealthHandler(),

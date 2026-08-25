@@ -136,6 +136,7 @@ func (s *Service) CreatePayment(ctx context.Context, userID user.ID, planCode st
 	}
 	providerPaymentID = id
 	url = confURL
+	provider = s.providerName()
 
 	payment := &subscription.Payment{
 		ID:         paymentID,
@@ -155,6 +156,20 @@ func (s *Service) CreatePayment(ctx context.Context, userID user.ID, planCode st
 	}
 
 	return url, nil
+}
+
+func (s *Service) providerName() string {
+	type named interface{ Name() string }
+	if n, ok := s.provider.(named); ok {
+		return n.Name()
+	}
+	return "yookassa"
+}
+
+// HandleProviderConfirmed credits a payment after a trusted provider webhook
+// (Platega CONFIRMED). Still re-fetches status when FetchPaymentStatus works.
+func (s *Service) HandleProviderConfirmed(ctx context.Context, providerPaymentID string) error {
+	return s.HandleWebhook(ctx, providerPaymentID)
 }
 
 // HandleWebhook processes a payment-provider notification.
@@ -247,7 +262,12 @@ func (s *Service) GetSubscription(ctx context.Context, userID user.ID) (subscrip
 	if err != nil {
 		return subscription.Info{}, err
 	}
-	return subscription.NewInfo(u.SubscriptionActiveUntil, s.clock.Now()), nil
+	return subscription.NewInfoWithTrial(
+		u.SubscriptionActiveUntil,
+		u.TrialEndsAt,
+		u.EntitlementSource,
+		s.clock.Now(),
+	), nil
 }
 
 // ListPayments implements "GET /payments" history (E06).

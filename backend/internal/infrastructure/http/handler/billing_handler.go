@@ -3,6 +3,7 @@ package handler
 import (
 	"crypto/subtle"
 	"net/http"
+	"strings"
 
 	billingsvc "streampass/backend/internal/application/billing"
 	httpx "streampass/backend/internal/infrastructure/http"
@@ -15,6 +16,8 @@ import (
 type BillingHandler struct {
 	svc           *billingsvc.Service
 	webhookSecret string
+	// plategaAuth verifies X-MerchantId / X-Secret on Platega callbacks (optional).
+	plategaAuth func(merchantID, secret string) bool
 }
 
 // NewBillingHandler builds the Billing HTTP handler.
@@ -22,6 +25,11 @@ type BillingHandler struct {
 // X-StreamPass-Webhook-Secret (defense in depth — S-04).
 func NewBillingHandler(svc *billingsvc.Service, webhookSecret string) *BillingHandler {
 	return &BillingHandler{svc: svc, webhookSecret: webhookSecret}
+}
+
+// SetPlategaAuth enables Platega callback header verification.
+func (h *BillingHandler) SetPlategaAuth(fn func(merchantID, secret string) bool) {
+	h.plategaAuth = fn
 }
 
 type createPaymentRequest struct {
@@ -88,9 +96,52 @@ func (h *BillingHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusNoContent, nil)
 }
 
+type plategaCallback struct {
+	ID     string  `json:"id"`
+	Amount float64 `json:"amount"`
+	Status string  `json:"status"`
+	Payload string `json:"payload"`
+}
+
+// HandlePlategaWebhook handles POST /payments/platega/webhook.
+// Activates subscription only on CONFIRMED after FetchPaymentStatus confirmation.
+func (h *BillingHandler) HandlePlategaWebhook(w http.ResponseWriter, r *http.Request) {
+	if h.plategaAuth != nil {
+		mid := r.Header.Get("X-MerchantId")
+		sec := r.Header.Get("X-Secret")
+		if !h.plategaAuth(mid, sec) {
+			httpx.WriteError(w, apperrors.New(apperrors.CodeForbidden, "invalid platega credentials"))
+			return
+		}
+	}
+	var cb plategaCallback
+	if err := httpx.DecodeJSON(r, &cb); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	status := strings.ToUpper(strings.TrimSpace(cb.Status))
+	if status != "CONFIRMED" {
+		// Acknowledge CANCELED / CHARGEBACKED without activating.
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{"ok": "ignored"})
+		return
+	}
+	if cb.ID == "" {
+		httpx.WriteError(w, apperrors.New(apperrors.CodeInvalidInput, "missing transaction id"))
+		return
+	}
+	if err := h.svc.HandleWebhook(r.Context(), cb.ID); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"ok": "confirmed"})
+}
+
 type subscriptionResponse struct {
 	Status      string  `json:"status"`
 	ActiveUntil *string `json:"active_until,omitempty"`
+	TrialEndsAt *string `json:"trial_ends_at,omitempty"`
+	Source      string  `json:"source,omitempty"`
+	DaysLeft    int     `json:"days_left"`
 }
 
 // GetSubscription handles "GET /subscription" (authenticated).
@@ -107,10 +158,18 @@ func (h *BillingHandler) GetSubscription(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	resp := subscriptionResponse{Status: string(info.Status)}
+	resp := subscriptionResponse{
+		Status:   string(info.Status),
+		Source:   info.Source,
+		DaysLeft: info.DaysLeft,
+	}
 	if info.ActiveUntil != nil {
 		formatted := info.ActiveUntil.Format(httpx.TimeFormat)
 		resp.ActiveUntil = &formatted
+	}
+	if info.TrialEndsAt != nil {
+		formatted := info.TrialEndsAt.Format(httpx.TimeFormat)
+		resp.TrialEndsAt = &formatted
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }

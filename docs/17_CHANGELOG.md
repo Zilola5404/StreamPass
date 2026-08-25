@@ -9,6 +9,7 @@
 
 ### Fixed
 - **Issue #4:** Server Unavailable UX — HTTP timeouts, Home CTA «Подключить», русские ошибки, autoConnect limit, Windows TUN teardown on relay fail.
+- **Architect Stage 1:** Windows RU split-tunnel (`Inet4RouteExcludeAddress`); 3-day trial on register; Basic/Pro/Business plans; Platega PaymentProvider + webhook; failover poll 10s.
 - **Android VPN notification:** тап по foreground/failure-уведомлению открывает `MainActivity` (`setContentIntent` + `PendingIntent`).
 - **Android Connect / gVisor:** `streampasscore.aar` пересобран с `-tags with_gvisor` (ошибка `gVisor is not included in this build`). Команды сборки AAR в README обновлены.
 

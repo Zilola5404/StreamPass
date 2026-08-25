@@ -40,12 +40,22 @@ billing:
   plan_period_days: 30
   yearly_amount_rub: 2990
   yearly_period_days: 365
+  plan_basic_rub: 299
+  plan_pro_rub: 499
+  plan_business_rub: 1490
+  # yookassa | platega — card/SBP provider for POST /payments (Telegram Stars still overrides when bot token set)
+  default_provider: yookassa
   webhook_secret: ${PAYMENTS_WEBHOOK_SECRET}
   yookassa_shop_id: ${YOOKASSA_SHOP_ID}
   yookassa_secret_key: ${YOOKASSA_SECRET_KEY}
   yookassa_return_url: ${YOOKASSA_RETURN_URL}
+  platega_merchant_id: ${PLATEGA_MERCHANT_ID}
+  platega_secret: ${PLATEGA_SECRET}
+  platega_return_url: ${PLATEGA_RETURN_URL}
+  platega_failed_url: ${PLATEGA_FAILED_URL}
+  platega_payment_method: 2 # 2=SBP QR, 10=cards
   # Telegram Stars + USDT (TZ 02.3 / BL-040). When telegram_bot_token is set,
-  # POST /payments creates Stars invoices instead of YooKassa.
+  # POST /payments creates Stars invoices instead of YooKassa/Platega.
   telegram_bot_token: ${TELEGRAM_BOT_TOKEN}
   telegram_webhook_secret: ${TELEGRAM_WEBHOOK_SECRET}
   usdt_trc20_address: ${USDT_TRC20_ADDRESS}

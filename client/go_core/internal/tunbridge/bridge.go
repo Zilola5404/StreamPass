@@ -126,6 +126,10 @@ func TunIPv4Host() string {
 type Options struct {
 	// BlockUDP443 drops UDP/443 so apps fall back to TCP/443 (QUIC off).
 	BlockUDP443 bool
+	// SplitRU excludes RU IPv4 CIDRs from AutoRoute (Windows). When false
+	// (full_relay / direct_test), all IPv4 stays on TUN. Android applies the
+	// same policy in VpnRouteConfigurator — not here.
+	SplitRU bool
 }
 
 // Start brings up the TUN stack and routes each flow via the Decision Engine.

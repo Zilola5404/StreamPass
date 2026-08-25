@@ -541,7 +541,7 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
 
   void _startHealthPoll() {
     _healthTimer?.cancel();
-    _healthTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+    _healthTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       unawaited(_checkRelayHealth());
     });
   }
@@ -990,8 +990,16 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
                           _bootstrap();
                         }),
                         const SizedBox(height: 14),
+                      ] else if (!_loadingSubscription &&
+                          _subscription?.isTrial == true &&
+                          _subscription?.isActive == true) ...[
+                        _TrialBanner(
+                          daysLeft: _subscription!.daysLeft,
+                          onTap: _openSubscriptionScreen,
+                        ),
+                        const SizedBox(height: 14),
                       ] else if (!_loadingSubscription && _subscription?.isActive != true) ...[
-                        _SubscriptionBanner(onTap: _openSubscriptionScreen),
+                        _PaywallBanner(onTap: _openSubscriptionScreen),
                         const SizedBox(height: 14),
                       ],
                       _RelayCard(
@@ -1145,9 +1153,49 @@ class _BackendUnreachableBanner extends StatelessWidget {
   }
 }
 
-class _SubscriptionBanner extends StatelessWidget {
+class _TrialBanner extends StatelessWidget {
+  final int daysLeft;
   final VoidCallback onTap;
-  const _SubscriptionBanner({required this.onTap});
+  const _TrialBanner({required this.daysLeft, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = daysLeft <= 0
+        ? 'Пробный период заканчивается сегодня'
+        : daysLeft == 1
+            ? 'Пробный период: остался 1 день'
+            : 'Пробный период: осталось $daysLeft дн.';
+    return GestureDetector(
+      onTap: onTap,
+      child: _GlassCard(
+        child: Row(
+          children: [
+            const Icon(Icons.timer_outlined, color: AppColors.cyan),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Подписка от 299 ₽/мес — выберите тариф заранее',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PaywallBanner extends StatelessWidget {
+  final VoidCallback onTap;
+  const _PaywallBanner({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1162,11 +1210,13 @@ class _SubscriptionBanner extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Подписка не активна',
+                  Text('Пробный период закончился',
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 4),
-                  Text('Оформите подписку, чтобы подключиться к VPN',
-                      style: Theme.of(context).textTheme.bodySmall),
+                  Text(
+                    'Выберите подписку, чтобы продолжить пользоваться StreamPass',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ],
               ),
             ),

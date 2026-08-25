@@ -18,7 +18,8 @@ import (
 // domain-meaningful AppError.
 const pqUniqueViolationCode = "23505"
 
-const userSelectCols = `id, email, password_hash, created_at, updated_at, subscription_active_until, banned_at`
+const userSelectCols = `id, email, password_hash, created_at, updated_at, subscription_active_until, banned_at, trial_started_at, trial_ends_at, entitlement_source`
+
 
 // UserRepository implements user.Repository against the "users" table.
 type UserRepository struct {
@@ -30,13 +31,21 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-// Create inserts a new user row.
+// Create inserts a new user row (including optional trial entitlement).
 func (r *UserRepository) Create(ctx context.Context, u *user.User) error {
 	const q = `
-		INSERT INTO users (id, email, password_hash, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5)`
+		INSERT INTO users (
+			id, email, password_hash, created_at, updated_at,
+			subscription_active_until, trial_started_at, trial_ends_at, entitlement_source
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
 
-	_, err := r.db.ExecContext(ctx, q, u.ID, u.Email, u.PasswordHash, u.CreatedAt, u.UpdatedAt)
+	_, err := r.db.ExecContext(ctx, q,
+		u.ID, u.Email, u.PasswordHash, u.CreatedAt, u.UpdatedAt,
+		nullTime(u.SubscriptionActiveUntil),
+		nullTime(u.TrialStartedAt),
+		nullTime(u.TrialEndsAt),
+		nullString(u.EntitlementSource),
+	)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return apperrors.New(apperrors.CodeAlreadyExists, "email already registered")
@@ -44,6 +53,20 @@ func (r *UserRepository) Create(ctx context.Context, u *user.User) error {
 		return apperrors.Wrap(apperrors.CodeInternal, "failed to insert user", err)
 	}
 	return nil
+}
+
+func nullTime(t *time.Time) any {
+	if t == nil {
+		return nil
+	}
+	return *t
+}
+
+func nullString(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 // FindByEmail looks up a user by email.
@@ -73,8 +96,12 @@ func scanUser(scanner interface {
 	Scan(dest ...any) error
 }) (*user.User, error) {
 	var u user.User
-	var subUntil, bannedAt sql.NullTime
-	err := scanner.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt, &subUntil, &bannedAt)
+	var subUntil, bannedAt, trialStart, trialEnd sql.NullTime
+	var entitlement sql.NullString
+	err := scanner.Scan(
+		&u.ID, &u.Email, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt,
+		&subUntil, &bannedAt, &trialStart, &trialEnd, &entitlement,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -83,6 +110,15 @@ func scanUser(scanner interface {
 	}
 	if bannedAt.Valid {
 		u.BannedAt = &bannedAt.Time
+	}
+	if trialStart.Valid {
+		u.TrialStartedAt = &trialStart.Time
+	}
+	if trialEnd.Valid {
+		u.TrialEndsAt = &trialEnd.Time
+	}
+	if entitlement.Valid {
+		u.EntitlementSource = entitlement.String
 	}
 	return &u, nil
 }
@@ -96,7 +132,15 @@ func isUniqueViolation(err error) bool {
 
 // ExtendSubscription sets the user's subscription expiry timestamp.
 func (r *UserRepository) ExtendSubscription(ctx context.Context, id user.ID, activeUntil time.Time) error {
-	const q = `UPDATE users SET subscription_active_until = $2, updated_at = NOW() WHERE id = $1`
+	const q = `
+		UPDATE users
+		SET subscription_active_until = $2,
+		    entitlement_source = CASE
+		      WHEN entitlement_source IS NULL OR entitlement_source = 'trial' THEN 'paid'
+		      ELSE entitlement_source
+		    END,
+		    updated_at = NOW()
+		WHERE id = $1`
 	res, err := r.db.ExecContext(ctx, q, id, activeUntil)
 	if err != nil {
 		return apperrors.Wrap(apperrors.CodeInternal, "failed to extend subscription", err)

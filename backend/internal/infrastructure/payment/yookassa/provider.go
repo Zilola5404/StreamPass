@@ -50,6 +50,9 @@ func New(cfg Config) *Provider {
 	}
 }
 
+// Name identifies this provider in payments.provider.
+func (p *Provider) Name() string { return "yookassa" }
+
 type createPaymentRequest struct {
 	Amount struct {
 		Value    string `json:"value"`

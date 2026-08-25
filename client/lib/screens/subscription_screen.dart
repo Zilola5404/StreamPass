@@ -24,7 +24,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
   SubscriptionInfo? _info;
   List<PlanInfo> _plans = const [];
   List<PaymentRecord> _payments = const [];
-  String _selectedPlan = 'month';
+  String _selectedPlan = 'pro';
   bool _loading = true;
   bool _payLoading = false;
   bool _awaitingPaymentReturn = false;

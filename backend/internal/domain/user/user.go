@@ -23,8 +23,13 @@ type User struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	// SubscriptionActiveUntil is a denormalized read model updated by the
-	// Billing module; Auth only reads it, never writes it.
+	// Billing module; Auth only reads it, never writes it (except trial on register).
 	SubscriptionActiveUntil *time.Time
+	// TrialStartedAt / TrialEndsAt are set once on registration (architect trial model).
+	TrialStartedAt *time.Time
+	TrialEndsAt    *time.Time
+	// EntitlementSource: trial | paid | admin (empty = legacy paid/until only).
+	EntitlementSource string
 	// BannedAt is set by admin ban (BL-050); nil means not banned.
 	BannedAt *time.Time
 }
