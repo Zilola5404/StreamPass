@@ -22,12 +22,21 @@ import (
 // Hysteria candidate dial runs AFTER the RPC reply (separate lifecycle).
 const startEngineBudget = 20 * time.Second
 
+// Issue #2: session stall → TRAFFIC_STALLED when TX advances without RX.
+const (
+	stallCheckEvery   = 10 * time.Second
+	stallNoRxAfterTx  = 45 * time.Second
+	stallIdleGrace    = 2 * time.Minute // no traffic at all is IDLE, not stalled
+)
+
 type runtime struct {
 	mu          sync.Mutex
 	cancel      context.CancelFunc
 	relayCancel context.CancelFunc
 	bridge      *tunbridge.Session
 	hy          client.Client
+	lastReq     Request
+	recovering  bool
 }
 
 func (r *runtime) start(req Request, emit func(Event)) error {
@@ -124,6 +133,7 @@ func (r *runtime) start(req Request, emit func(Event)) error {
 	r.cancel = cancel
 	r.bridge = bridge
 	r.hy = nil
+	r.lastReq = req
 	r.mu.Unlock()
 
 	stage = "engine_started"
@@ -141,6 +151,7 @@ func (r *runtime) start(req Request, emit func(Event)) error {
 		r.relayCancel = relayCancel
 		r.mu.Unlock()
 		go r.attachRelayAsync(relayCtx, req, emit, bridge, relayLabel)
+		go r.watchTrafficHealth(relayCtx, emit)
 	} else {
 		emit(Event{Type: "log", Message: "[RELAY] skipped (direct_test or empty config)"})
 	}
@@ -166,7 +177,8 @@ func (r *runtime) attachRelayAsync(ctx context.Context, req Request, emit func(E
 	case res := <-ch:
 		if res.err != nil {
 			emit(Event{Type: "log", Message: fmt.Sprintf("[TRAFFIC_FAILED] reason=relay_unavailable error=%v", res.err)})
-			emit(Event{Type: "log", Message: "[RELAY] unavailable — DIRECT path remains active"})
+			emit(Event{Type: "log", Message: "[lifecycle] RELAY_FAILED — DIRECT path remains for DIRECT rules only"})
+			emit(Event{Type: "status", Event: "error", Relay: relayLabel, Error: "relay_unavailable"})
 			return
 		}
 		if ctx.Err() != nil {
@@ -186,10 +198,123 @@ func (r *runtime) attachRelayAsync(ctx context.Context, req Request, emit func(E
 			_ = old.Close()
 		}
 		emit(Event{Type: "log", Message: fmt.Sprintf(
-			"[RELAY] connected via=%s/%s pingMs=%d",
+			"[RELAY] connected via=%s/%s pingMs=%d maxIdle=%s keepAlive=%s",
 			res.out.Candidate.Network, res.out.Candidate.Host, res.out.PingMs,
+			hyconfig.SessionMaxIdleTimeout, hyconfig.SessionKeepAlivePeriod,
 		)})
 		emit(Event{Type: "status", Event: "connected", Relay: label, PingMs: res.out.PingMs})
+	}
+}
+
+// recoverRelay rebinds underlay and re-handshakes Hysteria without tearing TUN (Issue #2).
+func (r *runtime) recoverRelay(emit func(Event)) error {
+	r.mu.Lock()
+	if r.recovering {
+		r.mu.Unlock()
+		return fmt.Errorf("recovery already in progress")
+	}
+	req := r.lastReq
+	bridge := r.bridge
+	r.recovering = true
+	r.mu.Unlock()
+	defer func() {
+		r.mu.Lock()
+		r.recovering = false
+		r.mu.Unlock()
+	}()
+
+	if bridge == nil || req.ConnectionConfig == "" || req.NetworkMode == "direct_test" {
+		return fmt.Errorf("nothing to recover")
+	}
+
+	emit(Event{Type: "log", Message: "[lifecycle] RECONNECTING reason=traffic_stalled_or_resume"})
+	emit(Event{Type: "status", Event: "connecting", Relay: req.RelayHost})
+	dnscache.InvalidateAfterIdle()
+
+	ifIdx, ifName, err := protect.BindPhysicalUnderlay()
+	if err != nil {
+		emit(Event{Type: "log", Message: fmt.Sprintf("[lifecycle] RELAY_FAILED underlay: %v", err)})
+		return err
+	}
+	emit(Event{Type: "log", Message: fmt.Sprintf("[vpn] UNDERLAY_IF rebind index=%d name=%s", ifIdx, ifName)})
+
+	out, err := hyconfig.ConnectWithFallback(req.ConnectionConfig, req.RelayHost, req.RelayPort)
+	if err != nil {
+		emit(Event{Type: "log", Message: fmt.Sprintf("[lifecycle] RELAY_FAILED reconnect: %v", err)})
+		emit(Event{Type: "status", Event: "error", Relay: req.RelayHost, Error: "relay_reconnect_failed"})
+		return err
+	}
+
+	label := req.RelayHost
+	if label == "" && out.Parsed != nil {
+		label = out.Parsed.ServerHost
+	}
+	bridge.SetHysteriaClient(out.Client, label)
+	r.mu.Lock()
+	old := r.hy
+	r.hy = out.Client
+	r.mu.Unlock()
+	if old != nil {
+		_ = old.Close()
+	}
+
+	emit(Event{Type: "log", Message: fmt.Sprintf(
+		"[RELAY] reconnected via=%s/%s pingMs=%d",
+		out.Candidate.Network, out.Candidate.Host, out.PingMs,
+	)})
+	emit(Event{Type: "status", Event: "connected", Relay: label, PingMs: out.PingMs})
+	emit(Event{Type: "log", Message: "[lifecycle] TRAFFIC_READY pending first_byte after reconnect"})
+	return nil
+}
+
+func (r *runtime) watchTrafficHealth(ctx context.Context, emit func(Event)) {
+	ticker := time.NewTicker(stallCheckEvery)
+	defer ticker.Stop()
+	var prevTx, prevRx int64
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			r.mu.Lock()
+			bridge := r.bridge
+			hy := r.hy
+			recovering := r.recovering
+			r.mu.Unlock()
+			if bridge == nil || hy == nil || recovering {
+				continue
+			}
+			snap := bridge.SnapshotTraffic()
+			now := time.Now()
+			txDelta := snap.Tx - prevTx
+			rxDelta := snap.Rx - prevRx
+			prevTx, prevRx = snap.Tx, snap.Rx
+
+			if snap.LastTxAt.IsZero() && snap.LastRxAt.IsZero() {
+				continue // still IDLE / no user traffic yet
+			}
+			// Quiet session — IDLE, not stalled.
+			if txDelta == 0 && rxDelta == 0 {
+				if !snap.LastRxAt.IsZero() && now.Sub(snap.LastRxAt) > stallIdleGrace {
+					emit(Event{Type: "log", Message: "[lifecycle] IDLE no user-plane for " + stallIdleGrace.String()})
+				}
+				continue
+			}
+			// TX advanced, no RX for stallNoRxAfterTx since last RX.
+			if txDelta > 0 && rxDelta == 0 {
+				sinceRx := stallNoRxAfterTx + time.Second
+				if !snap.LastRxAt.IsZero() {
+					sinceRx = now.Sub(snap.LastRxAt)
+				}
+				if sinceRx >= stallNoRxAfterTx {
+					emit(Event{Type: "log", Message: fmt.Sprintf(
+						"[lifecycle] TRAFFIC_STALLED tx_delta=%d rx_delta=0 since_rx=%s",
+						txDelta, sinceRx.Round(time.Second),
+					)})
+					_ = r.recoverRelay(emit)
+				}
+			}
+		}
 	}
 }
 
@@ -228,4 +353,10 @@ func (r *runtime) stop() {
 	if hy != nil {
 		_ = hy.Close()
 	}
+	// Issue #2: never leave 0.0.0.0/0 via dead StreamPass TUN after stop.
+	if err := protect.ClearStaleTunnelDefaultRoute(); err != nil {
+		// Best-effort; Admin may be required for route delete.
+		_ = err
+	}
+	dnscache.InvalidateAfterIdle()
 }

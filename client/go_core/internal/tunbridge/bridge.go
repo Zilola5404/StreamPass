@@ -239,6 +239,12 @@ type routingHandler struct {
 	engine      *decision.AtomicEngine
 	relayID     string
 	blockUDP443 bool
+
+	// Session-level user-plane counters (Issue #2 TRAFFIC_STALLED).
+	sessionTx   atomic.Int64
+	sessionRx   atomic.Int64
+	lastRxUnix  atomic.Int64 // unix nano; 0 = never
+	lastTxUnix  atomic.Int64
 }
 
 // SetHysteriaClient hot-attaches a relay client after ENGINE_STARTED (async handshake).
@@ -268,6 +274,43 @@ func (h *routingHandler) hyRelayID() string {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.relayID
+}
+
+func (h *routingHandler) noteBytes(n int, fromRemote bool) {
+	if h == nil || n <= 0 {
+		return
+	}
+	now := time.Now().UnixNano()
+	if fromRemote {
+		h.sessionRx.Add(int64(n))
+		h.lastRxUnix.Store(now)
+	} else {
+		h.sessionTx.Add(int64(n))
+		h.lastTxUnix.Store(now)
+	}
+}
+
+// SessionSnapshot is aggregate user-plane progress for stall detection.
+type SessionSnapshot struct {
+	Tx       int64
+	Rx       int64
+	LastRxAt time.Time
+	LastTxAt time.Time
+}
+
+func (s *Session) SnapshotTraffic() SessionSnapshot {
+	if s == nil || s.handler == nil {
+		return SessionSnapshot{}
+	}
+	h := s.handler
+	out := SessionSnapshot{Tx: h.sessionTx.Load(), Rx: h.sessionRx.Load()}
+	if v := h.lastRxUnix.Load(); v > 0 {
+		out.LastRxAt = time.Unix(0, v)
+	}
+	if v := h.lastTxUnix.Load(); v > 0 {
+		out.LastTxAt = time.Unix(0, v)
+	}
+	return out
 }
 
 func (h *routingHandler) PrepareConnection(
@@ -524,6 +567,7 @@ func (h *routingHandler) pipeTCP(
 			if n <= 0 {
 				return
 			}
+			h.noteBytes(n, fromRemote)
 			if fromRemote {
 				bytesRx.Add(int64(n))
 				if firstByte.Load() == 0 {
@@ -579,8 +623,9 @@ loop:
 		case <-noDataC:
 			noDataC = nil
 			tx, rx := bytesTx.Load(), bytesRx.Load()
-			// P0: stream lives ≥4s without both directions → STREAM_OPEN_NO_DATA.
-			if tx == 0 || rx == 0 {
+			// P0 / Issue #2: kill only when neither direction moved (true open-no-data).
+			// TX>0 && RX==0 is session-level TRAFFIC_STALLED, not per-stream abort.
+			if tx == 0 && rx == 0 {
 				cancel()
 				_ = remote.Close()
 				<-done

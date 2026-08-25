@@ -69,6 +69,32 @@ void main() {
     expect(picked?.id, 'nl2');
   });
 
+  test('pickBestRelay returns null when all relays unhealthy', () {
+    final picked = pickBestRelay([
+      _srv(id: 'a', region: 'nl', healthy: false),
+      _srv(id: 'b', region: 'nl', healthy: false),
+    ]);
+    expect(picked, isNull);
+  });
+
+  test('pickBestRelay skips relay without connection_config', () {
+    final picked = pickBestRelay([
+      RelayServer(
+        id: 'empty',
+        region: 'nl',
+        regionName: 'NL',
+        host: '1.2.3.4',
+        port: 443,
+        healthy: true,
+        loadRatio: 0,
+        rttMs: 1,
+        connectionConfig: '',
+      ),
+      _srv(id: 'ok', region: 'nl'),
+    ]);
+    expect(picked?.id, 'ok');
+  });
+
   test('shouldFailoverRelay when current unhealthy', () {
     final current = _srv(id: 'nl1', region: 'nl', healthy: false);
     final best = _srv(id: 'nl2', region: 'nl');

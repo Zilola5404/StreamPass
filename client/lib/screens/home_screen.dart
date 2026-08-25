@@ -99,11 +99,104 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
     await _checkClientUpdate();
     await _loadSubscription();
     await _loadStartupData();
+    await _enforceEntitlement();
     await _restoreVpnState();
+  }
+
+  /// Disconnect tunnel when subscription expired or no healthy relay is available.
+  Future<void> _enforceEntitlement() async {
+    final entitled = _subscription?.isActive == true;
+    final relay = _selectedRelay;
+    final relayOk = relay != null &&
+        relay.healthy &&
+        relay.connectionConfig.isNotEmpty;
+    if (entitled && relayOk) return;
+
+    try {
+      final native = await VpnChannel.fetchNativeStatus();
+      final tunnelUp = native?.event == VpnEvent.connected ||
+          native?.event == VpnEvent.connecting;
+      if (!tunnelUp && _state != ConnState.connected && _state != ConnState.connecting) {
+        return;
+      }
+    } catch (_) {}
+
+    _connectLog.warn('connect', 'entitlement disconnect', {
+      'subscription': '${_subscription?.isActive ?? false}',
+      'relay': relay?.id ?? 'none',
+      'relayHealthy': '${relay?.healthy ?? false}',
+    });
+    try {
+      await VpnChannel.disconnect();
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _state = ConnState.disconnected;
+      _stopDurationTimer();
+      if (!entitled) {
+        _errorMessage = null;
+      } else if (!relayOk) {
+        _errorMessage = 'Нет доступных серверов. Попробуйте позже';
+        _selectedRelay = null;
+      }
+    });
+  }
+
+  /// Refreshes subscription + server catalog before connect; returns false when blocked.
+  Future<bool> _refreshConnectPrerequisites() async {
+    try {
+      final info = await widget.api.fetchSubscription();
+      final servers = await widget.api.fetchServers();
+      final settings = await SettingsService().load();
+      final selected = pickBestRelay(
+        servers,
+        preferredRegion: settings.preferredRegion,
+        preferredServerId: settings.preferredServerId,
+        autoSelect: settings.autoSelectRelay,
+      );
+      if (!mounted) return false;
+      setState(() {
+        _subscription = info;
+        _loadingSubscription = false;
+        _selectedRelay = selected;
+        _loadingRelay = false;
+        _pingMs = selected?.rttMs;
+        _subscriptionCheckFailed = false;
+      });
+      _connectLog.info('api', 'connect prerequisites', {
+        'subscription': '${info.isActive}',
+        'healthyRelays': '${connectableRelays(servers).length}',
+        'selected': selected?.id ?? 'none',
+      });
+      if (!info.isActive) return false;
+      if (selected == null) return false;
+      return true;
+    } on SessionExpiredException {
+      if (mounted) {
+        navigateToLogin(context, widget.authService, widget.api);
+      }
+      return false;
+    } catch (e) {
+      if (!mounted) return false;
+      _connectLog.error('connect', 'prerequisites refresh failed', {'error': '$e'});
+      setState(() {
+        _subscriptionCheckFailed = _isNetworkError(e);
+        if (!_subscriptionCheckFailed) {
+          _errorMessage = e is ApiException
+              ? e.message
+              : 'Не удалось проверить подписку и серверы';
+          _state = ConnState.error;
+        }
+      });
+      return false;
+    }
   }
 
   Future<void> _restoreVpnState() async {
     try {
+      if (_subscription?.isActive != true || _selectedRelay == null) {
+        return;
+      }
       final native = await VpnChannel.fetchNativeStatus();
       if (!mounted || native == null) return;
       if (native.event != VpnEvent.connected) return;
@@ -608,7 +701,7 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
       final settings = await SettingsService().load();
       if (!settings.autoSelectRelay) return;
       final servers = await widget.api.fetchServers();
-      final others = servers
+      final others = connectableRelays(servers)
           .where((s) => s.id != _selectedRelay?.id)
           .toList();
       final best = pickBestRelay(
@@ -638,30 +731,43 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
       return;
     }
 
-    if (_subscription?.isActive != true) {
-      _connectLog.warn('connect', 'blocked: subscription inactive');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Для подключения нужна активная подписка'),
-            duration: Duration(seconds: 3),
-          ),
-        );
+    setState(() => _state = ConnState.connecting);
+    final allowed = await _refreshConnectPrerequisites();
+    if (!allowed) {
+      if (_subscription?.isActive != true) {
+        _connectLog.warn('connect', 'blocked: subscription inactive');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Для подключения нужна активная подписка'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        await _openSubscriptionScreen();
+      } else {
+        _connectLog.warn('connect', 'blocked: no healthy servers');
+        if (mounted) {
+          setState(() {
+            _state = ConnState.error;
+            _errorMessage =
+                'Нет доступных серверов. Попробуйте позже или обновите список';
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Нет активных серверов — подключение недоступно'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
       }
-      await _openSubscriptionScreen();
+      if (mounted && _state == ConnState.connecting) {
+        setState(() => _state = ConnState.disconnected);
+      }
       return;
     }
 
-    final relay = _selectedRelay;
-    if (relay == null) {
-      _connectLog.error('connect', 'blocked: no relay selected');
-      setState(() {
-        _state = ConnState.error;
-        _errorMessage = 'Нет доступных серверов. Попробуйте позже';
-      });
-      return;
-    }
-
+    final relay = _selectedRelay!;
     _connectLog.beginConnectSession(relayId: relay.id, host: relay.host);
     _connectLog.info('app', 'build ${BuildInfo.label}');
     setState(() {
@@ -1157,22 +1263,25 @@ class _GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.surface.withOpacity(0.78),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.cyan.withOpacity(0.08),
-            blurRadius: 24,
-            offset: const Offset(0, 14),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: child,
+    return Material(
+      color: Colors.transparent,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.surface.withOpacity(0.78),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.cyan.withOpacity(0.08),
+              blurRadius: 24,
+              offset: const Offset(0, 14),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: child,
+        ),
       ),
     );
   }

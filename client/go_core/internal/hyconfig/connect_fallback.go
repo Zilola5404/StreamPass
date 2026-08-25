@@ -11,9 +11,15 @@ import (
 )
 
 // Handshake budgets keep Windows RPC start() under Flutter's 45s timeout.
+// Session QUIC idle/keepalive are independent — handshake budget must NOT
+// become MaxIdleTimeout (that killed sessions after ~8–30s idle; issue #2).
 const (
 	handshakePerCandidate = 8 * time.Second
 	handshakeOverall      = 32 * time.Second
+
+	// Long-lived Hysteria session (Issue #2 P0: survive idle / short sleep).
+	SessionMaxIdleTimeout  = 120 * time.Second
+	SessionKeepAlivePeriod = 15 * time.Second
 )
 
 // ConnectResult is a successful Hysteria handshake after optional port fallback.
@@ -92,16 +98,9 @@ func dialCandidate(baseCfg *client.Config, parsed *Parsed, hostOnly string, c Di
 
 	cfg := cloneClientConfig(baseCfg)
 	cfg.ServerAddr = udpRemote
-	// Keep idle timeout within hysteria bounds but short enough for fallback.
-	idle := budget
-	if idle < 4*time.Second {
-		idle = 4 * time.Second
-	}
-	if idle > 30*time.Second {
-		idle = 30 * time.Second
-	}
-	cfg.QUICConfig.MaxIdleTimeout = idle
-	cfg.QUICConfig.KeepAlivePeriod = 2 * time.Second
+	// Session longevity (Issue #2) — not the per-candidate handshake dial budget.
+	cfg.QUICConfig.MaxIdleTimeout = SessionMaxIdleTimeout
+	cfg.QUICConfig.KeepAlivePeriod = SessionKeepAlivePeriod
 
 	switch c.Network {
 	case "tcp":

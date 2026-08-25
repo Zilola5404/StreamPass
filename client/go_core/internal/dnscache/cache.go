@@ -71,3 +71,13 @@ func (c *Cache) PutRaw(qtype uint16, name string, raw []byte, ttl time.Duration)
 		expires: time.Now().Add(ttl),
 	}
 }
+
+// Clear drops all cached DNS answers (Issue #2: DNS after idle / network change).
+func (c *Cache) Clear() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries = make(map[string]cacheEntry)
+}

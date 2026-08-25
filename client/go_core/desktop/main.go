@@ -104,6 +104,13 @@ func serve(conn net.Conn, token string, rt *runtime) {
 			rt.stop()
 			emit(Event{Type: "status", Event: "disconnected"})
 			emitReply(conn, &writeMu, Reply{ID: req.ID, Type: "reply", OK: true})
+		case "recover":
+			err := rt.recoverRelay(emit)
+			if err != nil {
+				emitReply(conn, &writeMu, Reply{ID: req.ID, Type: "reply", Error: err.Error()})
+			} else {
+				emitReply(conn, &writeMu, Reply{ID: req.ID, Type: "reply", OK: true})
+			}
 		case "update_rules":
 			err := rt.updateRules(req.RulesJSON, req.ExclusionsJSON)
 			if err != nil {

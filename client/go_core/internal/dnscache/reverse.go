@@ -355,3 +355,31 @@ func IndexAnswers(name string, raw []byte) {
 		RememberIP(name, ip)
 	}
 }
+
+// ClearSessionMaps drops reverse/pin/RTT maps after idle or network change (Issue #2).
+func ClearSessionMaps() {
+	revMu.Lock()
+	revByIP = map[string]map[string]struct{}{}
+	lastByIP = map[string]string{}
+	revMu.Unlock()
+
+	relayPinMu.Lock()
+	relayByIP = map[string]string{}
+	relayPinMu.Unlock()
+
+	directPinMu.Lock()
+	directByIP = map[string]string{}
+	directPinMu.Unlock()
+
+	rttMu.Lock()
+	rttByHost = map[string]int64{}
+	rttMu.Unlock()
+}
+
+// InvalidateAfterIdle clears DNS cache + hostname associations so post-idle
+// traffic re-resolves and re-pins (Issue #2 §12).
+func InvalidateAfterIdle() {
+	Default().cache.Clear()
+	ClearSessionMaps()
+	logLine(nil, "[dns] invalidated after idle/network change")
+}

@@ -106,7 +106,7 @@ class WindowsTrafficEngine implements WindowsVpnAdapter {
         throw VpnConnectException('connect superseded by newer session');
       }
       _connecting = false;
-      // ENGINE_STARTED / connected — traffic_ready is a separate lifecycle.
+      // ENGINE_STARTED / connected — traffic_ready only from first_byte (Issue #2).
       if (_last.event != VpnEvent.connected) {
         _emit(VpnStatusUpdate(
           VpnEvent.connected,
@@ -214,24 +214,41 @@ class WindowsTrafficEngine implements WindowsVpnAdapter {
   }
 
   void _armTrafficWatchdog(int session, String relayId) {
+    // Issue #2: never mark traffic_ready without first_byte.
+    // Optional UI hint only — CONNECTED stays gated on trafficReady.
     _cancelTrafficWatchdog();
-    _trafficWatchdog = Timer(const Duration(seconds: 20), () {
+    _trafficWatchdog = Timer(const Duration(seconds: 45), () {
       if (session != _session) return;
       final c = ConnectionController.instance;
       if (c.event != VpnEvent.connected) return;
       if (c.trafficReady) return;
-      // TUN is up but no first_byte — do not leave UI in connecting forever.
-      _log.warn('vpn', 'traffic_ready watchdog — marking ready after TUN up', {
+      _log.warn('vpn', 'traffic_ready still pending after 45s (not forcing ready)', {
         'session': '$session',
         'relayId': relayId,
       });
-      c.markTrafficReady();
     });
   }
 
   void _cancelTrafficWatchdog() {
     _trafficWatchdog?.cancel();
     _trafficWatchdog = null;
+  }
+
+  /// Issue #2: after Windows sleep/wake or NIC change — rehandshake relay in-place.
+  Future<void> recoverAfterResume() async {
+    final core = _core;
+    if (core == null || !core.isAttached) return;
+    if (_last.event != VpnEvent.connected &&
+        _last.event != VpnEvent.connecting) {
+      return;
+    }
+    _log.info('vpn', '[lifecycle] recover after resume');
+    ConnectionController.instance.clearTrafficReady();
+    try {
+      await core.recoverTunnel();
+    } catch (e) {
+      _log.warn('vpn', 'recover failed', {'error': '$e'});
+    }
   }
 
   @override

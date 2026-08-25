@@ -242,6 +242,25 @@ class WindowsCoreClient {
     } catch (_) {}
   }
 
+  /// Issue #2: rehandshake Hysteria without tearing Wintun (sleep/wake, stall).
+  Future<void> recoverTunnel() async {
+    if (_socket == null) {
+      throw VpnConnectException('ядро TUN не подключено');
+    }
+    lastStage = 'recover';
+    _log.info('vpn', '[RECOVER] command_sent');
+    final reply = await _rpc(
+      {'cmd': 'recover'},
+      timeout: const Duration(seconds: 40),
+    );
+    if (reply['ok'] != true) {
+      throw VpnConnectException(
+        reply['error'] as String? ?? 'recover failed',
+      );
+    }
+    lastStage = 'recovered';
+  }
+
   Future<void> dispose() async {
     _closed = true;
     lastStage = 'dispose';

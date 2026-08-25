@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../services/region_catalog.dart';
+import '../services/relay_picker.dart';
 import '../services/settings_service.dart';
 import '../services/streampass_api.dart';
 import '../main.dart' show navigateToLogin;
@@ -54,7 +55,7 @@ class _ServersScreenState extends State<ServersScreen>
     try {
       final prefs = await _settings.load();
       final servers = await widget.api.fetchServers();
-      final healthy = servers.where((s) => s.healthy).toList();
+      final healthy = connectableRelays(servers);
       if (!mounted) return;
       setState(() {
         _prefs = prefs;

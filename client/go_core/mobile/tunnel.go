@@ -96,6 +96,40 @@ func PrepareRelay(relayHost string, relayPort int, connectionConfig string) stri
 	return ""
 }
 
+// ReconnectRelay re-dials Hysteria while TUN stays up (Issue #2: network change / idle recovery).
+// Returns empty string on success, or an error message.
+func ReconnectRelay(relayHost string, relayPort int, connectionConfig string) string {
+	tunnelMu.Lock()
+	rt := active
+	tunnelMu.Unlock()
+	if rt == nil || rt.bridge == nil {
+		return "no active tunnel"
+	}
+	logEvent("[lifecycle] RECONNECTING reason=network_or_idle")
+	dnscache.InvalidateAfterIdle()
+
+	result, err := hyconfig.ConnectWithFallback(connectionConfig, relayHost, relayPort)
+	if err != nil {
+		logEvent(fmt.Sprintf("[lifecycle] RELAY_FAILED reconnect: %v", err))
+		return fmt.Errorf("hysteria reconnect: %w", err).Error()
+	}
+
+	label := relayHost
+	if label == "" && result.Parsed != nil {
+		label = result.Parsed.ServerHost
+	}
+	old := rt.hy
+	rt.hy = result.Client
+	rt.relayLabel = label
+	rt.pingMs = result.PingMs
+	rt.bridge.SetHysteriaClient(result.Client, label)
+	if old != nil {
+		_ = old.Close()
+	}
+	logEvent(fmt.Sprintf("[RELAY] reconnected via=%s pingMs=%d", result.Candidate, result.PingMs))
+	return ""
+}
+
 func takePreparedSession() *tunnelRuntime {
 	tunnelMu.Lock()
 	defer tunnelMu.Unlock()

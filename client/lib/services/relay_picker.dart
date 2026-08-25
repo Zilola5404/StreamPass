@@ -1,8 +1,14 @@
 import '../services/streampass_api.dart';
 import 'region_catalog.dart';
 
+/// Relays eligible for connect (healthy + non-empty hysteria2 config).
+List<RelayServer> connectableRelays(List<RelayServer> servers) => servers
+    .where((s) => s.healthy && s.connectionConfig.isNotEmpty)
+    .toList();
+
 /// Picks the best healthy relay, optionally constrained to a preferred
 /// region and/or a pinned server id (when auto-select is off).
+/// Returns null when no healthy relay is available (never falls back to unhealthy).
 RelayServer? pickBestRelay(
   List<RelayServer> servers, {
   String? preferredRegion,
@@ -12,8 +18,8 @@ RelayServer? pickBestRelay(
   if (servers.isEmpty) return null;
 
   final wantRegion = normalizeRegionCode(preferredRegion);
-  final healthy = servers.where((s) => s.healthy).toList();
-  final pool = healthy.isNotEmpty ? healthy : servers;
+  final pool = connectableRelays(servers);
+  if (pool.isEmpty) return null;
 
   if (!autoSelect && preferredServerId != null && preferredServerId.isNotEmpty) {
     for (final s in pool) {

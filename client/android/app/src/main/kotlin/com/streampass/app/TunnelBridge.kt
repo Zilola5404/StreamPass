@@ -138,6 +138,26 @@ class TunnelBridge(
         }
     }
 
+    /** Issue #2: rehandshake Hysteria without tearing TUN (Wi-Fi↔LTE / idle). */
+    fun reconnectRelay(relayHost: String, relayPort: Int, connectionConfig: String): String? {
+        return try {
+            val coreClass = coreClass() ?: throw ClassNotFoundException("mobile.Mobile")
+            val method = coreClass.getMethod(
+                "reconnectRelay",
+                String::class.java,
+                Long::class.javaPrimitiveType,
+                String::class.java,
+            )
+            val err = method.invoke(null, relayHost, relayPort.toLong(), connectionConfig) as String
+            ConnectLogger.log(context, "ReconnectRelay result=${if (err.isEmpty()) "OK" else err}")
+            if (err.isEmpty()) null else err
+        } catch (t: Throwable) {
+            Log.e(TAG, "ReconnectRelay failed", t)
+            ConnectLogger.log(context, "ReconnectRelay failed: ${t.message}")
+            t.message ?: "ReconnectRelay failed"
+        }
+    }
+
     fun startTunnel(
         fd: Int,
         relayHost: String,
