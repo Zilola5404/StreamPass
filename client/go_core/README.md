@@ -53,9 +53,12 @@ go install golang.org/x/mobile/cmd/gobind@latest
 gomobile init
 cd client/go_core
 go get -tool golang.org/x/mobile/cmd/gobind
-gomobile bind -target=android -androidapi=21 -o streampasscore.aar ./mobile
+gomobile bind -tags with_gvisor -target=android -androidapi=21 -o streampasscore.aar ./mobile
 cp streampasscore.aar ../android/app/libs/
 ```
+
+**Обязательно** `-tags with_gvisor`: без него Android TUN падает с  
+`gVisor is not included in this build` (stack в `tunbridge` — `gvisor`).
 
 Полученный `streampasscore.aar` кладётся в
 `android/app/libs/streampasscore.aar` и подключается в

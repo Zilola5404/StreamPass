@@ -3,6 +3,7 @@ package com.streampass.app
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
@@ -187,6 +188,23 @@ class StreamPassVpnService : VpnService() {
         }
     }
 
+    private fun openAppPendingIntent(): PendingIntent {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            action = Intent.ACTION_MAIN
+            addCategory(Intent.CATEGORY_LAUNCHER)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_IMMUTABLE
+            } else {
+                0
+            }
+        return PendingIntent.getActivity(this, 0, intent, flags)
+    }
+
     private fun notifyFailure(message: String) {
         if (userRequestedStop) return
         if (!NativeSettingsChannel.failureNotificationsEnabled(this)) return
@@ -196,6 +214,7 @@ class StreamPassVpnService : VpnService() {
             .setContentTitle("StreamPass")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentIntent(openAppPendingIntent())
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
@@ -218,7 +237,9 @@ class StreamPassVpnService : VpnService() {
             .setContentTitle("StreamPass")
             .setContentText(status)
             .setSmallIcon(android.R.drawable.stat_sys_download_done) // заменить на брендовую иконку
+            .setContentIntent(openAppPendingIntent())
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }

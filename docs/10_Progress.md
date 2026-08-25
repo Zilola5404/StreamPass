@@ -6,6 +6,7 @@
 
 | Дата | Что сделано | Файлы | Результат |
 |------|-------------|-------|-----------|
+| 2026-08-25 | Android: клик по VPN-уведомлению + AAR `with_gvisor` | `StreamPassVpnService.kt`, `streampasscore.aar`, README, `reports/QA/android-notification-gvisor-2026-08-25.md` | Тап открывает app; Connect без ошибки gVisor |
 | 2026-08-15 | TASK-WIN-001 stages 5-12 | `VerifyWindowsTUN.ps1`, decision/tunbridge tests, home traffic_ready chip | Contract PASS; live TUN needs Admin |
 | 2026-08-06 | BL-017 TCP underlay + device E2E script | `go_core/hyconfig`, `scripts/VerifyDeviceE2E.ps1`, VPS bridge | UDP→TCP fallback; APK +25 |
 | 2026-08-06 | BL-035 off-site encrypted backup | `scripts/backup-offsite.sh`, cron 03:15 UTC | encrypt → `212.43.157.167` |

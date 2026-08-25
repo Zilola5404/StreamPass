@@ -44,7 +44,7 @@ go build -o streampass-server ./backend/cmd/server
 cd client
 flutter pub get
 # после изменений в go_core — пересобрать AAR (нужен JDK / Android Studio JBR):
-cd go_core && gomobile bind -target=android -androidapi=21 -o streampasscore.aar ./mobile
+cd go_core && gomobile bind -tags with_gvisor -target=android -androidapi=21 -o streampasscore.aar ./mobile
 cp streampasscore.aar ../android/app/libs/
 cd ..
 flutter build apk --release --target-platform android-arm64

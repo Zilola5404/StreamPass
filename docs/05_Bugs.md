@@ -82,6 +82,32 @@
 
 ---
 
+## BUG-007: Android Connect — AAR без `-tags with_gvisor`
+
+| Поле | Значение |
+|------|----------|
+| **Описание** | Connect падает с уведомлением `tun bridge: gVisor is not included in this build, rebuild with -tags with_gvisor` |
+| **Как воспроизвести** | Установить APK с AAR, собранным без тега → Connect |
+| **Причина** | `tunbridge` требует stack `gvisor`; `gomobile bind` без `-tags with_gvisor` |
+| **Решение** | Пересобрать AAR с `-tags with_gvisor`; обновить README |
+| **Статус** | Fixed / Closed — 2026-08-25 |
+| **Файлы** | `client/android/app/libs/streampasscore.aar`, `client/go_core/internal/tunbridge/bridge.go`, README |
+
+---
+
+## BUG-008: VPN-уведомление не открывало приложение
+
+| Поле | Значение |
+|------|----------|
+| **Описание** | Foreground-уведомление «Подключено» не кликабельно |
+| **Как воспроизвести** | Connect → тап по уведомлению StreamPass |
+| **Причина** | Нет `setContentIntent` у `NotificationCompat.Builder` |
+| **Решение** | `PendingIntent` на `MainActivity` в `StreamPassVpnService.kt` |
+| **Статус** | Fixed / Closed — 2026-08-25 |
+| **Файлы** | `client/android/.../StreamPassVpnService.kt` |
+
+---
+
 ## Шаблон для новых багов
 
 ```

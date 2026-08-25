@@ -16,7 +16,7 @@ flutter build apk --release --target-platform android-arm64
 ```bash
 # JAVA_HOME = Android Studio JBR
 cd go_core
-gomobile bind -target=android -androidapi=21 -o streampasscore.aar ./mobile
+gomobile bind -tags with_gvisor -target=android -androidapi=21 -o streampasscore.aar ./mobile
 cp streampasscore.aar ../android/app/libs/
 ```
 

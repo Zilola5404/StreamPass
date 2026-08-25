@@ -1,14 +1,21 @@
 # StreamPass — Changelog
 
 > Формат: [Keep a Changelog](https://keepachangelog.com/)  
-> Дата начала документа: 2026-08-03 | Обновлено: 2026-08-07
+> Дата начала документа: 2026-08-03 | Обновлено: 2026-08-25
 
 ---
 
 ## [Unreleased]
 
+### Fixed
+- **Android VPN notification:** тап по foreground/failure-уведомлению открывает `MainActivity` (`setContentIntent` + `PendingIntent`).
+- **Android Connect / gVisor:** `streampasscore.aar` пересобран с `-tags with_gvisor` (ошибка `gVisor is not included in this build`). Команды сборки AAR в README обновлены.
+
 ### Added
 - **TASK-WIN-001 / BL-023:** Windows TUN — Wintun sidecar (`streampasscore.exe`), physical-NIC `IP_UNICAST_IF` protect, DNS `198.18.0.1`, `traffic_ready` gate. Stages 5–12: Decision/split, Variant B IPv6, MTU UI, adaptive FALLBACK path, `scripts/VerifyWindowsTUN.ps1`.
+
+### Docs
+- `reports/QA/android-notification-gvisor-2026-08-25.md`
 
 ### Known Issues
 - См. `docs/18_KnownIssues.md`
