@@ -12,7 +12,8 @@
 |------|--------|
 | **Release Candidate Branch** | `release/mvp-1` |
 | **Contains** | `fae42dd` (Architect Stage 1 / Billing baseline) **+** all Network Core fixes from PR #3 / `fix/client-network-diagnostics` **+** BILLING-001/002 **+** RELEASE-NETWORK-001 **+** Windows underlay/route harden from `main` (cherry-picked, not full merge) |
-| **RC SHA** | _pinned in §1.1 after commit_ |
+| **RC SHA (build & test)** | `2bc74bcabe7a1696270fe27bc6dc6f8f5e96aa91` (`2bc74bc`) |
+| **Branch tip** | tip of `release/mvp-1` (docs may sit 1 commit above code freeze) |
 | **Do not test** | random mix of `origin/main` tip alone vs PR tip alone |
 
 ### 1.1 Why not `git merge origin/main`
@@ -33,7 +34,7 @@ fae42dd  Architect Stage 1: Windows RU split, 3-day trial, Platega
 0cea0b4  BILLING-001
 b5f96bf  RELEASE-NETWORK-001
 10e072d  BILLING-002
-<this>   RELEASE-001: RC branch + Windows protect harden from main
+2bc74bc  RELEASE-001: RC branch + Windows protect harden from main
 ```
 
 ---
