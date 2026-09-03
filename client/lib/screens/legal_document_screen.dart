@@ -25,6 +25,18 @@ class LegalDocumentScreen extends StatelessWidget {
         body: LegalDocs.privacyBody,
       );
 
+  factory LegalDocumentScreen.refund({Key? key}) => LegalDocumentScreen(
+        key: key,
+        title: LegalDocs.refundTitle,
+        body: LegalDocs.refundBody,
+      );
+
+  factory LegalDocumentScreen.support({Key? key}) => LegalDocumentScreen(
+        key: key,
+        title: LegalDocs.supportTitle,
+        body: LegalDocs.supportBody,
+      );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

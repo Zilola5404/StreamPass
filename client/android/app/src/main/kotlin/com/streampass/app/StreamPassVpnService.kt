@@ -284,7 +284,21 @@ class StreamPassVpnService : VpnService() {
             tunnelBridge = bridge
 
             // Protect underlay sockets BEFORE PrepareRelay so QUIC survives TUN default route.
-            bridge.setEventLogger { msg -> ConnectLogger.log(this@StreamPassVpnService, msg) }
+            bridge.setEventLogger { msg ->
+                ConnectLogger.log(this@StreamPassVpnService, msg)
+                // RELEASE-NETWORK-001: first_byte / traffic_ready → Flutter markTrafficReady.
+                if (msg.contains("traffic_ready")) {
+                    Handler(Looper.getMainLooper()).post {
+                        emit(
+                            "connected",
+                            relay = relayDisplayName.ifEmpty { relayHost },
+                            pingMs = null,
+                            error = null,
+                            trafficReady = true,
+                        )
+                    }
+                }
+            }
             bridge.setSocketProtector { fd ->
                 val ok = protect(fd)
                 ConnectLogger.log(this@StreamPassVpnService, "protect(fd=$fd)=$ok")
@@ -499,21 +513,34 @@ class StreamPassVpnService : VpnService() {
         super.onRevoke()
     }
 
-    private fun emit(event: String, relay: String? = null, pingMs: Int? = null, error: String? = null) {
-        lastEvent = event
-        lastRelay = relay
-        lastPingMs = pingMs
-        lastError = error
+    private fun emit(
+        event: String,
+        relay: String? = null,
+        pingMs: Int? = null,
+        error: String? = null,
+        trafficReady: Boolean = false,
+    ) {
+        if (!trafficReady) {
+            lastEvent = event
+            lastRelay = relay
+            lastPingMs = pingMs
+            lastError = error
+        }
         mainHandler.post {
             val payload = mutableMapOf<String, Any?>("event" to event)
             relay?.let { payload["relay"] = it }
             pingMs?.let { payload["pingMs"] = it }
             error?.let { payload["error"] = it }
+            if (trafficReady) {
+                payload["trafficReady"] = true
+            }
             try {
                 eventSink?.success(payload)
             } catch (t: Throwable) {
                 Log.e(TAG, "eventSink failed for event=$event", t)
             }
+
+            if (trafficReady) return@post
 
             val statusText = when (event) {
                 "connecting" -> "Подключение…"

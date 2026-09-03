@@ -19,7 +19,7 @@ func TestWindowsSplitMatrix(t *testing.T) {
 		{"youtube.com", decision.ModeRelay},
 		{"instagram.com", decision.ModeRelay},
 		{"github.com", decision.ModeRelay},
-		{"cloudflare.com", decision.ModeRelay}, // DefaultMode; no Cloudflare CIDR→RELAY hack
+		{"cloudflare.com", decision.ModeDirect}, // DefaultMode=DIRECT (unknown)
 	}
 	for _, tc := range cases {
 		got := e.Decide(decision.Target{Host: tc.host})

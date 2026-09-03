@@ -187,6 +187,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       ),
                     );
                   },
+                  onRefund: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => LegalDocumentScreen.refund(),
+                      ),
+                    );
+                  },
                 ),
               ],
               const Spacer(flex: 2),
@@ -203,8 +210,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 class _LegalAcceptLine extends StatelessWidget {
   final VoidCallback onTerms;
   final VoidCallback onPrivacy;
+  final VoidCallback onRefund;
 
-  const _LegalAcceptLine({required this.onTerms, required this.onPrivacy});
+  const _LegalAcceptLine({
+    required this.onTerms,
+    required this.onPrivacy,
+    required this.onRefund,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -232,13 +244,22 @@ class _LegalAcceptLine extends StatelessWidget {
               child: const Text('Условия', style: link),
             ),
           ),
-          const TextSpan(text: ' и '),
+          const TextSpan(text: ', '),
           WidgetSpan(
             alignment: PlaceholderAlignment.baseline,
             baseline: TextBaseline.alphabetic,
             child: GestureDetector(
               onTap: onPrivacy,
               child: const Text('Политику конфиденциальности', style: link),
+            ),
+          ),
+          const TextSpan(text: ' и '),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: GestureDetector(
+              onTap: onRefund,
+              child: const Text('правила подписки/возвратов', style: link),
             ),
           ),
           const TextSpan(text: '.'),

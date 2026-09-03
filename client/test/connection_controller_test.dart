@@ -10,7 +10,22 @@ void main() {
     await WindowsTrafficEngine.instance.disposeCore();
   });
 
-  test('Android policy: connected event is user-visible without extra health flag', () {
+  test('Android policy: require trafficReady before user-visible connected', () {
+    final c = ConnectionController.instance;
+    c.policy = ConnectedUiPolicy.requireTrafficReady;
+    c.debugApply(VpnStatusUpdate(VpnEvent.connected, relayName: 'nl-native-1'));
+    expect(c.showConnected, isFalse);
+    expect(c.trafficReady, isFalse);
+    c.debugApply(VpnStatusUpdate(
+      VpnEvent.connected,
+      relayName: 'nl-native-1',
+      trafficReadyHint: true,
+    ));
+    expect(c.showConnected, isTrue);
+    expect(c.trafficReady, isTrue);
+  });
+
+  test('Legacy policy: connected event is user-visible without extra health flag', () {
     final c = ConnectionController.instance;
     c.policy = ConnectedUiPolicy.nativeConnectedMeansReady;
     c.debugApply(VpnStatusUpdate(VpnEvent.connected, relayName: 'nl-native-1'));

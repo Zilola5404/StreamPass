@@ -274,6 +274,7 @@ func (r *runtime) watchTrafficHealth(ctx context.Context, emit func(Event)) {
 	ticker := time.NewTicker(stallCheckEvery)
 	defer ticker.Stop()
 	var prevTx, prevRx int64
+	var lastIfIdx int
 	for {
 		select {
 		case <-ctx.Done():
@@ -287,6 +288,21 @@ func (r *runtime) watchTrafficHealth(ctx context.Context, emit func(Event)) {
 			if bridge == nil || hy == nil || recovering {
 				continue
 			}
+
+			// RELEASE-NETWORK-001: NIC / default-route change → rebind + recoverRelay.
+			if idx, name, err := protect.PhysicalInterfaceIndex(); err == nil {
+				if lastIfIdx != 0 && idx != lastIfIdx {
+					emit(Event{Type: "log", Message: fmt.Sprintf(
+						"[lifecycle] UNDERLAY_CHANGED prev_if=%d next_if=%d name=%s — recoverRelay",
+						lastIfIdx, idx, name,
+					)})
+					lastIfIdx = idx
+					_ = r.recoverRelay(emit)
+					continue
+				}
+				lastIfIdx = idx
+			}
+
 			snap := bridge.SnapshotTraffic()
 			now := time.Now()
 			txDelta := snap.Tx - prevTx

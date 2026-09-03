@@ -10,10 +10,10 @@ import 'vpn_channel.dart';
 /// UI must not treat Hysteria handshake as [VpnEvent.connected] until
 /// [trafficReady] is set by a data-plane health check.
 enum ConnectedUiPolicy {
-  /// Android: native already requires a working tunnel before emitting connected.
+  /// Legacy: native connected event is treated as user-visible ready.
   nativeConnectedMeansReady,
 
-  /// Windows: handshake/TUN up is not enough — wait for [markTrafficReady].
+  /// Handshake/TUN up is not enough — wait for [markTrafficReady] (first_byte).
   requireTrafficReady,
 }
 
@@ -55,7 +55,10 @@ class ConnectionController extends ChangeNotifier {
   void attach() {
     if (_attached) return;
     _attached = true;
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+    // RELEASE-NETWORK-001: CONNECTED ≠ TRAFFIC_READY on Android and Windows.
+    if (!kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.android)) {
       policy = ConnectedUiPolicy.requireTrafficReady;
     }
     VpnChannel.ensureListening();
@@ -65,7 +68,14 @@ class ConnectionController extends ChangeNotifier {
 
   void _onUpdate(VpnStatusUpdate update) {
     _status = update;
-    if (update.event != VpnEvent.connected) {
+    if (update.trafficReadyHint) {
+      if (update.event == VpnEvent.connected) {
+        _trafficReady = true;
+        _pendingTrafficReady = false;
+      } else {
+        _pendingTrafficReady = true;
+      }
+    } else if (update.event != VpnEvent.connected) {
       _trafficReady = false;
       _pendingTrafficReady = false;
     } else if (policy == ConnectedUiPolicy.nativeConnectedMeansReady) {

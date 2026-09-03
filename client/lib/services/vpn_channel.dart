@@ -13,7 +13,16 @@ class VpnStatusUpdate {
   final String? relayName;
   final int? pingMs;
   final String? errorMessage;
-  VpnStatusUpdate(this.event, {this.relayName, this.pingMs, this.errorMessage});
+  /// Set when native reports first_byte / traffic_ready (Android EventChannel).
+  final bool trafficReadyHint;
+
+  VpnStatusUpdate(
+    this.event, {
+    this.relayName,
+    this.pingMs,
+    this.errorMessage,
+    this.trafficReadyHint = false,
+  });
 }
 
 /// Thrown when the native VPN layer rejects the connect request.
@@ -147,6 +156,7 @@ class VpnChannel {
         relayName: map['relay'] as String?,
         pingMs: map['pingMs'] as int?,
         errorMessage: map['error'] as String?,
+        trafficReadyHint: map['trafficReady'] == true,
       );
     }).map((update) {
       lastStatus = update;

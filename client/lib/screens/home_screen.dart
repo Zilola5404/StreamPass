@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../main.dart' show navigateToLogin;
@@ -68,6 +69,8 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
   bool _failoverInFlight = false;
   DiagUploader? _diagUploader;
   Timer? _statsFlushTimer;
+  /// RELEASE-NETWORK-001: tear down if first_byte never arrives (Android).
+  Timer? _androidTrafficWatchdog;
   /// Issue #4: autoConnect must not loop forever when server is offline.
   int _autoConnectFailures = 0;
   static const _maxAutoConnectFailures = 2;
@@ -464,10 +467,35 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
     _durationTimer?.cancel();
     _statsFlushTimer?.cancel();
     _healthTimer?.cancel();
+    _androidTrafficWatchdog?.cancel();
     _ruleEngine.stop();
     _sub?.cancel();
     ConnectionController.instance.removeListener(_onGlobalConnection);
     super.dispose();
+  }
+
+  void _armAndroidTrafficWatchdog() {
+    _androidTrafficWatchdog?.cancel();
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    _androidTrafficWatchdog = Timer(ApiTimeouts.trafficReady, () {
+      if (!mounted) return;
+      final c = ConnectionController.instance;
+      if (c.trafficReady) return;
+      if (c.event != VpnEvent.connected && c.event != VpnEvent.connecting) {
+        return;
+      }
+      _connectLog.warn('vpn', 'traffic_ready timeout — tearing down');
+      setState(() {
+        _state = ConnState.error;
+        _errorMessage = UserFacingErrors.connectFailed;
+      });
+      unawaited(_safeDisconnectAfterError());
+    });
+  }
+
+  void _cancelAndroidTrafficWatchdog() {
+    _androidTrafficWatchdog?.cancel();
+    _androidTrafficWatchdog = null;
   }
 
   void _startDurationTimer() {
@@ -630,6 +658,7 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
     final c = ConnectionController.instance;
     // Stage 6: traffic_ready may arrive after VpnEvent.connected — flip UI then.
     if (c.showConnected && _state == ConnState.connecting) {
+      _cancelAndroidTrafficWatchdog();
       setState(() {
         _state = ConnState.connected;
         _errorMessage = null;
@@ -671,6 +700,7 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
           if (!ConnectionController.instance.showConnected) {
             _state = ConnState.connecting;
           } else {
+            _cancelAndroidTrafficWatchdog();
             _state = ConnState.connected;
             _errorMessage = null;
             _resetAutoConnectFailures();
@@ -681,6 +711,7 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
             }
           }
         case VpnEvent.disconnected:
+          _cancelAndroidTrafficWatchdog();
           if (_state == ConnState.disconnecting) {
             _state = ConnState.disconnected;
           } else if (_state != ConnState.error) {
@@ -689,10 +720,12 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
           _stopDurationTimer();
           _pingMs = _effectivePing(_selectedRelay?.rttMs);
         case VpnEvent.permissionDenied:
+          _cancelAndroidTrafficWatchdog();
           _state = ConnState.error;
           _stopDurationTimer();
           _errorMessage = UserFacingErrors.permissionDenied;
         case VpnEvent.error:
+          _cancelAndroidTrafficWatchdog();
           _state = ConnState.error;
           _stopDurationTimer();
           final raw = update.errorMessage ?? '';
@@ -872,8 +905,10 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
           _errorMessage = UserFacingErrors.connectFailed;
         });
         _noteAutoConnectFailure(fromAuto: fromAuto);
+      } else if (accepted) {
+        // accepted=true: statusStream drives connected / traffic_ready.
+        _armAndroidTrafficWatchdog();
       }
-      // accepted=true: statusStream drives connected / traffic_ready.
     } on VpnConnectException catch (e) {
       _connectLog.error('connect', 'VpnConnectException', {'message': e.message});
       if (!mounted) return;

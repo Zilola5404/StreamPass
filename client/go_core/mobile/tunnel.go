@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/netip"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/apernet/hysteria/core/v2/client"
@@ -51,19 +52,31 @@ func SetSocketProtector(p SocketProtector) {
 }
 
 var (
-	tunnelMu   sync.Mutex
-	active     *tunnelRuntime
-	prepared   *tunnelRuntime
+	tunnelMu    sync.Mutex
+	active      *tunnelRuntime
+	prepared    *tunnelRuntime
 	runTunnelWg sync.WaitGroup
 )
 
+// Issue #2 / RELEASE-NETWORK-001: stall → TRAFFIC_STALLED → ReconnectRelay (parity with Windows).
+const (
+	stallCheckEvery  = 10 * time.Second
+	stallNoRxAfterTx = 45 * time.Second
+	stallIdleGrace   = 2 * time.Minute
+	maxStallRecover  = 2
+)
+
 type tunnelRuntime struct {
-	cancel     context.CancelFunc
-	bridge     *tunbridge.Session
-	hy         client.Client
-	mtu        uint32
-	relayLabel string
-	pingMs     int
+	cancel           context.CancelFunc
+	bridge           *tunbridge.Session
+	hy               client.Client
+	mtu              uint32
+	relayLabel       string
+	pingMs           int
+	relayHost        string
+	relayPort        int
+	connectionConfig string
+	recovering       atomic.Bool
 }
 
 // PrepareRelay dials the Hysteria relay before Android brings up the TUN
@@ -87,10 +100,13 @@ func PrepareRelay(relayHost string, relayPort int, connectionConfig string) stri
 
 	tunnelMu.Lock()
 	prepared = &tunnelRuntime{
-		hy:         result.Client,
-		mtu:        result.Parsed.MTU,
-		relayLabel: relayLabel,
-		pingMs:     result.PingMs,
+		hy:               result.Client,
+		mtu:              result.Parsed.MTU,
+		relayLabel:       relayLabel,
+		pingMs:           result.PingMs,
+		relayHost:        relayHost,
+		relayPort:        relayPort,
+		connectionConfig: connectionConfig,
 	}
 	tunnelMu.Unlock()
 	return ""
@@ -105,7 +121,29 @@ func ReconnectRelay(relayHost string, relayPort int, connectionConfig string) st
 	if rt == nil || rt.bridge == nil {
 		return "no active tunnel"
 	}
-	logEvent("[lifecycle] RECONNECTING reason=network_or_idle")
+	return rt.reconnect(relayHost, relayPort, connectionConfig, "network_or_idle")
+}
+
+func (r *tunnelRuntime) reconnect(relayHost string, relayPort int, connectionConfig, reason string) string {
+	if !r.recovering.CompareAndSwap(false, true) {
+		return "recovery already in progress"
+	}
+	defer r.recovering.Store(false)
+
+	if relayHost == "" {
+		relayHost = r.relayHost
+	}
+	if relayPort == 0 {
+		relayPort = r.relayPort
+	}
+	if connectionConfig == "" {
+		connectionConfig = r.connectionConfig
+	}
+	if connectionConfig == "" {
+		return "missing connection config"
+	}
+
+	logEvent(fmt.Sprintf("[lifecycle] RECONNECTING reason=%s", reason))
 	dnscache.InvalidateAfterIdle()
 
 	result, err := hyconfig.ConnectWithFallback(connectionConfig, relayHost, relayPort)
@@ -118,15 +156,19 @@ func ReconnectRelay(relayHost string, relayPort int, connectionConfig string) st
 	if label == "" && result.Parsed != nil {
 		label = result.Parsed.ServerHost
 	}
-	old := rt.hy
-	rt.hy = result.Client
-	rt.relayLabel = label
-	rt.pingMs = result.PingMs
-	rt.bridge.SetHysteriaClient(result.Client, label)
+	old := r.hy
+	r.hy = result.Client
+	r.relayLabel = label
+	r.pingMs = result.PingMs
+	r.relayHost = relayHost
+	r.relayPort = relayPort
+	r.connectionConfig = connectionConfig
+	r.bridge.SetHysteriaClient(result.Client, label)
 	if old != nil {
 		_ = old.Close()
 	}
 	logEvent(fmt.Sprintf("[RELAY] reconnected via=%s pingMs=%d", result.Candidate, result.PingMs))
+	logEvent("[lifecycle] TRAFFIC_READY pending first_byte after reconnect")
 	return ""
 }
 
@@ -141,9 +183,9 @@ func takePreparedSession() *tunnelRuntime {
 // TunnelOptionsJSON configures diagnostic network modes (TASK network fix).
 // Example: {"networkMode":"split","mtu":1280,"blockUdp443":true}
 type tunnelOptions struct {
-	NetworkMode  string `json:"networkMode"`  // split | full_relay | direct_test | tcp_only
-	MTU          int    `json:"mtu"`          // 1280 | 1350 | 1400
-	BlockUDP443  bool   `json:"blockUdp443"`
+	NetworkMode string `json:"networkMode"` // split | full_relay | direct_test | tcp_only
+	MTU         int    `json:"mtu"`         // 1280 | 1350 | 1400
+	BlockUDP443 bool   `json:"blockUdp443"`
 }
 
 func parseTunnelOptions(raw string) tunnelOptions {
@@ -265,6 +307,15 @@ func runTunnel(fd int, relayHost string, relayPort int, connectionConfig string,
 		}
 		relayLabel = relaySession.relayLabel
 		pingMs = relaySession.pingMs
+		if relayHost == "" {
+			relayHost = relaySession.relayHost
+		}
+		if relayPort == 0 {
+			relayPort = relaySession.relayPort
+		}
+		if connectionConfig == "" {
+			connectionConfig = relaySession.connectionConfig
+		}
 	} else {
 		stopTunnelSessions()
 
@@ -321,21 +372,89 @@ func runTunnel(fd int, relayHost string, relayPort int, connectionConfig string,
 	}
 
 	runtime := &tunnelRuntime{
-		cancel:     cancel,
-		bridge:     bridge,
-		hy:         hyClient,
-		mtu:        mtu,
-		relayLabel: relayLabel,
+		cancel:           cancel,
+		bridge:           bridge,
+		hy:               hyClient,
+		mtu:              mtu,
+		relayLabel:       relayLabel,
+		pingMs:           pingMs,
+		relayHost:        relayHost,
+		relayPort:        relayPort,
+		connectionConfig: connectionConfig,
 	}
 	tunnelMu.Lock()
 	active = runtime
 	tunnelMu.Unlock()
+
+	wantRelay := connectionConfig != "" && opts.NetworkMode != "direct_test"
+	if wantRelay {
+		go runtime.watchTrafficHealth(ctx, cb)
+	}
 
 	if cb != nil {
 		cb.OnConnected(relayLabel, pingMs)
 	}
 
 	<-ctx.Done()
+}
+
+func (r *tunnelRuntime) watchTrafficHealth(ctx context.Context, cb StatusCallback) {
+	ticker := time.NewTicker(stallCheckEvery)
+	defer ticker.Stop()
+	var prevTx, prevRx int64
+	fails := 0
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if r.bridge == nil || r.hy == nil || r.recovering.Load() {
+				continue
+			}
+			snap := r.bridge.SnapshotTraffic()
+			now := time.Now()
+			txDelta := snap.Tx - prevTx
+			rxDelta := snap.Rx - prevRx
+			prevTx, prevRx = snap.Tx, snap.Rx
+
+			if snap.LastTxAt.IsZero() && snap.LastRxAt.IsZero() {
+				continue
+			}
+			if txDelta == 0 && rxDelta == 0 {
+				if !snap.LastRxAt.IsZero() && now.Sub(snap.LastRxAt) > stallIdleGrace {
+					logEvent("[lifecycle] IDLE no user-plane for " + stallIdleGrace.String())
+				}
+				continue
+			}
+			if txDelta > 0 && rxDelta == 0 {
+				sinceRx := stallNoRxAfterTx + time.Second
+				if !snap.LastRxAt.IsZero() {
+					sinceRx = now.Sub(snap.LastRxAt)
+				}
+				if sinceRx < stallNoRxAfterTx {
+					continue
+				}
+				logEvent(fmt.Sprintf(
+					"[lifecycle] TRAFFIC_STALLED tx_delta=%d rx_delta=0 since_rx=%s",
+					txDelta, sinceRx.Round(time.Second),
+				))
+				errMsg := r.reconnect(r.relayHost, r.relayPort, r.connectionConfig, "traffic_stalled")
+				if errMsg == "" {
+					fails = 0
+					continue
+				}
+				fails++
+				if fails >= maxStallRecover {
+					logEvent("[lifecycle] RELAY_FAILED stall recovery exhausted — clean disconnect")
+					emitError(cb, fmt.Errorf("relay_reconnect_failed: %s", errMsg))
+					if r.cancel != nil {
+						r.cancel()
+					}
+					return
+				}
+			}
+		}
+	}
 }
 
 func (r *tunnelRuntime) close() {
