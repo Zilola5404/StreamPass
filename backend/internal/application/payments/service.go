@@ -150,7 +150,7 @@ func (s *Service) ConfirmUSDT(ctx context.Context, txHash, email, tariff string)
 		return apperrors.New(apperrors.CodeInvalidInput, "tx_hash and email required")
 	}
 	if tariff == "" {
-		tariff = "month"
+		tariff = "month" // Stars/USDT period SKU; card MVP uses personal_* via billing.CreatePayment
 	}
 	if existing, err := s.payments.FindByTxHash(ctx, txHash); err == nil && existing != nil {
 		if existing.Status == subscription.PaymentSucceeded {

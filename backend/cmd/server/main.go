@@ -28,6 +28,7 @@ import (
 	rulesvc "streampass/backend/internal/application/rule"
 	telemetrysvc "streampass/backend/internal/application/telemetry"
 	"streampass/backend/internal/domain/user"
+	"streampass/backend/internal/domain/subscription"
 	"streampass/backend/internal/infrastructure/http/handler"
 	"streampass/backend/internal/infrastructure/http/router"
 	"streampass/backend/internal/infrastructure/payment/platega"
@@ -170,7 +171,11 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 	// --- Application services ---
 	registerUC := authsvc.NewRegisterUseCase(userRepo, hasher, idGeneratorAdapter{}, authsvc.SystemClock{}, log).
 		WithTrialHours(cfg.IntOr("billing.trial_hours", authsvc.DefaultTrialHours))
-	maxDevices := cfg.IntOr("auth.max_devices", 3)
+	// Default device cap matches Personal Basic / trial (BILLING-002). Pro/Business raise via plan_code.
+	maxDevices := cfg.IntOr("auth.max_devices", subscription.MaxDevicesForPlan(subscription.PlanPersonalBasic))
+	if maxDevices <= 0 {
+		maxDevices = 2
+	}
 	loginUC := authsvc.NewLoginUseCase(userRepo, deviceRepo, hasher, tokens, sessions, authsvc.SystemClock{}, maxDevices, log)
 	logoutUC := authsvc.NewLogoutUseCase(tokens, sessions, log)
 	refreshUC := authsvc.NewRefreshUseCase(tokens, sessions, log)
@@ -208,29 +213,22 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 		proAmount := int64(cfg.IntOr("billing.plan_personal_pro_rub", cfg.IntOr("billing.plan_pro_rub", 499)))
 		bizAmount := int64(cfg.IntOr("billing.plan_business_rub", 1490))
 		monthDays := cfg.IntOr("billing.plan_period_days", 30)
-		yearAmount := int64(cfg.IntOr("billing.yearly_amount_rub", int(basicAmount*10)))
-		yearDays := cfg.IntOr("billing.yearly_period_days", 365)
 		billingPlans = []billingsvc.Plan{
 			{
-				Code: "personal_basic", Title: "Personal Basic", AmountRUB: basicAmount, PeriodDays: monthDays,
-				Currency: "RUB", MaxDevices: 2, MaxUsers: 1,
+				Code: subscription.PlanPersonalBasic, Title: "Personal Basic", AmountRUB: basicAmount, PeriodDays: monthDays,
+				Currency: "RUB", MaxDevices: subscription.MaxDevicesForPlan(subscription.PlanPersonalBasic), MaxUsers: 1,
 				Description: "1 пользователь · до 2 устройств · DIRECT/RELAY · авто-маршрутизация",
 			},
 			{
-				Code: "personal_pro", Title: "Personal Pro", AmountRUB: proAmount, PeriodDays: monthDays,
-				Currency: "RUB", MaxDevices: 5, MaxUsers: 1,
+				Code: subscription.PlanPersonalPro, Title: "Personal Pro", AmountRUB: proAmount, PeriodDays: monthDays,
+				Currency: "RUB", MaxDevices: subscription.MaxDevicesForPlan(subscription.PlanPersonalPro), MaxUsers: 1,
 				Description: "1 пользователь · до 5 устройств · приоритетная поддержка",
 			},
 			{
-				Code: "business", Title: "Business", AmountRUB: bizAmount, PeriodDays: monthDays,
-				Currency: "RUB", MaxDevices: 5, MaxUsers: 5,
+				Code: subscription.PlanBusiness, Title: "Business", AmountRUB: bizAmount, PeriodDays: monthDays,
+				Currency: "RUB", MaxDevices: subscription.MaxDevicesForPlan(subscription.PlanBusiness), MaxUsers: 5,
 				Description: "Организация · до 5 пользователей · централизованная подписка",
 			},
-			// Legacy aliases (accepted by CreatePayment; hidden from GET /plans)
-			{Code: "basic", Title: "Personal Basic", AmountRUB: basicAmount, PeriodDays: monthDays, Currency: "RUB", MaxDevices: 2, MaxUsers: 1},
-			{Code: "pro", Title: "Personal Pro", AmountRUB: proAmount, PeriodDays: monthDays, Currency: "RUB", MaxDevices: 5, MaxUsers: 1},
-			{Code: "month", Title: "Месяц (Basic)", AmountRUB: basicAmount, PeriodDays: monthDays, Currency: "RUB", MaxDevices: 2, MaxUsers: 1},
-			{Code: "year", Title: "Год (Basic)", AmountRUB: yearAmount, PeriodDays: yearDays, Currency: "RUB", MaxDevices: 2, MaxUsers: 1},
 		}
 	}
 	orderRepo := postgres.NewOrderRepository(db)

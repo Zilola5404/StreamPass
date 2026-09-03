@@ -69,7 +69,7 @@ func (h *PaymentsHandler) CreateTelegramPayment(w http.ResponseWriter, r *http.R
 	var req telegramCreateRequest
 	_ = httpx.DecodeJSON(r, &req)
 	if req.Tariff == "" {
-		req.Tariff = "month"
+		req.Tariff = "month" // Stars period SKU (Telegram catalog), not MVP card plan code
 	}
 	link, err := h.svc.CreateTelegramInvoice(r.Context(), userID, req.Tariff)
 	if err != nil {

@@ -24,6 +24,7 @@ import (
 	relaysvc "streampass/backend/internal/application/relay"
 	rulesvc "streampass/backend/internal/application/rule"
 	telemetrysvc "streampass/backend/internal/application/telemetry"
+	"streampass/backend/internal/domain/subscription"
 	"streampass/backend/internal/domain/user"
 	"streampass/backend/internal/infrastructure/http/handler"
 	"streampass/backend/internal/infrastructure/http/router"
@@ -266,11 +267,9 @@ func NewTestHandler(t *testing.T, db *sql.DB) (http.Handler, *fakePayments) {
 	)
 
 	billingService := billingsvc.NewService(userRepo, paymentRepo, orderRepo, payments, []billingsvc.Plan{
-		{Code: "personal_basic", Title: "Personal Basic", AmountRUB: 299, PeriodDays: 30, MaxDevices: 2, MaxUsers: 1},
-		{Code: "personal_pro", Title: "Personal Pro", AmountRUB: 499, PeriodDays: 30, MaxDevices: 5, MaxUsers: 1},
-		{Code: "business", Title: "Business", AmountRUB: 1490, PeriodDays: 30, MaxDevices: 5, MaxUsers: 5},
-		{Code: "month", Title: "Месяц", AmountRUB: 299, PeriodDays: 30, MaxDevices: 2},
-		{Code: "year", Title: "Год", AmountRUB: 2990, PeriodDays: 365, MaxDevices: 2},
+		{Code: subscription.PlanPersonalBasic, Title: "Personal Basic", AmountRUB: 299, PeriodDays: 30, MaxDevices: 2, MaxUsers: 1},
+		{Code: subscription.PlanPersonalPro, Title: "Personal Pro", AmountRUB: 499, PeriodDays: 30, MaxDevices: 5, MaxUsers: 1},
+		{Code: subscription.PlanBusiness, Title: "Business", AmountRUB: 1490, PeriodDays: 30, MaxDevices: 5, MaxUsers: 5},
 	}, billingsvc.SystemClock{}, log)
 
 	adminUserService := adminsvc.NewUserService(userRepo, sessions, auditRepo, adminsvc.SystemClock{}, log)

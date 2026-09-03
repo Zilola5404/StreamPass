@@ -27,11 +27,9 @@ type RegisterUseCase struct {
 	trialHours int
 }
 
-// DefaultTrialHours is the BILLING-001 free trial length (72 hours wall-clock).
+// DefaultTrialHours is the free-trial length in wall-clock hours (BILLING-002 SSOT).
+// Config key: billing.trial_hours (default 72). Never trust client/device clock.
 const DefaultTrialHours = 72
-
-// DefaultTrialDays is kept for callers that still think in calendar days (3×24h).
-const DefaultTrialDays = 3
 
 // NewRegisterUseCase wires the use case via constructor injection — every
 // dependency is an interface (Dependency Injection / Interface First).
@@ -42,7 +40,7 @@ func NewRegisterUseCase(repo user.Repository, hasher PasswordHasher, ids IDGener
 	}
 }
 
-// WithTrialHours overrides the free-trial length in hours (tests / config).
+// WithTrialHours overrides the free-trial length in hours (tests / billing.trial_hours).
 func (uc *RegisterUseCase) WithTrialHours(hours int) *RegisterUseCase {
 	if hours > 0 {
 		uc.trialHours = hours
@@ -50,7 +48,7 @@ func (uc *RegisterUseCase) WithTrialHours(hours int) *RegisterUseCase {
 	return uc
 }
 
-// WithTrialDays overrides trial as days×24 hours (compat helper).
+// WithTrialDays is a test helper: days×24 hours. Production uses WithTrialHours / billing.trial_hours.
 func (uc *RegisterUseCase) WithTrialDays(days int) *RegisterUseCase {
 	if days > 0 {
 		uc.trialHours = days * 24

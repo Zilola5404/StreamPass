@@ -111,4 +111,22 @@ func TestNewInfoWithTrial(t *testing.T) {
 	if info.Status != subscription.StatusExpired {
 		t.Fatalf("status=%s want EXPIRED", info.Status)
 	}
+	if info.ErrorCode != "TRIAL_EXPIRED" {
+		t.Fatalf("error_code=%q", info.ErrorCode)
+	}
+
+	// Paid expiry must not report TRIAL_EXPIRED.
+	info = subscription.DeriveInfo(subscription.EntitlementInput{
+		ActiveUntil: &past,
+		TrialEndsAt: &past,
+		Source:      "paid",
+		PlanCode:    subscription.PlanPersonalBasic,
+		Now:         now,
+	})
+	if info.Status != subscription.StatusExpired {
+		t.Fatalf("paid expired status=%s", info.Status)
+	}
+	if info.ErrorCode != "" {
+		t.Fatalf("paid expired must not set TRIAL_EXPIRED, got %q", info.ErrorCode)
+	}
 }

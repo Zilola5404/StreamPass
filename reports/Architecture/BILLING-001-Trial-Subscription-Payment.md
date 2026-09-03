@@ -12,8 +12,9 @@ Single access model owned by StreamPass Backend:
 |--------|---------|
 | `TRIAL` | allowed |
 | `ACTIVE` | allowed |
-| `CANCELED` (until `active_until`) | allowed |
-| `EXPIRED` / `INACTIVE` | blocked |
+| `CANCELED` (until `active_until`) | allowed — **official subscription state (BILLING-002)** |
+| `EXPIRED` | blocked |
+| `INACTIVE` | blocked |
 
 App UI is never locked; only Connect is gated.
 

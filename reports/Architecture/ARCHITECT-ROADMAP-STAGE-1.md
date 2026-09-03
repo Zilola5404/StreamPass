@@ -30,8 +30,8 @@ Android уже имел `excludeRoute` — без изменений.
 
 | Этап архитектора | Что сделано |
 |------------------|-------------|
-| A Trial Engine | Migration `0012`, register → 3 дня `TRIAL`, `GET /subscription` → `TRIAL`/`ACTIVE`/`EXPIRED` |
-| B Plan Catalog | Basic 299 / Pro 499 / Business 1490 (+ aliases month/year) |
+| A Trial Engine | Migration `0012`, register → **72h** `TRIAL` (`billing.trial_hours`), `GET /subscription` → `TRIAL`/`ACTIVE`/`CANCELED`/`EXPIRED`/`INACTIVE` |
+| B Plan Catalog | `personal_basic` 299 / `personal_pro` 499 / `business` 1490 (aliases normalized; see BILLING-002) |
 | C Payment abstraction | `default_provider: yookassa \| platega`, `Name()` на провайдерах |
 | D Platega | `internal/infrastructure/payment/platega`, webhook `POST /payments/platega/webhook` |
 | E/F Access | Client: trial banner + paywall; connect по-прежнему только при `isActive` (TRIAL\|ACTIVE) |

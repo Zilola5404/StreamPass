@@ -188,6 +188,7 @@ type subscriptionResponse struct {
 	DaysLeft      int     `json:"days_left"`
 	HoursLeft     int     `json:"hours_left"`
 	AccessAllowed bool    `json:"access_allowed"`
+	MaxDevices    int     `json:"max_devices,omitempty"`
 	ErrorCode     string  `json:"error_code,omitempty"`
 }
 
@@ -212,6 +213,7 @@ func (h *BillingHandler) GetSubscription(w http.ResponseWriter, r *http.Request)
 		DaysLeft:      info.DaysLeft,
 		HoursLeft:     info.HoursLeft,
 		AccessAllowed: info.AccessAllowed,
+		MaxDevices:    info.MaxDevices,
 		ErrorCode:     info.ErrorCode,
 	}
 	if info.ActiveUntil != nil {

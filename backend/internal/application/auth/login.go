@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"streampass/backend/internal/domain/subscription"
 	"streampass/backend/internal/domain/user"
 	"streampass/shared/idgen"
 	apperrors "streampass/shared/errors"
@@ -44,7 +45,7 @@ func NewLoginUseCase(
 	log *logger.Logger,
 ) *LoginUseCase {
 	if maxDevices <= 0 {
-		maxDevices = 3
+		maxDevices = 2
 	}
 	return &LoginUseCase{
 		repo: repo, devices: devices, hasher: hasher, tokens: tokens,
@@ -99,11 +100,17 @@ func (uc *LoginUseCase) Execute(ctx context.Context, in LoginInput) (*TokenPair,
 				uc.log.Error(ctx, err)
 				return nil, apperrors.Wrap(apperrors.CodeInternal, "failed to count devices", err)
 			}
-			if n >= uc.maxDevices {
+			limit := uc.maxDevices
+			if planLimit := subscription.MaxDevicesForPlan(u.PlanCode); planLimit > 0 {
+				limit = planLimit
+			} else if u.EntitlementSource == "trial" {
+				limit = subscription.MaxDevicesForPlan(subscription.PlanPersonalBasic)
+			}
+			if n >= limit {
 				return nil, apperrors.New(
 					apperrors.CodeDeviceLimit,
 					"Достигнут лимит устройств. Отключите одно в профиле.",
-				).WithDetails(map[string]any{"max_devices": uc.maxDevices})
+				).WithDetails(map[string]any{"max_devices": limit})
 			}
 		}
 	}

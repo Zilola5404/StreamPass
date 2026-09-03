@@ -36,16 +36,19 @@ rate_limit:
   public_window: 1m
 
 billing:
+  # SSOT trial length (hours). Wired to register via billing.trial_hours → DefaultTrialHours=72.
   trial_hours: 72
-  plan_amount_rub: 299
   plan_period_days: 30
-  yearly_amount_rub: 2990
-  yearly_period_days: 365
+  # Canonical MVP plan prices (GET /plans codes: personal_basic | personal_pro | business)
   plan_personal_basic_rub: 299
   plan_personal_pro_rub: 499
+  plan_business_rub: 1490
+  # Legacy keys (still accepted as fallbacks for personal_basic / personal_pro)
+  plan_amount_rub: 299
   plan_basic_rub: 299
   plan_pro_rub: 499
-  plan_business_rub: 1490
+  yearly_amount_rub: 2990
+  yearly_period_days: 365
   # yookassa | platega — card/SBP provider for POST /payments (Telegram Stars still overrides when bot token set)
   default_provider: yookassa
   webhook_secret: ${PAYMENTS_WEBHOOK_SECRET}
@@ -72,4 +75,5 @@ billing:
 # Keep false in production once email delivery is wired.
 auth:
   expose_reset_token: true
-  max_devices: 3
+  # Default device cap = Personal Basic / trial (raised automatically for personal_pro / business).
+  max_devices: 2

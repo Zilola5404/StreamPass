@@ -3,7 +3,18 @@ package subscription
 
 import "time"
 
-// Status is the coarse state of a user's subscription / trial (BILLING-001).
+// Status is the coarse state of a user's subscription / trial (BILLING-002 SSOT).
+//
+// Official subscription states:
+//
+//	TRIAL     — free trial window; Connect allowed
+//	ACTIVE    — paid (or admin) entitlement; Connect allowed
+//	CANCELED  — auto-renew canceled; Connect still allowed until ActiveUntil
+//	EXPIRED   — had entitlement, now ended; Connect blocked
+//	INACTIVE  — never entitled; Connect blocked
+//
+// Payment provider statuses (PENDING/SUCCEEDED/CANCELED) are separate and must
+// not be confused with these subscription states.
 type Status string
 
 const (
@@ -26,9 +37,11 @@ type Info struct {
 	// DaysLeft / HoursLeft remaining access (server clock).
 	DaysLeft  int
 	HoursLeft int
-	// AccessAllowed is true when Connect may start (TRIAL or paid period not ended).
+	// AccessAllowed is true when Connect may start.
 	// CANCELED with remaining time still allows Connect until ActiveUntil.
 	AccessAllowed bool
+	// MaxDevices from plan catalog (0 = use auth.max_devices fallback).
+	MaxDevices int
 	// ErrorCode for client UX (e.g. TRIAL_EXPIRED).
 	ErrorCode string
 }
@@ -58,13 +71,21 @@ func NewInfoWithTrial(activeUntil, trialEndsAt *time.Time, source string, now ti
 	})
 }
 
-// DeriveInfo is the SSOT for subscription status (BILLING-001).
+// DeriveInfo is the SSOT for subscription status (BILLING-001 / BILLING-002).
 func DeriveInfo(in EntitlementInput) Info {
 	info := Info{
 		ActiveUntil: in.ActiveUntil,
 		TrialEndsAt: in.TrialEndsAt,
 		Source:      in.Source,
-		PlanCode:    in.PlanCode,
+	}
+	if in.PlanCode != "" {
+		info.PlanCode = NormalizePlanCode(in.PlanCode)
+	}
+	if n := MaxDevicesForPlan(in.PlanCode); n > 0 {
+		info.MaxDevices = n
+	} else if in.Source == "trial" || in.PlanCode == "" {
+		// Trial / no plan yet → Personal Basic device cap.
+		info.MaxDevices = MaxDevicesForPlan(PlanPersonalBasic)
 	}
 	now := in.Now
 
@@ -97,7 +118,8 @@ func DeriveInfo(in EntitlementInput) Info {
 	info.AccessAllowed = false
 	if in.ActiveUntil != nil || in.TrialEndsAt != nil {
 		info.Status = StatusExpired
-		if in.Source == "trial" || (in.TrialEndsAt != nil && in.Source != "paid" && in.Source != "admin") {
+		// TRIAL_EXPIRED only when entitlement was trial (never for paid/admin expiry).
+		if in.Source == "trial" {
 			info.ErrorCode = "TRIAL_EXPIRED"
 		}
 		return info

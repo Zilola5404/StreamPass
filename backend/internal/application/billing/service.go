@@ -15,7 +15,7 @@ import (
 // Plan describes a sellable subscription plan. Loaded from config
 // (BILLING-001: prices never hard-coded in clients).
 type Plan struct {
-	Code        string // personal_basic | personal_pro | business (+ aliases)
+	Code        string // personal_basic | personal_pro | business (aliases normalized on resolve)
 	Title       string
 	AmountRUB   int64 // RUB for card providers; Stars for Telegram mode
 	PeriodDays  int
@@ -55,8 +55,9 @@ func NewService(
 ) *Service {
 	if len(plans) == 0 {
 		plans = []Plan{{
-			Code: "personal_basic", Title: "Personal Basic",
-			AmountRUB: 299, PeriodDays: 30, Currency: "RUB", MaxDevices: 2, MaxUsers: 1,
+			Code: subscription.PlanPersonalBasic, Title: "Personal Basic",
+			AmountRUB: 299, PeriodDays: 30, Currency: "RUB",
+			MaxDevices: subscription.MaxDevicesForPlan(subscription.PlanPersonalBasic), MaxUsers: 1,
 		}}
 	}
 	for i := range plans {
@@ -77,9 +78,8 @@ func (s *Service) SetTelegramInvoicer(inv TelegramInvoicer) { s.telegram = inv }
 // Prefer BILLING-001 canonical codes when present; otherwise return full catalog
 // (Telegram Stars month/quarter/year).
 func (s *Service) ListPlans() []Plan {
-	preferred := []string{"personal_basic", "personal_pro", "business"}
-	out := make([]Plan, 0, len(preferred))
-	for _, code := range preferred {
+	out := make([]Plan, 0, len(subscription.CanonicalPlanCodes))
+	for _, code := range subscription.CanonicalPlanCodes {
 		for _, p := range s.plans {
 			if p.Code == code {
 				out = append(out, p)
@@ -90,6 +90,7 @@ func (s *Service) ListPlans() []Plan {
 	if len(out) > 0 {
 		return out
 	}
+	// Telegram Stars / period SKUs when canonical MVP plans are not configured.
 	seen := map[string]bool{}
 	out = make([]Plan, 0, len(s.plans))
 	for _, p := range s.plans {
@@ -103,25 +104,16 @@ func (s *Service) ListPlans() []Plan {
 }
 
 func (s *Service) resolvePlan(code string) (Plan, error) {
-	if code == "" {
-		return s.plans[0], nil
-	}
-	// Normalize legacy aliases → BILLING-001 codes.
-	switch code {
-	case "basic", "month":
-		code = "personal_basic"
-	case "pro":
-		code = "personal_pro"
-	}
+	code = subscription.NormalizePlanCode(code)
 	for _, p := range s.plans {
 		if p.Code == code {
 			return p, nil
 		}
 	}
-	// Fall back to matching aliases still listed in catalog.
+	// Legacy alias rows still in catalog (basic/pro/month) → map to canonical plan fields.
 	for _, p := range s.plans {
-		if p.Code == code || (code == "personal_basic" && (p.Code == "basic" || p.Code == "month")) ||
-			(code == "personal_pro" && p.Code == "pro") {
+		if subscription.NormalizePlanCode(p.Code) == code {
+			p.Code = code
 			return p, nil
 		}
 	}
@@ -396,7 +388,9 @@ func (s *Service) extendFromPayment(ctx context.Context, payment *subscription.P
 	newExpiry := base.Add(time.Duration(payment.PeriodDays) * 24 * time.Hour)
 	planCode := payment.Tariff
 	if planCode == "" {
-		planCode = "personal_basic"
+		planCode = subscription.PlanPersonalBasic
+	} else {
+		planCode = subscription.NormalizePlanCode(planCode)
 	}
 	if err := s.users.ActivatePaidPlan(ctx, user.ID(payment.UserID), newExpiry, planCode); err != nil {
 		s.log.Error(ctx, err)

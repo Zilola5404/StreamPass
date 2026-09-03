@@ -347,6 +347,7 @@ class SubscriptionInfo {
   final String planCode;
   final int daysLeft;
   final int hoursLeft;
+  final int maxDevices;
   final String errorCode;
 
   const SubscriptionInfo({
@@ -358,10 +359,12 @@ class SubscriptionInfo {
     this.planCode = '',
     this.daysLeft = 0,
     this.hoursLeft = 0,
+    this.maxDevices = 0,
     this.errorCode = '',
   });
 
   bool get isTrial => status.toUpperCase() == 'TRIAL' || source == 'trial';
+  bool get isCanceled => status.toUpperCase() == 'CANCELED';
   bool get isExpired =>
       status.toUpperCase() == 'EXPIRED' ||
       (!isActive && (activeUntil != null || trialEndsAt != null));
@@ -379,13 +382,14 @@ class SubscriptionInfo {
     final planCode = json['plan_code'] as String? ?? '';
     final daysLeft = (json['days_left'] as num?)?.toInt() ?? 0;
     final hoursLeft = (json['hours_left'] as num?)?.toInt() ?? 0;
+    final maxDevices = (json['max_devices'] as num?)?.toInt() ?? 0;
     final errorCode = json['error_code'] as String? ?? '';
     final accessAllowed = json['access_allowed'];
     final bool active;
     if (accessAllowed is bool) {
       active = accessAllowed;
     } else {
-      // Connect allowed while TRIAL/ACTIVE/CANCELED with remaining time (server clock).
+      // Connect allowed: TRIAL / ACTIVE / CANCELED (with remaining time).
       active = statusStr == 'ACTIVE' ||
           statusStr == 'TRIAL' ||
           statusStr == 'CANCELED' ||
@@ -400,6 +404,7 @@ class SubscriptionInfo {
       planCode: planCode,
       daysLeft: daysLeft,
       hoursLeft: hoursLeft,
+      maxDevices: maxDevices,
       errorCode: errorCode,
     );
   }

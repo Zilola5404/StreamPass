@@ -247,3 +247,25 @@ func TestListPlansCanonicalOnly(t *testing.T) {
 		t.Fatalf("unexpected plans: %+v", plans)
 	}
 }
+
+func TestResolvePlanAliases(t *testing.T) {
+	svc := billing.NewService(nil, nil, nil, &fakeProvider{}, []billing.Plan{
+		{Code: "personal_basic", Title: "Basic", AmountRUB: 299, PeriodDays: 30},
+		{Code: "personal_pro", Title: "Pro", AmountRUB: 499, PeriodDays: 30},
+	}, fixedClock{t: time.Now()}, logger.New("test", "error"))
+
+	// CreatePayment with legacy alias must resolve (no panic / unknown plan).
+	users := &memUsersBilling{u: &user.User{ID: "u1", Email: "a@b.c"}}
+	svc = billing.NewService(users, newMemPay(), newMemOrders(), &fakeProvider{status: billing.PaymentStatusPending}, []billing.Plan{
+		{Code: "personal_basic", Title: "Basic", AmountRUB: 299, PeriodDays: 30},
+		{Code: "personal_pro", Title: "Pro", AmountRUB: 499, PeriodDays: 30},
+	}, fixedClock{t: time.Now()}, logger.New("test", "error"))
+
+	url, err := svc.CreatePayment(context.Background(), "u1", "pro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if url == "" {
+		t.Fatal("empty url")
+	}
+}

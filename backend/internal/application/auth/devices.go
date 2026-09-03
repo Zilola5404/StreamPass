@@ -34,7 +34,7 @@ type ListDevicesUseCase struct {
 // NewListDevicesUseCase wires the use case.
 func NewListDevicesUseCase(devices user.DeviceRepository, maxDevices int, log *logger.Logger) *ListDevicesUseCase {
 	if maxDevices <= 0 {
-		maxDevices = 3
+		maxDevices = 2
 	}
 	return &ListDevicesUseCase{devices: devices, maxDevices: maxDevices, log: log.With("list_devices")}
 }
