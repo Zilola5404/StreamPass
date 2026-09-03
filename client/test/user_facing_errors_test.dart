@@ -54,7 +54,10 @@ void main() {
       expect(UserFacingErrors.connecting, 'Подключение…');
       expect(UserFacingErrors.connected, 'Подключено');
       expect(UserFacingErrors.disconnecting, 'Отключение…');
-      expect(UserFacingErrors.serverUnavailable, 'Сервер недоступен');
+      expect(
+        UserFacingErrors.serverUnavailable,
+        'Сервер временно недоступен. Попробуйте позже.',
+      );
       expect(UserFacingErrors.connectFailed, 'Не удалось подключиться');
     });
   });

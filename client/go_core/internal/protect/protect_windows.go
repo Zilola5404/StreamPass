@@ -6,8 +6,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
-	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -16,6 +16,13 @@ import (
 const (
 	ipUnicastIF   = 31
 	ipv6UnicastIF = 31
+)
+
+var (
+	underlayMu     sync.Mutex
+	underlayCached bool
+	underlayIdx    int
+	underlayName   string
 )
 
 type interfaceProtector struct {
@@ -84,31 +91,65 @@ func IsTunnelInterface(name string) bool {
 
 // BindPhysicalUnderlay finds a real NIC (never StreamPass/Wintun/TAP) and
 // installs the protector. Must run BEFORE Hysteria handshake and before AutoRoute.
+// Result is cached for the session (StartDesktop must not re-probe — PowerShell
+// Get-NetRoute can hang on repeated calls).
 func BindPhysicalUnderlay() (index int, name string, err error) {
+	underlayMu.Lock()
+	if underlayCached {
+		idx, n := underlayIdx, underlayName
+		underlayMu.Unlock()
+		BindInterface(idx)
+		return idx, n, nil
+	}
+	underlayMu.Unlock()
+
 	index, name, err = PhysicalInterfaceIndex()
 	if err != nil {
 		return 0, "", err
 	}
 	BindInterface(index)
+	underlayMu.Lock()
+	underlayIdx, underlayName = index, name
+	underlayCached = true
+	underlayMu.Unlock()
 	return index, name, nil
 }
 
-// ClearStaleTunnelDefaultRoute removes a leftover 0.0.0.0/0 via StreamPass
-// (metric 0) from a previous crash so the OS is not stuck on a dead TUN.
-// Best-effort; may require Administrator.
+// HasUnderlay reports whether BindPhysicalUnderlay succeeded this session.
+func HasUnderlay() bool {
+	underlayMu.Lock()
+	defer underlayMu.Unlock()
+	return underlayCached
+}
+
+// InvalidateUnderlayCache drops the session NIC bind so the next
+// BindPhysicalUnderlay re-probes (Wi‑Fi ↔ LTE / NIC change recovery).
+func InvalidateUnderlayCache() {
+	resetUnderlaySession()
+}
+
+func resetUnderlaySession() {
+	underlayMu.Lock()
+	underlayCached = false
+	underlayIdx = 0
+	underlayName = ""
+	underlayMu.Unlock()
+}
+
+// ClearStaleTunnelDefaultRoute removes leftover 0.0.0.0/0 via StreamPass from a
+// previous crash so the OS is not stuck on a dead TUN. See route_windows.go.
 func ClearStaleTunnelDefaultRoute() error {
-	// StreamPass gateway is Addr().Next() of 10.10.0.1/30 → 10.10.0.2
-	cmd := exec.Command("route", "delete", "0.0.0.0", "mask", "0.0.0.0", "10.10.0.2")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("route delete: %w (%s)", err, strings.TrimSpace(string(out)))
-	}
-	return nil
+	return clearStaleTunnelDefaultRouteImpl()
 }
 
 // PhysicalInterfaceIndex is the IPv4 NIC used for internet *before* TUN routes.
 // Never returns StreamPass / Wintun / TAP — otherwise underlay loops into TUN.
 func PhysicalInterfaceIndex() (index int, name string, err error) {
+	// Prefer the OS default-route interface (audit P1), then dial-owner, then probe.
+	if idx, n, ok := defaultRouteInterfaceIndex(); ok {
+		return idx, n, nil
+	}
+
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return 0, "", err

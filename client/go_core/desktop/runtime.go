@@ -234,6 +234,8 @@ func (r *runtime) recoverRelay(emit func(Event)) error {
 	emit(Event{Type: "status", Event: "connecting", Relay: req.RelayHost})
 	dnscache.InvalidateAfterIdle()
 
+	// NIC may have changed — drop cached underlay so BindPhysicalUnderlay re-probes.
+	protect.InvalidateUnderlayCache()
 	ifIdx, ifName, err := protect.BindPhysicalUnderlay()
 	if err != nil {
 		emit(Event{Type: "log", Message: fmt.Sprintf("[lifecycle] RELAY_FAILED underlay: %v", err)})

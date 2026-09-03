@@ -13,7 +13,8 @@ class UserFacingErrors {
   static const connecting = 'Подключение…';
   static const connected = 'Подключено';
   static const disconnecting = 'Отключение…';
-  static const serverUnavailable = 'Сервер недоступен';
+  static const serverUnavailable =
+      'Сервер временно недоступен. Попробуйте позже.';
   static const noInternet = 'Нет подключения к интернету';
   static const connectFailed = 'Не удалось подключиться';
   static const permissionDenied = 'Нужно разрешение на VPN-соединение';

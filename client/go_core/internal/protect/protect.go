@@ -25,9 +25,10 @@ func Set(p Protector) {
 	mu.Unlock()
 }
 
-// Clear removes the active protector.
+// Clear removes the active protector and drops the Windows underlay session cache.
 func Clear() {
 	Set(nil)
+	resetUnderlaySession()
 }
 
 // FD protects a raw file descriptor. No-op when no protector is installed
