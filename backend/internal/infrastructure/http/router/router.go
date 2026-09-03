@@ -108,6 +108,7 @@ func New(d Deps) http.Handler {
 	mux.Handle(v1("POST /telemetry"), authMW(http.HandlerFunc(d.Telemetry.Record)))
 	mux.Handle(v1("GET /plans"), authMW(http.HandlerFunc(d.Billing.ListPlans)))
 	mux.Handle(v1("GET /payments"), authMW(http.HandlerFunc(d.Billing.ListPayments)))
+	mux.Handle(v1("POST /orders"), authMW(http.HandlerFunc(d.Billing.CreateOrder)))
 	mux.Handle(v1("POST /payments"), authMW(http.HandlerFunc(d.Billing.CreatePayment)))
 	if d.Payments != nil {
 		mux.Handle(v1("POST /payments/telegram/create"), authMW(http.HandlerFunc(d.Payments.CreateTelegramPayment)))

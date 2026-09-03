@@ -30,6 +30,10 @@ type User struct {
 	TrialEndsAt    *time.Time
 	// EntitlementSource: trial | paid | admin (empty = legacy paid/until only).
 	EntitlementSource string
+	// PlanCode is the last confirmed product plan (personal_basic | personal_pro | business).
+	PlanCode string
+	// SubscriptionCanceledAt marks auto-renew cancel; access continues until ActiveUntil.
+	SubscriptionCanceledAt *time.Time
 	// BannedAt is set by admin ban (BL-050); nil means not banned.
 	BannedAt *time.Time
 }
@@ -74,6 +78,10 @@ type Repository interface {
 	// single denormalized field on the User row — see
 	// domain/subscription's package doc for the reasoning.
 	ExtendSubscription(ctx context.Context, id ID, activeUntil time.Time) error
+	// ActivatePaidPlan extends access after a confirmed payment and records plan_code.
+	ActivatePaidPlan(ctx context.Context, id ID, activeUntil time.Time, planCode string) error
+	// CancelAutoRenew sets subscription_canceled_at (access until ActiveUntil).
+	CancelAutoRenew(ctx context.Context, id ID, now time.Time) error
 	// ClearSubscription removes Premium (admin revoke / ban).
 	ClearSubscription(ctx context.Context, id ID, now time.Time) error
 	// SetBanned marks or clears the ban timestamp.

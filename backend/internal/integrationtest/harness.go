@@ -241,13 +241,15 @@ func NewTestHandler(t *testing.T, db *sql.DB) (http.Handler, *fakePayments) {
 	telemetryRepo := postgres.NewTelemetryRepository(db)
 	appConfigRepo := postgres.NewAppConfigRepository(db)
 	paymentRepo := postgres.NewPaymentRepository(db)
+	orderRepo := postgres.NewOrderRepository(db)
 	exclusionRepo := postgres.NewExclusionRepository(db)
 	diagRepo := postgres.NewDiagRepository(db)
 
 	hasher := security.NewArgon2Hasher()
 	tokens := security.NewJWTTokenIssuer(testJWTSecret, 15*time.Minute, 720*time.Hour)
 
-	registerUC := authsvc.NewRegisterUseCase(userRepo, hasher, idGen{}, authsvc.SystemClock{}, log)
+	registerUC := authsvc.NewRegisterUseCase(userRepo, hasher, idGen{}, authsvc.SystemClock{}, log).
+		WithTrialHours(authsvc.DefaultTrialHours)
 	loginUC := authsvc.NewLoginUseCase(userRepo, deviceRepo, hasher, tokens, sessions, authsvc.SystemClock{}, 3, log)
 	logoutUC := authsvc.NewLogoutUseCase(tokens, sessions, log)
 	refreshUC := authsvc.NewRefreshUseCase(tokens, sessions, log)
@@ -263,9 +265,12 @@ func NewTestHandler(t *testing.T, db *sql.DB) (http.Handler, *fakePayments) {
 		authsvc.NewRevokeDeviceUseCase(deviceRepo, sessions, log),
 	)
 
-	billingService := billingsvc.NewService(userRepo, paymentRepo, payments, []billingsvc.Plan{
-		{Code: "month", Title: "Месяц", AmountRUB: 299, PeriodDays: 30},
-		{Code: "year", Title: "Год", AmountRUB: 2990, PeriodDays: 365},
+	billingService := billingsvc.NewService(userRepo, paymentRepo, orderRepo, payments, []billingsvc.Plan{
+		{Code: "personal_basic", Title: "Personal Basic", AmountRUB: 299, PeriodDays: 30, MaxDevices: 2, MaxUsers: 1},
+		{Code: "personal_pro", Title: "Personal Pro", AmountRUB: 499, PeriodDays: 30, MaxDevices: 5, MaxUsers: 1},
+		{Code: "business", Title: "Business", AmountRUB: 1490, PeriodDays: 30, MaxDevices: 5, MaxUsers: 5},
+		{Code: "month", Title: "Месяц", AmountRUB: 299, PeriodDays: 30, MaxDevices: 2},
+		{Code: "year", Title: "Год", AmountRUB: 2990, PeriodDays: 365, MaxDevices: 2},
 	}, billingsvc.SystemClock{}, log)
 
 	adminUserService := adminsvc.NewUserService(userRepo, sessions, auditRepo, adminsvc.SystemClock{}, log)

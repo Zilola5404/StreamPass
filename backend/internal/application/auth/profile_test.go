@@ -51,6 +51,10 @@ func (m *memUsers) FindByID(_ context.Context, id user.ID) (*user.User, error) {
 	return &cp, nil
 }
 func (m *memUsers) ExtendSubscription(context.Context, user.ID, time.Time) error { return nil }
+func (m *memUsers) ActivatePaidPlan(context.Context, user.ID, time.Time, string) error {
+	return nil
+}
+func (m *memUsers) CancelAutoRenew(context.Context, user.ID, time.Time) error { return nil }
 func (m *memUsers) ClearSubscription(context.Context, user.ID, time.Time) error  { return nil }
 func (m *memUsers) SetBanned(context.Context, user.ID, *time.Time, time.Time) error {
 	return nil

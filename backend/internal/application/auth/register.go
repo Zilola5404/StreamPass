@@ -19,15 +19,18 @@ type IDGenerator interface {
 // RegisterUseCase implements "POST /register" business logic (spec section
 // 13/22: user registration).
 type RegisterUseCase struct {
-	repo      user.Repository
-	hasher    PasswordHasher
-	ids       IDGenerator
-	clock     Clock
-	log       *logger.Logger
-	trialDays int
+	repo       user.Repository
+	hasher     PasswordHasher
+	ids        IDGenerator
+	clock      Clock
+	log        *logger.Logger
+	trialHours int
 }
 
-// DefaultTrialDays is the architect-approved free trial length.
+// DefaultTrialHours is the BILLING-001 free trial length (72 hours wall-clock).
+const DefaultTrialHours = 72
+
+// DefaultTrialDays is kept for callers that still think in calendar days (3×24h).
 const DefaultTrialDays = 3
 
 // NewRegisterUseCase wires the use case via constructor injection — every
@@ -35,14 +38,22 @@ const DefaultTrialDays = 3
 func NewRegisterUseCase(repo user.Repository, hasher PasswordHasher, ids IDGenerator, clock Clock, log *logger.Logger) *RegisterUseCase {
 	return &RegisterUseCase{
 		repo: repo, hasher: hasher, ids: ids, clock: clock,
-		log: log.With("register"), trialDays: DefaultTrialDays,
+		log: log.With("register"), trialHours: DefaultTrialHours,
 	}
 }
 
-// WithTrialDays overrides the free-trial length (tests / config).
+// WithTrialHours overrides the free-trial length in hours (tests / config).
+func (uc *RegisterUseCase) WithTrialHours(hours int) *RegisterUseCase {
+	if hours > 0 {
+		uc.trialHours = hours
+	}
+	return uc
+}
+
+// WithTrialDays overrides trial as days×24 hours (compat helper).
 func (uc *RegisterUseCase) WithTrialDays(days int) *RegisterUseCase {
 	if days > 0 {
-		uc.trialDays = days
+		uc.trialHours = days * 24
 	}
 	return uc
 }
@@ -73,7 +84,7 @@ func (uc *RegisterUseCase) Execute(ctx context.Context, email, password string) 
 
 	now := uc.clock.Now()
 	u := user.NewUser(uc.ids.NewID(), email, hash, now)
-	trialEnd := now.Add(time.Duration(uc.trialDays) * 24 * time.Hour)
+	trialEnd := now.Add(time.Duration(uc.trialHours) * time.Hour)
 	u.TrialStartedAt = &now
 	u.TrialEndsAt = &trialEnd
 	u.SubscriptionActiveUntil = &trialEnd

@@ -18,7 +18,7 @@ import (
 // domain-meaningful AppError.
 const pqUniqueViolationCode = "23505"
 
-const userSelectCols = `id, email, password_hash, created_at, updated_at, subscription_active_until, banned_at, trial_started_at, trial_ends_at, entitlement_source`
+const userSelectCols = `id, email, password_hash, created_at, updated_at, subscription_active_until, banned_at, trial_started_at, trial_ends_at, entitlement_source, COALESCE(plan_code, ''), subscription_canceled_at`
 
 
 // UserRepository implements user.Repository against the "users" table.
@@ -96,11 +96,11 @@ func scanUser(scanner interface {
 	Scan(dest ...any) error
 }) (*user.User, error) {
 	var u user.User
-	var subUntil, bannedAt, trialStart, trialEnd sql.NullTime
+	var subUntil, bannedAt, trialStart, trialEnd, canceledAt sql.NullTime
 	var entitlement sql.NullString
 	err := scanner.Scan(
 		&u.ID, &u.Email, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt,
-		&subUntil, &bannedAt, &trialStart, &trialEnd, &entitlement,
+		&subUntil, &bannedAt, &trialStart, &trialEnd, &entitlement, &u.PlanCode, &canceledAt,
 	)
 	if err != nil {
 		return nil, err
@@ -119,6 +119,9 @@ func scanUser(scanner interface {
 	}
 	if entitlement.Valid {
 		u.EntitlementSource = entitlement.String
+	}
+	if canceledAt.Valid {
+		u.SubscriptionCanceledAt = &canceledAt.Time
 	}
 	return &u, nil
 }
@@ -139,6 +142,7 @@ func (r *UserRepository) ExtendSubscription(ctx context.Context, id user.ID, act
 		      WHEN entitlement_source IS NULL OR entitlement_source = 'trial' THEN 'paid'
 		      ELSE entitlement_source
 		    END,
+		    subscription_canceled_at = NULL,
 		    updated_at = NOW()
 		WHERE id = $1`
 	res, err := r.db.ExecContext(ctx, q, id, activeUntil)
@@ -148,6 +152,51 @@ func (r *UserRepository) ExtendSubscription(ctx context.Context, id user.ID, act
 	n, err := res.RowsAffected()
 	if err != nil {
 		return apperrors.Wrap(apperrors.CodeInternal, "failed to confirm subscription update", err)
+	}
+	if n == 0 {
+		return user.ErrNotFound(string(id))
+	}
+	return nil
+}
+
+// ActivatePaidPlan extends access after webhook confirmation and stores plan_code.
+func (r *UserRepository) ActivatePaidPlan(ctx context.Context, id user.ID, activeUntil time.Time, planCode string) error {
+	const q = `
+		UPDATE users
+		SET subscription_active_until = $2,
+		    entitlement_source = 'paid',
+		    plan_code = NULLIF($3, ''),
+		    subscription_canceled_at = NULL,
+		    updated_at = NOW()
+		WHERE id = $1`
+	res, err := r.db.ExecContext(ctx, q, id, activeUntil, planCode)
+	if err != nil {
+		return apperrors.Wrap(apperrors.CodeInternal, "failed to activate paid plan", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return apperrors.Wrap(apperrors.CodeInternal, "failed to confirm paid plan update", err)
+	}
+	if n == 0 {
+		return user.ErrNotFound(string(id))
+	}
+	return nil
+}
+
+// CancelAutoRenew records cancel intent; access remains until subscription_active_until.
+func (r *UserRepository) CancelAutoRenew(ctx context.Context, id user.ID, now time.Time) error {
+	const q = `
+		UPDATE users
+		SET subscription_canceled_at = COALESCE(subscription_canceled_at, $2),
+		    updated_at = $2
+		WHERE id = $1`
+	res, err := r.db.ExecContext(ctx, q, id, now)
+	if err != nil {
+		return apperrors.Wrap(apperrors.CodeInternal, "failed to cancel subscription", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return apperrors.Wrap(apperrors.CodeInternal, "failed to confirm subscription cancel", err)
 	}
 	if n == 0 {
 		return user.ErrNotFound(string(id))
@@ -216,6 +265,9 @@ func (r *UserRepository) Delete(ctx context.Context, id user.ID) error {
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM payments WHERE user_id = $1`, id); err != nil {
 		return apperrors.Wrap(apperrors.CodeInternal, "failed to delete user payments", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM orders WHERE user_id = $1`, id); err != nil {
+		return apperrors.Wrap(apperrors.CodeInternal, "failed to delete user orders", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM user_devices WHERE user_id = $1`, id); err != nil {
 		return apperrors.Wrap(apperrors.CodeInternal, "failed to delete user devices", err)

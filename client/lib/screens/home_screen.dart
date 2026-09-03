@@ -781,7 +781,7 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
           setState(() => _state = ConnState.disconnected);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Для подключения нужна активная подписка'),
+              content: Text('Пробный период закончился. Выберите тариф.'),
               duration: Duration(seconds: 3),
             ),
           );
@@ -1179,7 +1179,7 @@ class _TrialBanner extends StatelessWidget {
                   Text(label, style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 4),
                   Text(
-                    'Подписка от 299 ₽/мес — выберите тариф заранее',
+                    'Тарифы загружаются с сервера — выберите заранее',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -1214,7 +1214,7 @@ class _PaywallBanner extends StatelessWidget {
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 4),
                   Text(
-                    'Выберите подписку, чтобы продолжить пользоваться StreamPass',
+                    'Выберите тариф, чтобы продолжить пользоваться StreamPass.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],

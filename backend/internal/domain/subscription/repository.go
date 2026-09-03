@@ -9,8 +9,16 @@ type PaymentRepository interface {
 	FindByID(ctx context.Context, id string) (*Payment, error)
 	FindByTxHash(ctx context.Context, txHash string) (*Payment, error)
 	Create(ctx context.Context, p *Payment) error
-	MarkSucceeded(ctx context.Context, providerID string) error
-	MarkSucceededByID(ctx context.Context, id, chargeID string, tgUserID *int64) error
-	// ListByUserID returns payments for a user, newest first (E06 history).
+	// MarkSucceededIfPending returns true only when this call transitioned PENDING→SUCCEEDED.
+	// Concurrent/replayed webhooks return false without error (no duplicate subscription extend).
+	MarkSucceededIfPending(ctx context.Context, providerID string) (bool, error)
+	MarkSucceededByIDIfPending(ctx context.Context, id, chargeID string, tgUserID *int64) (bool, error)
 	ListByUserID(ctx context.Context, userID string) ([]*Payment, error)
+}
+
+// OrderRepository persists purchase intents (BILLING-001 Create Order step).
+type OrderRepository interface {
+	Create(ctx context.Context, o *Order) error
+	FindByID(ctx context.Context, id string) (*Order, error)
+	MarkPaidIfPending(ctx context.Context, id string) (bool, error)
 }

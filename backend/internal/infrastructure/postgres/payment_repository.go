@@ -23,7 +23,8 @@ func NewPaymentRepository(db *sql.DB) *PaymentRepository {
 const paymentSelectCols = `
 	id, user_id, provider_id, amount_rub, period_days, status, created_at,
 	COALESCE(provider, 'yookassa'), COALESCE(currency, 'RUB'),
-	telegram_user_id, COALESCE(tariff, ''), COALESCE(tx_hash, ''), paid_at`
+	telegram_user_id, COALESCE(tariff, ''), COALESCE(tx_hash, ''), paid_at,
+	COALESCE(order_id, '')`
 
 func scanPayment(scanner interface {
 	Scan(dest ...any) error
@@ -33,7 +34,7 @@ func scanPayment(scanner interface {
 	var paidAt sql.NullTime
 	err := scanner.Scan(
 		&p.ID, &p.UserID, &p.ProviderID, &p.AmountRUB, &p.PeriodDays, &p.Status, &p.CreatedAt,
-		&p.Provider, &p.Currency, &tgID, &p.Tariff, &p.TxHash, &paidAt,
+		&p.Provider, &p.Currency, &tgID, &p.Tariff, &p.TxHash, &paidAt, &p.OrderID,
 	)
 	if err != nil {
 		return nil, err
@@ -60,16 +61,20 @@ func (r *PaymentRepository) Create(ctx context.Context, p *subscription.Payment)
 	const q = `
 		INSERT INTO payments (
 			id, user_id, provider_id, amount_rub, period_days, status, created_at,
-			provider, currency, telegram_user_id, tariff, tx_hash, paid_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`
+			provider, currency, telegram_user_id, tariff, tx_hash, paid_at, order_id
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`
 
 	var tg any
 	if p.TelegramUserID != nil {
 		tg = *p.TelegramUserID
 	}
+	var orderID any
+	if p.OrderID != "" {
+		orderID = p.OrderID
+	}
 	_, err := r.db.ExecContext(ctx, q,
 		p.ID, p.UserID, p.ProviderID, p.AmountRUB, p.PeriodDays, p.Status, p.CreatedAt,
-		p.Provider, p.Currency, tg, p.Tariff, nullIfEmpty(p.TxHash), p.PaidAt,
+		p.Provider, p.Currency, tg, p.Tariff, nullIfEmpty(p.TxHash), p.PaidAt, orderID,
 	)
 	if err != nil {
 		return apperrors.Wrap(apperrors.CodeInternal, "failed to insert payment", err)
@@ -127,52 +132,46 @@ func (r *PaymentRepository) FindByTxHash(ctx context.Context, txHash string) (*s
 	return p, nil
 }
 
-// MarkSucceeded transitions a payment to SUCCEEDED.
-func (r *PaymentRepository) MarkSucceeded(ctx context.Context, providerID string) error {
-	const q = `UPDATE payments SET status = $2, paid_at = COALESCE(paid_at, NOW()) WHERE provider_id = $1`
-
-	res, err := r.db.ExecContext(ctx, q, providerID, subscription.PaymentSucceeded)
+// MarkSucceededIfPending transitions PENDING→SUCCEEDED once (BILLING-001 idempotency).
+func (r *PaymentRepository) MarkSucceededIfPending(ctx context.Context, providerID string) (bool, error) {
+	const q = `
+		UPDATE payments
+		SET status = $2, paid_at = COALESCE(paid_at, NOW())
+		WHERE provider_id = $1 AND status = $3`
+	res, err := r.db.ExecContext(ctx, q, providerID, subscription.PaymentSucceeded, subscription.PaymentPending)
 	if err != nil {
-		return apperrors.Wrap(apperrors.CodeInternal, "failed to mark payment succeeded", err)
+		return false, apperrors.Wrap(apperrors.CodeInternal, "failed to mark payment succeeded", err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return apperrors.Wrap(apperrors.CodeInternal, "failed to confirm payment update", err)
+		return false, apperrors.Wrap(apperrors.CodeInternal, "failed to confirm payment update", err)
 	}
-	if n == 0 {
-		return apperrors.New(apperrors.CodeNotFound, "payment not found").
-			WithDetails(map[string]any{"provider_id": providerID})
-	}
-	return nil
+	return n > 0, nil
 }
 
-// MarkSucceededByID marks a payment succeeded by primary key and stores charge metadata.
-func (r *PaymentRepository) MarkSucceededByID(ctx context.Context, id, chargeID string, tgUserID *int64) error {
+// MarkSucceededByIDIfPending marks a payment succeeded by primary key once.
+func (r *PaymentRepository) MarkSucceededByIDIfPending(ctx context.Context, id, chargeID string, tgUserID *int64) (bool, error) {
 	const q = `
 		UPDATE payments
 		SET status = $2,
 		    paid_at = COALESCE(paid_at, NOW()),
 		    tx_hash = COALESCE(NULLIF($3, ''), tx_hash),
 		    telegram_user_id = COALESCE($4, telegram_user_id)
-		WHERE id = $1`
+		WHERE id = $1 AND status = $5`
 
 	var tg any
 	if tgUserID != nil {
 		tg = *tgUserID
 	}
-	res, err := r.db.ExecContext(ctx, q, id, subscription.PaymentSucceeded, chargeID, tg)
+	res, err := r.db.ExecContext(ctx, q, id, subscription.PaymentSucceeded, chargeID, tg, subscription.PaymentPending)
 	if err != nil {
-		return apperrors.Wrap(apperrors.CodeInternal, "failed to mark payment succeeded", err)
+		return false, apperrors.Wrap(apperrors.CodeInternal, "failed to mark payment succeeded", err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return apperrors.Wrap(apperrors.CodeInternal, "failed to confirm payment update", err)
+		return false, apperrors.Wrap(apperrors.CodeInternal, "failed to confirm payment update", err)
 	}
-	if n == 0 {
-		return apperrors.New(apperrors.CodeNotFound, "payment not found").
-			WithDetails(map[string]any{"id": id})
-	}
-	return nil
+	return n > 0, nil
 }
 
 // ListByUserID returns payments for a user, newest first.

@@ -168,7 +168,8 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 	tgProvider := telegram.NewProvider(tgBot, starsPlans)
 
 	// --- Application services ---
-	registerUC := authsvc.NewRegisterUseCase(userRepo, hasher, idGeneratorAdapter{}, authsvc.SystemClock{}, log)
+	registerUC := authsvc.NewRegisterUseCase(userRepo, hasher, idGeneratorAdapter{}, authsvc.SystemClock{}, log).
+		WithTrialHours(cfg.IntOr("billing.trial_hours", authsvc.DefaultTrialHours))
 	maxDevices := cfg.IntOr("auth.max_devices", 3)
 	loginUC := authsvc.NewLoginUseCase(userRepo, deviceRepo, hasher, tokens, sessions, authsvc.SystemClock{}, maxDevices, log)
 	logoutUC := authsvc.NewLogoutUseCase(tokens, sessions, log)
@@ -203,22 +204,37 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 			})
 		}
 	} else {
-		basicAmount := int64(cfg.IntOr("billing.plan_basic_rub", cfg.IntOr("billing.plan_amount_rub", 299)))
-		proAmount := int64(cfg.IntOr("billing.plan_pro_rub", 499))
+		basicAmount := int64(cfg.IntOr("billing.plan_personal_basic_rub", cfg.IntOr("billing.plan_basic_rub", cfg.IntOr("billing.plan_amount_rub", 299))))
+		proAmount := int64(cfg.IntOr("billing.plan_personal_pro_rub", cfg.IntOr("billing.plan_pro_rub", 499)))
 		bizAmount := int64(cfg.IntOr("billing.plan_business_rub", 1490))
 		monthDays := cfg.IntOr("billing.plan_period_days", 30)
 		yearAmount := int64(cfg.IntOr("billing.yearly_amount_rub", int(basicAmount*10)))
 		yearDays := cfg.IntOr("billing.yearly_period_days", 365)
 		billingPlans = []billingsvc.Plan{
-			{Code: "basic", Title: "Basic", AmountRUB: basicAmount, PeriodDays: monthDays, Currency: "RUB"},
-			{Code: "pro", Title: "Pro", AmountRUB: proAmount, PeriodDays: monthDays, Currency: "RUB"},
-			{Code: "business", Title: "Business", AmountRUB: bizAmount, PeriodDays: monthDays, Currency: "RUB"},
-			// Aliases for older clients
-			{Code: "month", Title: "Месяц (Basic)", AmountRUB: basicAmount, PeriodDays: monthDays, Currency: "RUB"},
-			{Code: "year", Title: "Год (Basic)", AmountRUB: yearAmount, PeriodDays: yearDays, Currency: "RUB"},
+			{
+				Code: "personal_basic", Title: "Personal Basic", AmountRUB: basicAmount, PeriodDays: monthDays,
+				Currency: "RUB", MaxDevices: 2, MaxUsers: 1,
+				Description: "1 пользователь · до 2 устройств · DIRECT/RELAY · авто-маршрутизация",
+			},
+			{
+				Code: "personal_pro", Title: "Personal Pro", AmountRUB: proAmount, PeriodDays: monthDays,
+				Currency: "RUB", MaxDevices: 5, MaxUsers: 1,
+				Description: "1 пользователь · до 5 устройств · приоритетная поддержка",
+			},
+			{
+				Code: "business", Title: "Business", AmountRUB: bizAmount, PeriodDays: monthDays,
+				Currency: "RUB", MaxDevices: 5, MaxUsers: 5,
+				Description: "Организация · до 5 пользователей · централизованная подписка",
+			},
+			// Legacy aliases (accepted by CreatePayment; hidden from GET /plans)
+			{Code: "basic", Title: "Personal Basic", AmountRUB: basicAmount, PeriodDays: monthDays, Currency: "RUB", MaxDevices: 2, MaxUsers: 1},
+			{Code: "pro", Title: "Personal Pro", AmountRUB: proAmount, PeriodDays: monthDays, Currency: "RUB", MaxDevices: 5, MaxUsers: 1},
+			{Code: "month", Title: "Месяц (Basic)", AmountRUB: basicAmount, PeriodDays: monthDays, Currency: "RUB", MaxDevices: 2, MaxUsers: 1},
+			{Code: "year", Title: "Год (Basic)", AmountRUB: yearAmount, PeriodDays: yearDays, Currency: "RUB", MaxDevices: 2, MaxUsers: 1},
 		}
 	}
-	billingService := billingsvc.NewService(userRepo, paymentRepo, paymentProvider, billingPlans, billingsvc.SystemClock{}, log)
+	orderRepo := postgres.NewOrderRepository(db)
+	billingService := billingsvc.NewService(userRepo, paymentRepo, orderRepo, paymentProvider, billingPlans, billingsvc.SystemClock{}, log)
 	if tgBot.Enabled() {
 		billingService.SetTelegramInvoicer(tgProvider)
 	}

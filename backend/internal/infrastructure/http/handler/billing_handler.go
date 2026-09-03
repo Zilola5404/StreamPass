@@ -34,10 +34,52 @@ func (h *BillingHandler) SetPlategaAuth(fn func(merchantID, secret string) bool)
 
 type createPaymentRequest struct {
 	PlanCode string `json:"plan_code"`
+	OrderID  string `json:"order_id"`
 }
 
 type createPaymentResponse struct {
 	ConfirmationURL string `json:"confirmation_url"`
+	OrderID         string `json:"order_id,omitempty"`
+}
+
+type createOrderRequest struct {
+	PlanCode string `json:"plan_code"`
+}
+
+type createOrderResponse struct {
+	OrderID    string `json:"order_id"`
+	PlanCode   string `json:"plan_code"`
+	AmountRUB  int64  `json:"amount_rub"`
+	PeriodDays int    `json:"period_days"`
+	Currency   string `json:"currency"`
+	Status     string `json:"status"`
+}
+
+// CreateOrder handles "POST /orders" (authenticated) — BILLING-001.
+func (h *BillingHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, httpx.ErrUnauthenticated())
+		return
+	}
+	var req createOrderRequest
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	order, err := h.svc.CreateOrder(r.Context(), userID, req.PlanCode)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, createOrderResponse{
+		OrderID:    order.ID,
+		PlanCode:   order.PlanCode,
+		AmountRUB:  order.AmountRUB,
+		PeriodDays: order.PeriodDays,
+		Currency:   order.Currency,
+		Status:     string(order.Status),
+	})
 }
 
 // CreatePayment handles "POST /payments" (authenticated).
@@ -49,15 +91,16 @@ func (h *BillingHandler) CreatePayment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req createPaymentRequest
-	// Empty body is fine — defaults to month plan.
+	// Empty body is fine — defaults to first plan.
 	_ = httpx.DecodeJSON(r, &req)
 
-	url, err := h.svc.CreatePayment(r.Context(), userID, req.PlanCode)
+	planCode := req.PlanCode
+	url, err := h.svc.CreatePaymentForOrder(r.Context(), userID, planCode, req.OrderID)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusCreated, createPaymentResponse{ConfirmationURL: url})
+	httpx.WriteJSON(w, http.StatusCreated, createPaymentResponse{ConfirmationURL: url, OrderID: req.OrderID})
 }
 
 type webhookRequest struct {
@@ -137,11 +180,15 @@ func (h *BillingHandler) HandlePlategaWebhook(w http.ResponseWriter, r *http.Req
 }
 
 type subscriptionResponse struct {
-	Status      string  `json:"status"`
-	ActiveUntil *string `json:"active_until,omitempty"`
-	TrialEndsAt *string `json:"trial_ends_at,omitempty"`
-	Source      string  `json:"source,omitempty"`
-	DaysLeft    int     `json:"days_left"`
+	Status        string  `json:"status"`
+	ActiveUntil   *string `json:"active_until,omitempty"`
+	TrialEndsAt   *string `json:"trial_ends_at,omitempty"`
+	Source        string  `json:"source,omitempty"`
+	PlanCode      string  `json:"plan_code,omitempty"`
+	DaysLeft      int     `json:"days_left"`
+	HoursLeft     int     `json:"hours_left"`
+	AccessAllowed bool    `json:"access_allowed"`
+	ErrorCode     string  `json:"error_code,omitempty"`
 }
 
 // GetSubscription handles "GET /subscription" (authenticated).
@@ -159,9 +206,13 @@ func (h *BillingHandler) GetSubscription(w http.ResponseWriter, r *http.Request)
 	}
 
 	resp := subscriptionResponse{
-		Status:   string(info.Status),
-		Source:   info.Source,
-		DaysLeft: info.DaysLeft,
+		Status:        string(info.Status),
+		Source:        info.Source,
+		PlanCode:      info.PlanCode,
+		DaysLeft:      info.DaysLeft,
+		HoursLeft:     info.HoursLeft,
+		AccessAllowed: info.AccessAllowed,
+		ErrorCode:     info.ErrorCode,
 	}
 	if info.ActiveUntil != nil {
 		formatted := info.ActiveUntil.Format(httpx.TimeFormat)
@@ -190,14 +241,17 @@ func (h *BillingHandler) CancelSubscription(w http.ResponseWriter, r *http.Reque
 }
 
 type planDTO struct {
-	Code       string `json:"code"`
-	Title      string `json:"title"`
-	AmountRUB  int64  `json:"amount_rub"`
-	PeriodDays int    `json:"period_days"`
-	Currency   string `json:"currency"`
+	Code        string `json:"code"`
+	Title       string `json:"title"`
+	AmountRUB   int64  `json:"amount_rub"`
+	PeriodDays  int    `json:"period_days"`
+	Currency    string `json:"currency"`
+	MaxDevices  int    `json:"max_devices,omitempty"`
+	MaxUsers    int    `json:"max_users,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
-// ListPlans handles "GET /plans" (authenticated — tariffs for E06).
+// ListPlans handles "GET /plans" (authenticated — tariffs for E06 / BILLING-001).
 func (h *BillingHandler) ListPlans(w http.ResponseWriter, r *http.Request) {
 	plans := h.svc.ListPlans()
 	out := make([]planDTO, 0, len(plans))
@@ -207,11 +261,14 @@ func (h *BillingHandler) ListPlans(w http.ResponseWriter, r *http.Request) {
 			cur = "RUB"
 		}
 		out = append(out, planDTO{
-			Code:       p.Code,
-			Title:      p.Title,
-			AmountRUB:  p.AmountRUB,
-			PeriodDays: p.PeriodDays,
-			Currency:   cur,
+			Code:        p.Code,
+			Title:       p.Title,
+			AmountRUB:   p.AmountRUB,
+			PeriodDays:  p.PeriodDays,
+			Currency:    cur,
+			MaxDevices:  p.MaxDevices,
+			MaxUsers:    p.MaxUsers,
+			Description: p.Description,
 		})
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)

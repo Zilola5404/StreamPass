@@ -4,16 +4,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/streampass_api.dart';
 import '../theme/app_theme.dart';
 
-/// E06 — статус, тарифы, оплата, история (BL-048).
+/// E06 / BILLING-001 — статус, Plan Catalog с Backend, оплата, история.
 class SubscriptionScreen extends StatefulWidget {
   final StreamPassApi api;
   const SubscriptionScreen({super.key, required this.api});
-
-  static const fallbackStarsPlans = [
-    PlanInfo(code: 'month', title: '1 месяц', amountRub: 499, periodDays: 30, currency: 'XTR'),
-    PlanInfo(code: 'quarter', title: '3 месяца', amountRub: 1299, periodDays: 90, currency: 'XTR'),
-    PlanInfo(code: 'year', title: '12 месяцев', amountRub: 3999, periodDays: 365, currency: 'XTR'),
-  ];
 
   @override
   State<SubscriptionScreen> createState() => _SubscriptionScreenState();
@@ -24,7 +18,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
   SubscriptionInfo? _info;
   List<PlanInfo> _plans = const [];
   List<PaymentRecord> _payments = const [];
-  String _selectedPlan = 'pro';
+  String _selectedPlan = 'personal_basic';
   bool _loading = true;
   bool _payLoading = false;
   bool _awaitingPaymentReturn = false;
@@ -65,9 +59,6 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
       try {
         plans = await widget.api.fetchPlans();
       } catch (_) {}
-      if (plans.isEmpty) {
-        plans = SubscriptionScreen.fallbackStarsPlans;
-      }
       try {
         payments = await widget.api.fetchPayments();
       } catch (_) {}
@@ -92,6 +83,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
   }
 
   Future<void> _pay() async {
+    if (_plans.isEmpty) {
+      setState(() => _error = 'Тарифы недоступны. Обновите экран и попробуйте снова.');
+      return;
+    }
     setState(() {
       _payLoading = true;
       _error = null;
@@ -180,17 +175,26 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
   }
 
   String _paymentAmountLabel(PaymentRecord p) {
-    if (p.amountRub == 499 || p.amountRub == 1299 || p.amountRub == 3999) {
-      return '${p.amountRub} ⭐';
-    }
     if (_plans.isNotEmpty && _plans.first.currency == 'XTR') {
       return '${p.amountRub} ⭐';
     }
     return '${p.amountRub} ₽';
   }
 
+  String get _payButtonLabel {
+    if (_plans.isEmpty) return 'Выбрать тариф';
+    if (_plans.every((p) => p.currency == 'XTR')) {
+      return 'Оплатить через Telegram';
+    }
+    return 'Выбрать тариф';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final trialExpired = _info?.isTrialExpired == true ||
+        (_info?.isActive != true && _info?.errorCode == 'TRIAL_EXPIRED');
+    final showPaywallCopy = _info?.isActive != true;
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -209,24 +213,43 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
                 padding: const EdgeInsets.all(20),
                 children: [
                   _StatusCard(info: _info),
+                  if (showPaywallCopy) ...[
+                    const SizedBox(height: 20),
+                    Text(
+                      trialExpired
+                          ? 'Пробный период закончился'
+                          : 'Нужна подписка',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Выберите тариф, чтобы продолжить пользоваться StreamPass.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                    ),
+                  ],
                   if (_error != null) ...[
                     const SizedBox(height: 16),
                     Text(_error!, style: const TextStyle(color: AppColors.danger)),
                   ],
                   const SizedBox(height: 24),
                   Text(
-                    _info?.isActive == true ? 'Продлить подписку' : 'Тариф',
+                    _info?.isActive == true ? 'Продлить подписку' : 'Тарифы',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 12),
                   if (_plans.isEmpty)
                     const Text(
-                      'Тарифы временно недоступны',
+                      'Тарифы временно недоступны. Проверьте соединение и обновите экран.',
                       style: TextStyle(color: AppColors.textSecondary),
                     )
                   else
                     ..._plans.map((p) {
                       final selected = p.code == _selectedPlan;
+                      final subtitle = p.description.isNotEmpty
+                          ? p.description
+                          : '${p.periodDays} дн.';
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Material(
@@ -257,8 +280,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
                                           p.title,
                                           style: Theme.of(context).textTheme.titleMedium,
                                         ),
+                                        const SizedBox(height: 4),
                                         Text(
-                                          '${p.periodDays} дн.',
+                                          subtitle,
                                           style: Theme.of(context).textTheme.bodyMedium,
                                         ),
                                       ],
@@ -279,7 +303,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: _payLoading ? null : _pay,
+                      onPressed: (_payLoading || _plans.isEmpty) ? null : _pay,
                       child: _payLoading
                           ? const SizedBox(
                               height: 20,
@@ -289,14 +313,17 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
                                 color: AppColors.bg,
                               ),
                             )
-                          : const Text('Оплатить через Telegram'),
+                          : Text(_payButtonLabel),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Счёт откроется в Telegram (Stars).',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+                  if (_plans.isNotEmpty &&
+                      _plans.every((p) => p.currency == 'XTR')) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Счёт откроется в Telegram (Stars).',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                   if (_info?.isActive == true) ...[
                     const SizedBox(height: 24),
                     SizedBox(
@@ -350,6 +377,18 @@ class _StatusCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final active = info?.isActive ?? false;
     final until = info?.activeUntil;
+    final status = (info?.status ?? '').toUpperCase();
+
+    String title;
+    if (status == 'TRIAL') {
+      title = 'Пробный период';
+    } else if (status == 'CANCELED' && active) {
+      title = 'Подписка отменена';
+    } else if (active) {
+      title = 'Подписка активна';
+    } else {
+      title = 'Подписка не активна';
+    }
 
     return Container(
       width: double.infinity,
@@ -367,10 +406,7 @@ class _StatusCard extends StatelessWidget {
               Icon(Icons.workspace_premium_rounded,
                   color: active ? AppColors.amber : AppColors.textSecondary),
               const SizedBox(width: 10),
-              Text(
-                active ? 'Premium активна' : 'Подписка не активна',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+              Text(title, style: Theme.of(context).textTheme.titleMedium),
             ],
           ),
           if (active && until != null) ...[
@@ -383,7 +419,7 @@ class _StatusCard extends StatelessWidget {
           if (!active) ...[
             const SizedBox(height: 10),
             Text(
-              'Оформите подписку, чтобы подключаться к relay-серверам StreamPass.',
+              'Выберите тариф, чтобы продолжить пользоваться StreamPass.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ],

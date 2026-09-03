@@ -36,10 +36,13 @@ rate_limit:
   public_window: 1m
 
 billing:
+  trial_hours: 72
   plan_amount_rub: 299
   plan_period_days: 30
   yearly_amount_rub: 2990
   yearly_period_days: 365
+  plan_personal_basic_rub: 299
+  plan_personal_pro_rub: 499
   plan_basic_rub: 299
   plan_pro_rub: 499
   plan_business_rub: 1490

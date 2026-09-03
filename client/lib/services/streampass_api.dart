@@ -72,7 +72,7 @@ class StreamPassApi {
   }
 
   /// Returns a payment confirmation URL (Telegram invoice link or card redirect).
-  Future<String> createPayment({String planCode = 'month'}) async {
+  Future<String> createPayment({String planCode = 'personal_basic'}) async {
     final body = await _post('/payments', {'plan_code': planCode});
     final map = body as Map<String, dynamic>;
     return (map['confirmation_url'] ?? map['invoice_link']) as String;
@@ -344,7 +344,10 @@ class SubscriptionInfo {
   final DateTime? trialEndsAt;
   final String status;
   final String source;
+  final String planCode;
   final int daysLeft;
+  final int hoursLeft;
+  final String errorCode;
 
   const SubscriptionInfo({
     required this.isActive,
@@ -352,13 +355,19 @@ class SubscriptionInfo {
     this.trialEndsAt,
     this.status = '',
     this.source = '',
+    this.planCode = '',
     this.daysLeft = 0,
+    this.hoursLeft = 0,
+    this.errorCode = '',
   });
 
   bool get isTrial => status.toUpperCase() == 'TRIAL' || source == 'trial';
   bool get isExpired =>
       status.toUpperCase() == 'EXPIRED' ||
       (!isActive && (activeUntil != null || trialEndsAt != null));
+  bool get isTrialExpired =>
+      errorCode == 'TRIAL_EXPIRED' ||
+      (isExpired && (isTrial || source == 'trial'));
 
   factory SubscriptionInfo.fromJson(Map<String, dynamic> json) {
     final statusStr = (json['status'] as String? ?? '').toUpperCase();
@@ -367,17 +376,31 @@ class SubscriptionInfo {
     final trialRaw = json['trial_ends_at'] as String?;
     final trialUntil = trialRaw != null ? DateTime.tryParse(trialRaw) : null;
     final source = (json['source'] as String? ?? '').toLowerCase();
+    final planCode = json['plan_code'] as String? ?? '';
     final daysLeft = (json['days_left'] as num?)?.toInt() ?? 0;
-    final active = statusStr == 'ACTIVE' ||
-        statusStr == 'TRIAL' ||
-        (until != null && until.isAfter(DateTime.now()));
+    final hoursLeft = (json['hours_left'] as num?)?.toInt() ?? 0;
+    final errorCode = json['error_code'] as String? ?? '';
+    final accessAllowed = json['access_allowed'];
+    final bool active;
+    if (accessAllowed is bool) {
+      active = accessAllowed;
+    } else {
+      // Connect allowed while TRIAL/ACTIVE/CANCELED with remaining time (server clock).
+      active = statusStr == 'ACTIVE' ||
+          statusStr == 'TRIAL' ||
+          statusStr == 'CANCELED' ||
+          (until != null && until.isAfter(DateTime.now()));
+    }
     return SubscriptionInfo(
       isActive: active,
       activeUntil: until,
       trialEndsAt: trialUntil,
       status: statusStr,
       source: source,
+      planCode: planCode,
       daysLeft: daysLeft,
+      hoursLeft: hoursLeft,
+      errorCode: errorCode,
     );
   }
 }
@@ -388,6 +411,9 @@ class PlanInfo {
   final int amountRub;
   final int periodDays;
   final String currency;
+  final int maxDevices;
+  final int maxUsers;
+  final String description;
 
   const PlanInfo({
     required this.code,
@@ -395,6 +421,9 @@ class PlanInfo {
     required this.amountRub,
     required this.periodDays,
     this.currency = 'RUB',
+    this.maxDevices = 0,
+    this.maxUsers = 0,
+    this.description = '',
   });
 
   factory PlanInfo.fromJson(Map<String, dynamic> json) => PlanInfo(
@@ -403,6 +432,9 @@ class PlanInfo {
         amountRub: (json['amount_rub'] as num?)?.toInt() ?? 0,
         periodDays: (json['period_days'] as num?)?.toInt() ?? 0,
         currency: (json['currency'] as String?)?.toUpperCase() ?? 'RUB',
+        maxDevices: (json['max_devices'] as num?)?.toInt() ?? 0,
+        maxUsers: (json['max_users'] as num?)?.toInt() ?? 0,
+        description: json['description'] as String? ?? '',
       );
 
   String get priceLabel {
