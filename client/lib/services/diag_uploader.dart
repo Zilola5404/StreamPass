@@ -24,22 +24,32 @@ class DiagUploader {
   );
 
   Timer? _timer;
+  Timer? _initialFlush;
   final LinkedHashSet<String> _uploaded = LinkedHashSet<String>();
   bool _inFlight = false;
+  bool _stopped = true;
 
   void start() {
+    _stopped = false;
     _timer?.cancel();
+    _initialFlush?.cancel();
     _timer = Timer.periodic(interval, (_) => flush());
-    unawaited(Future<void>.delayed(const Duration(seconds: 3), flush));
+    // One-shot first flush; must be cancelable so widget tests / dispose do not leak.
+    _initialFlush = Timer(const Duration(seconds: 3), () {
+      if (!_stopped) unawaited(flush());
+    });
   }
 
   void stop() {
+    _stopped = true;
     _timer?.cancel();
     _timer = null;
+    _initialFlush?.cancel();
+    _initialFlush = null;
   }
 
   Future<void> flush() async {
-    if (_inFlight) return;
+    if (_stopped || _inFlight) return;
     _inFlight = true;
     try {
       await NativeConnectLog.pullFromNative();

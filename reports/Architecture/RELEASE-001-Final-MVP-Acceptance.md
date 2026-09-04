@@ -39,40 +39,42 @@ b5f96bf  RELEASE-NETWORK-001
 
 ---
 
-## 2. Acceptance matrix (Device = physical proof)
+## 2. Acceptance matrix
 
-Fill **Device** on real Android / Windows before Production. Code column = present in this RC.
+**Code** = present in RC. **Lab** = automated / static proof on this runner (2026-09-04). **Device** = physical proof (required for Production).
+
+See also: `RELEASE-001-Lab-Execution.md`.
 
 ### Android — STEPS 2–4, 6–7
 
-| # | Test | Expectation | Code | Device |
-|---|------|-------------|------|--------|
-| 2a | Launch → Login → Home | App usable with Backend ON | PASS | OPEN |
-| 2b | DIRECT: ya.ru, 2ip.ru, Госуслуги, S7 | Pages load (not only Connected) | PASS | OPEN |
-| 2c | RELAY known blocked dest | Request → Response → Page loaded | PASS | OPEN |
-| 3a | Idle 15 min → Internet | Session alive, traffic works | PASS | OPEN |
-| 3b | Idle 30 min → Internet | Same | PASS | OPEN |
-| 4a | Wi‑Fi → LTE | Internet works | PASS | OPEN |
-| 4b | LTE → Wi‑Fi | Internet works | PASS | OPEN |
-| 6 | Connected → Relay OFF | Recovery **or** clean disconnect + ISP Internet | PASS | OPEN |
-| 7 | Backend OFF → Connect | «Сервер временно недоступен…» / no infinite spinner; no blackhole | PASS | OPEN |
+| # | Test | Expectation | Code | Lab | Device |
+|---|------|-------------|------|-----|--------|
+| 2a | Launch → Login → Home | App usable with Backend ON | PASS | PASS (mock e2e) | OPEN |
+| 2b | DIRECT: ya.ru, 2ip.ru, Госуслуги, S7 | Pages load (not only Connected) | PASS | PASS (rule matrix) | OPEN |
+| 2c | RELAY known blocked dest | Request → Response → Page loaded | PASS | PASS (rule matrix) | OPEN |
+| 3a | Idle 15 min → Internet | Session alive, traffic works | PASS | PASS (code path) | OPEN |
+| 3b | Idle 30 min → Internet | Same | PASS | PASS (code path) | OPEN |
+| 4a | Wi‑Fi → LTE | Internet works | PASS | PASS (code path) | OPEN |
+| 4b | LTE → Wi‑Fi | Internet works | PASS | PASS (code path) | OPEN |
+| 6 | Connected → Relay OFF | Recovery **or** clean disconnect + ISP Internet | PASS | PASS (code path) | OPEN |
+| 7 | Backend OFF → Connect | «Сервер временно недоступен…» / no infinite spinner; no blackhole | PASS | PASS (copy+unit) | OPEN |
 
 ### Windows — STEPS 5–7
 
-| # | Test | Expectation | Code | Device |
-|---|------|-------------|------|--------|
-| 5a | Connect → Internet | Page load | PASS | OPEN |
-| 5b | Idle 30 min → Internet | Works | PASS | OPEN |
-| 5c | Sleep → Wake → Internet | recover path | PASS | OPEN |
-| 5d | Disconnect → normal Internet | No stale `0.0.0.0/0` via StreamPass | PASS | OPEN |
-| 6 | Relay OFF while Connected | Recovery or clean disconnect | PASS | OPEN |
-| 7 | Backend OFF → Connect | User-facing unavailable; no hang | PASS | OPEN |
+| # | Test | Expectation | Code | Lab | Device |
+|---|------|-------------|------|-----|--------|
+| 5a | Connect → Internet | Page load | PASS | PASS (exe rebuild) | OPEN |
+| 5b | Idle 30 min → Internet | Works | PASS | PASS (code path) | OPEN |
+| 5c | Sleep → Wake → Internet | recover path | PASS | PASS (code path) | OPEN |
+| 5d | Disconnect → normal Internet | No stale `0.0.0.0/0` via StreamPass | PASS | PASS (protect tests) | OPEN |
+| 6 | Relay OFF while Connected | Recovery or clean disconnect | PASS | PASS (code path) | OPEN |
+| 7 | Backend OFF → Connect | User-facing unavailable; no hang | PASS | PASS (copy+unit) | OPEN |
 
 ### STEP 8 — Real Payment
 
-| # | Test | Expectation | Code | Device |
-|---|------|-------------|------|--------|
-| 8 | Trial expired → Paywall → Basic → Platega → Webhook → ACTIVE → Connect | Full money path | PASS | OPEN |
+| # | Test | Expectation | Code | Lab | Device |
+|---|------|-------------|------|-----|--------|
+| 8 | Trial expired → Paywall → Basic → Platega → Webhook → ACTIVE → Connect | Full money path | PASS | PASS (billing unit) | OPEN |
 
 ---
 
@@ -94,14 +96,15 @@ Fill **Device** on real Android / Windows before Production. Code column = prese
 
 ---
 
-## 5. Verdict (pre-device)
+## 5. Verdict (after lab execution)
 
 | Area | Status |
 |------|--------|
 | Billing (`fae42dd` + BILLING-001/002) | Accept — do not redesign trial/plans/Platega |
 | Network code (PR #3 + RELEASE-NETWORK-001 + Windows protect harden) | Accept for RC code freeze |
-| Proven on devices | OPEN — ~60% until matrix filled |
-| Closed beta readiness | After Device smoke + RC push |
-| Public launch | Not yet |
+| Lab automated proof | PASS (see Lab-Execution log) |
+| Proven on devices | OPEN — no adb device; API unreachable from runner |
+| Closed beta readiness | After Device smoke STEPS 2+5+7 |
+| Public launch / merge to Production | **HOLD** until Device columns PASS |
 
-**Next human action:** run STEPS 2–8 against **this RC SHA only**, mark Device column, then Code Review → merge PR #3 → Production cut from `release/mvp-1`.
+**Next human action:** rebuild AAR (needs JDK), run STEPS 2–8 on physical Android/Windows against **RC `2bc74bc` only**, mark Device column, then Code Review → merge PR #3 → Production cut from `release/mvp-1`.
