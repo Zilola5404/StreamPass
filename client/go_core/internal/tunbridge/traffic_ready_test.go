@@ -10,16 +10,21 @@ func TestMarkTrafficReadyOnce(t *testing.T) {
 
 	markTrafficReady("RELAY")
 	markTrafficReady("DIRECT")
-	if len(lines) != 1 {
-		t.Fatalf("want 1 traffic_ready log, got %d: %v", len(lines), lines)
+	if len(lines) != 2 {
+		t.Fatalf("want 2 logs (traffic_ready + TRAFFIC_READY), got %d: %v", len(lines), lines)
 	}
 	if lines[0] != "[vpn] traffic_ready via=RELAY" {
-		t.Fatalf("log=%q", lines[0])
+		t.Fatalf("log0=%q", lines[0])
+	}
+	if lines[1] != "[lifecycle] TRAFFIC_READY via=RELAY" {
+		t.Fatalf("log1=%q", lines[1])
 	}
 
 	resetTrafficReady()
 	markTrafficReady("DIRECT")
-	if len(lines) != 2 || lines[1] != "[vpn] traffic_ready via=DIRECT" {
+	if len(lines) != 4 ||
+		lines[2] != "[vpn] traffic_ready via=DIRECT" ||
+		lines[3] != "[lifecycle] TRAFFIC_READY via=DIRECT" {
 		t.Fatalf("after reset got %v", lines)
 	}
 }

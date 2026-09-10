@@ -24,7 +24,7 @@
 
 ## Ограничения политики (не баги)
 
-- `DefaultMode=RELAY` (+48 / ADR-018) + DNS `PinDirectIP` for RU — foreign→NL, 2ip→ISP.
+- `DefaultMode=DIRECT` (RELEASE-NETWORK-001) + DNS `PinDirectIP` for RU — unknown→ISP; known accelerator→RELAY.
 - Product `split` **не** делает UDP/443→DIRECT (`quic_direct_bypass` запрещён).
 - Cloudflare `/12` в builtin/rules **не** используется; Google/Meta CIDR — только IP-only safety net.
 - Network Mode (full_relay / direct_test / tcp_only) — только **Диагностика (E09)**.

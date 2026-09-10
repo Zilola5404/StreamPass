@@ -8,6 +8,7 @@
 ## [Unreleased]
 
 ### Fixed
+- **RELEASE-001:** Reset `traffic_ready` on relay re-attach / reconnect; Android underlay recover clears UI Connected until first_byte; canonical `[lifecycle]` CONNECT/RELAY/TRAFFIC_READY/RECONNECT events; IPv6 diagnostics accuracy (Windows Variant B vs Android capture+drop).
 - **Issue #4:** Server Unavailable UX — HTTP timeouts, Home CTA «Подключить», русские ошибки, autoConnect limit, Windows TUN teardown on relay fail.
 - **Architect Stage 1:** Windows RU split-tunnel (`Inet4RouteExcludeAddress`); **72h** trial on register; personal_basic/pro/business plans; Platega PaymentProvider + webhook; failover poll 10s.
 - **BILLING-002:** trial_hours SSOT, canonical plan codes, official CANCELED subscription status.
@@ -18,10 +19,13 @@
 - **TASK-WIN-001 / BL-023:** Windows TUN — Wintun sidecar (`streampasscore.exe`), physical-NIC `IP_UNICAST_IF` protect, DNS `198.18.0.1`, `traffic_ready` gate. Stages 5–12: Decision/split, Variant B IPv6, MTU UI, adaptive FALLBACK path, `scripts/VerifyWindowsTUN.ps1`.
 
 ### Docs
+- ADR-020: `DefaultMode=DIRECT` supersedes ADR-018 for MVP Smart Split (`docs/07.4`, `18`, `37`).
+- `reports/Architecture/RELEASE-001-Production-Readiness.md`
 - `reports/QA/android-notification-gvisor-2026-08-25.md`
 
 ### Known Issues
 - См. `docs/18_KnownIssues.md`
+- Physical Device E2E for RELEASE-001 RC still OPEN (required for 100/100)
 - TUN connect ~6s vs SLA ≤5s (accepted for Android MVP sign-off)
 - T3 airplane recover: needs clean manual retest
 

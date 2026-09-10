@@ -1,17 +1,21 @@
 # Last Session
 
-> Updated: 2026-08-15
+> Updated: 2026-09-10
 
 ## Completed
 
-- TASK-WIN-001 stages 5–12:
-  - Decision/split + FALLBACK unit tests
-  - traffic_ready UI chip + ConnectionController gate
-  - DNS 198.18.0.1 / IPv6 Variant B contracts
-  - Diagnostics Windows rows (DNS/IPv6/MTU)
-  - `scripts/VerifyWindowsTUN.ps1` + QA report (live TUN skipped without Admin)
+- RELEASE-001 production readiness package on `release/mvp-1`:
+  - Reset `traffic_ready` on `SetHysteriaClient` / reconnect
+  - Android underlay recover: CONNECTING until new first_byte
+  - Canonical `[lifecycle]` CONNECT/RELAY/TRAFFIC_READY/RECONNECT events
+  - DefaultMode SSOT docs = DIRECT (ADR-020 supersedes ADR-018 runtime)
+  - Diagnostics IPv6 platform-accurate strings
+  - Reports: `RELEASE-001-Production-Readiness.md`
 
-## Residual
+## Residual (blocks 100/100)
 
-- Run Verify script elevated for CreateAdapter
-- `insecure=1` still on relay URIs
+- Physical Android + Windows E2E evidence on this tip
+- Real Platega payment E2E
+- Rebuild AAR with JDK (`gomobile bind -tags with_gvisor`)
+- Live Backend OFF / Relay OFF blackhole tests on devices
+- Do **not** declare Public Beta until Device matrix PASS

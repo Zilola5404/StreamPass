@@ -420,15 +420,21 @@ class StreamPassVpnService : VpnService() {
         }
         if (!networkRecoverInFlight.compareAndSet(false, true)) return
         ConnectLogger.log(this, "[lifecycle] RECONNECTING underlay change prev=$prev next=$network reason=$reason")
+        ConnectLogger.log(this, "[lifecycle] RECONNECT_START")
+        // Clear TRAFFIC_READY latch in Flutter until first_byte after reconnect.
+        emit("connecting", relay = relayDisplayName.ifEmpty { relayHost })
         scope.launch {
             try {
                 val bridge = tunnelBridge ?: return@launch
                 val err = bridge.reconnectRelay(relayHost, relayPort, connectionConfig)
                 if (err != null) {
                     ConnectLogger.log(this@StreamPassVpnService, "[lifecycle] RELAY_FAILED: $err")
+                    ConnectLogger.log(this@StreamPassVpnService, "[lifecycle] RECONNECT_FAILED")
                     emit("error", error = "relay_reconnect_failed: $err")
                 } else {
-                    ConnectLogger.log(this@StreamPassVpnService, "[lifecycle] relay reconnected after network change")
+                    ConnectLogger.log(this@StreamPassVpnService, "[lifecycle] RECONNECT_SUCCESS")
+                    // Handshake OK — wait for Go [vpn] traffic_ready before UI Connected.
+                    emit("connected", relay = relayDisplayName.ifEmpty { relayHost }, trafficReady = false)
                 }
             } finally {
                 networkRecoverInFlight.set(false)

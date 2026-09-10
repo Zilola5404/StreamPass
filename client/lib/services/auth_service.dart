@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'api_timeouts.dart';
-import 'auth_errors.dart';
 import 'connection_log.dart';
 import 'device_identity.dart';
 import 'token_storage.dart';

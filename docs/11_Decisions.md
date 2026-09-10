@@ -220,6 +220,18 @@
 
 ---
 
+## ADR-020: DefaultMode=DIRECT for MVP Smart Split (supersedes ADR-018 runtime)
+
+| | |
+|---|---|
+| **Дата** | 2026-09-10 |
+| **Проблема** | ADR-018 sent unknown foreign to RELAY; conflicted with RELEASE-NETWORK-001 / RELEASE-001 product split |
+| **Решение** | `decision.DefaultMode = ModeDirect`. Unknown → ISP. Known blocked/accelerator → published + builtin RELAY rules. RU → DIRECT + PinDirectIP. Code is SSOT; `docs/07.4` aligned |
+| **Причина** | MVP must not tunnel all unknown destinations; avoid RELAY load and false “VPN for everything” |
+| **Последствия** | RELEASE-001 RC; operators must not re-test against ADR-018 DefaultMode=RELAY |
+
+---
+
 ## ADR-019: Windows TUN = Wintun sidecar, not c-shared / not Android fd
 
 | | |

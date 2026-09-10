@@ -61,6 +61,7 @@ func (r *runtime) start(req Request, emit func(Event)) error {
 	dnscache.SetLogger(logFn)
 
 	emit(Event{Type: "log", Message: "[CONNECT] platform=windows"})
+	emit(Event{Type: "log", Message: "[lifecycle] CONNECT_START"})
 	emit(Event{Type: "status", Event: "connecting", Relay: req.RelayHost})
 	emit(Event{Type: "log", Message: fmt.Sprintf("[START] command_received mtu=%d networkMode=%s", req.MTU, req.NetworkMode)})
 
@@ -161,6 +162,7 @@ func (r *runtime) start(req Request, emit func(Event)) error {
 
 func (r *runtime) attachRelayAsync(ctx context.Context, req Request, emit func(Event), bridge *tunbridge.Session, relayLabel string) {
 	emit(Event{Type: "log", Message: fmt.Sprintf("[RELAY] handshake_started host=%s port=%d", req.RelayHost, req.RelayPort)})
+	emit(Event{Type: "log", Message: "[lifecycle] RELAY_CONNECTING"})
 	type result struct {
 		out *hyconfig.ConnectResult
 		err error
@@ -205,6 +207,7 @@ func (r *runtime) attachRelayAsync(ctx context.Context, req Request, emit func(E
 			res.out.Candidate.Network, res.out.Candidate.Host, res.out.PingMs,
 			hyconfig.SessionMaxIdleTimeout, hyconfig.SessionKeepAlivePeriod,
 		)})
+		emit(Event{Type: "log", Message: "[lifecycle] RELAY_CONNECTED"})
 		emit(Event{Type: "status", Event: "connected", Relay: label, PingMs: res.out.PingMs})
 	}
 }
@@ -231,6 +234,7 @@ func (r *runtime) recoverRelay(emit func(Event)) error {
 	}
 
 	emit(Event{Type: "log", Message: "[lifecycle] RECONNECTING reason=traffic_stalled_or_resume"})
+	emit(Event{Type: "log", Message: "[lifecycle] RECONNECT_START"})
 	emit(Event{Type: "status", Event: "connecting", Relay: req.RelayHost})
 	dnscache.InvalidateAfterIdle()
 
@@ -239,6 +243,7 @@ func (r *runtime) recoverRelay(emit func(Event)) error {
 	ifIdx, ifName, err := protect.BindPhysicalUnderlay()
 	if err != nil {
 		emit(Event{Type: "log", Message: fmt.Sprintf("[lifecycle] RELAY_FAILED underlay: %v", err)})
+		emit(Event{Type: "log", Message: "[lifecycle] RECONNECT_FAILED"})
 		return err
 	}
 	emit(Event{Type: "log", Message: fmt.Sprintf("[vpn] UNDERLAY_IF rebind index=%d name=%s", ifIdx, ifName)})
@@ -246,6 +251,7 @@ func (r *runtime) recoverRelay(emit func(Event)) error {
 	out, err := hyconfig.ConnectWithFallback(req.ConnectionConfig, req.RelayHost, req.RelayPort)
 	if err != nil {
 		emit(Event{Type: "log", Message: fmt.Sprintf("[lifecycle] RELAY_FAILED reconnect: %v", err)})
+		emit(Event{Type: "log", Message: "[lifecycle] RECONNECT_FAILED"})
 		emit(Event{Type: "status", Event: "error", Relay: req.RelayHost, Error: "relay_reconnect_failed"})
 		return err
 	}
@@ -267,8 +273,8 @@ func (r *runtime) recoverRelay(emit func(Event)) error {
 		"[RELAY] reconnected via=%s/%s pingMs=%d",
 		out.Candidate.Network, out.Candidate.Host, out.PingMs,
 	)})
+	emit(Event{Type: "log", Message: "[lifecycle] RECONNECT_SUCCESS"})
 	emit(Event{Type: "status", Event: "connected", Relay: label, PingMs: out.PingMs})
-	emit(Event{Type: "log", Message: "[lifecycle] TRAFFIC_READY pending first_byte after reconnect"})
 	return nil
 }
 

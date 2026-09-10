@@ -154,6 +154,13 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
         _DiagRow('TUN adapter', 'StreamPass / Wintun'),
         _DiagRow('MTU (настройка)', '${_settings.mtu}'),
       ],
+      if (Platform.isAndroid) ...[
+        _DiagRow(
+          'IPv6 policy',
+          'capture + drop + AAAA-suppress (не Variant B)',
+        ),
+        _DiagRow('VPN DNS', '198.18.0.1 (HostForIP)'),
+      ],
     ];
 
     final entries = _log.entries.reversed.toList();

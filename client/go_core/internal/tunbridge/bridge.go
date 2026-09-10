@@ -46,6 +46,7 @@ func resetTrafficReady() {
 func markTrafficReady(via string) {
 	if trafficReady.CompareAndSwap(false, true) {
 		logLine(fmt.Sprintf("[vpn] traffic_ready via=%s", via))
+		logLine(fmt.Sprintf("[lifecycle] TRAFFIC_READY via=%s", via))
 	}
 }
 
@@ -251,12 +252,16 @@ type routingHandler struct {
 	lastTxUnix  atomic.Int64
 }
 
-// SetHysteriaClient hot-attaches a relay client after ENGINE_STARTED (async handshake).
+// SetHysteriaClient hot-attaches a relay client after ENGINE_STARTED (async handshake)
+// or after ReconnectRelay. Clears the traffic_ready latch so UI must wait for a new
+// first_byte before marking TRAFFIC_READY again (RELEASE-001).
 func (s *Session) SetHysteriaClient(c client.Client, relayID string) {
 	if s == nil || s.handler == nil {
 		return
 	}
+	resetTrafficReady()
 	s.handler.setClient(c, relayID)
+	logLine("[lifecycle] TRAFFIC_READY pending first_byte after relay attach")
 }
 
 func (h *routingHandler) setClient(c client.Client, relayID string) {
@@ -589,6 +594,7 @@ func (h *routingHandler) pipeTCP(
 
 	// Blind spot: dial ok but incomplete exchange for several seconds (P0).
 	xferCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	done := make(chan struct{})
 	go func() {
 		defer close(done)

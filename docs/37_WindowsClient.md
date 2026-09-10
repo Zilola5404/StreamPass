@@ -29,7 +29,7 @@
 ## Architecture locks
 
 ```text
-Unknown → DIRECT rules for *.ru; DefaultMode=RELAY for foreign
+Unknown → DIRECT (DefaultMode=DIRECT); known blocked → RELAY via rules
 DIRECT works if Relay is down
 Hysteria underlay → physical NIC (never TUN)
 insecure=1 forbidden for Windows production (WARN logged)

@@ -87,11 +87,15 @@ type tunnelRuntime struct {
 func PrepareRelay(relayHost string, relayPort int, connectionConfig string) string {
 	StopTunnel()
 
+	logEvent("[lifecycle] CONNECT_START")
+	logEvent("[lifecycle] RELAY_CONNECTING")
 	result, err := hyconfig.ConnectWithFallback(connectionConfig, relayHost, relayPort)
 	if err != nil {
+		logEvent("[lifecycle] RELAY_FAILED")
 		return fmt.Errorf("hysteria connect: %w", err).Error()
 	}
 	logEvent(fmt.Sprintf("[connect] hysteria ok via %s pingMs=%d", result.Candidate, result.PingMs))
+	logEvent("[lifecycle] RELAY_CONNECTED")
 
 	relayLabel := relayHost
 	if relayLabel == "" {
@@ -144,11 +148,13 @@ func (r *tunnelRuntime) reconnect(relayHost string, relayPort int, connectionCon
 	}
 
 	logEvent(fmt.Sprintf("[lifecycle] RECONNECTING reason=%s", reason))
+	logEvent("[lifecycle] RECONNECT_START")
 	dnscache.InvalidateAfterIdle()
 
 	result, err := hyconfig.ConnectWithFallback(connectionConfig, relayHost, relayPort)
 	if err != nil {
 		logEvent(fmt.Sprintf("[lifecycle] RELAY_FAILED reconnect: %v", err))
+		logEvent("[lifecycle] RECONNECT_FAILED")
 		return fmt.Errorf("hysteria reconnect: %w", err).Error()
 	}
 
@@ -168,7 +174,7 @@ func (r *tunnelRuntime) reconnect(relayHost string, relayPort int, connectionCon
 		_ = old.Close()
 	}
 	logEvent(fmt.Sprintf("[RELAY] reconnected via=%s pingMs=%d", result.Candidate, result.PingMs))
-	logEvent("[lifecycle] TRAFFIC_READY pending first_byte after reconnect")
+	logEvent("[lifecycle] RECONNECT_SUCCESS")
 	return ""
 }
 
