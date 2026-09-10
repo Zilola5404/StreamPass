@@ -8,6 +8,7 @@
 ## [Unreleased]
 
 ### Fixed
+- **RELEASE-001 / Issue #5:** Lab + Windows contract evidence package; Issue #5 destination matrix test (S7 DIRECT, GitHub/YouTube/OpenAI RELAY); reconnect traffic_ready latch; lifecycle SSOT; ADR-020 DefaultMode=DIRECT.
 - **RELEASE-001:** Reset `traffic_ready` on relay re-attach / reconnect; Android underlay recover clears UI Connected until first_byte; canonical `[lifecycle]` CONNECT/RELAY/TRAFFIC_READY/RECONNECT events; IPv6 diagnostics accuracy (Windows Variant B vs Android capture+drop).
 - **Issue #4:** Server Unavailable UX — HTTP timeouts, Home CTA «Подключить», русские ошибки, autoConnect limit, Windows TUN teardown on relay fail.
 - **Architect Stage 1:** Windows RU split-tunnel (`Inet4RouteExcludeAddress`); **72h** trial on register; personal_basic/pro/business plans; Platega PaymentProvider + webhook; failover poll 10s.

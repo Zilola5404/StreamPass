@@ -43,7 +43,7 @@ b5f96bf  RELEASE-NETWORK-001
 
 **Code** = present in RC. **Lab** = automated / static proof on this runner (2026-09-04). **Device** = physical proof (required for Production).
 
-See also: `RELEASE-001-Lab-Execution.md`.
+See also: `RELEASE-001-Lab-Execution.md`, `ISSUE-5-RELEASE-001-Evidence.md` (GitHub Issue #5).
 
 ### Android — STEPS 2–4, 6–7
 
@@ -63,12 +63,12 @@ See also: `RELEASE-001-Lab-Execution.md`.
 
 | # | Test | Expectation | Code | Lab | Device |
 |---|------|-------------|------|-----|--------|
-| 5a | Connect → Internet | Page load | PASS | PASS (exe rebuild) | OPEN |
+| 5a | Connect → Internet | Page load | PASS | PASS (IPC+exe; live TUN Admin SKIP) | OPEN |
 | 5b | Idle 30 min → Internet | Works | PASS | PASS (code path) | OPEN |
 | 5c | Sleep → Wake → Internet | recover path | PASS | PASS (code path) | OPEN |
-| 5d | Disconnect → normal Internet | No stale `0.0.0.0/0` via StreamPass | PASS | PASS (protect tests) | OPEN |
+| 5d | Disconnect → normal Internet | No stale `0.0.0.0/0` via StreamPass | PASS | PASS (route baseline + protect tests 2026-09-10) | OPEN |
 | 6 | Relay OFF while Connected | Recovery or clean disconnect | PASS | PASS (code path) | OPEN |
-| 7 | Backend OFF → Connect | User-facing unavailable; no hang | PASS | PASS (copy+unit) | OPEN |
+| 7 | Backend OFF → Connect | User-facing unavailable; no hang | PASS | PASS (copy+unit); ISP intact after non-Admin start | OPEN |
 
 ### STEP 8 — Real Payment
 

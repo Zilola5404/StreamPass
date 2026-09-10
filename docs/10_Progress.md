@@ -6,6 +6,7 @@
 
 | Дата | Что сделано | Файлы | Результат |
 |------|-------------|-------|-----------|
+| 2026-09-10 | Issue #5 evidence: Windows VerifyTUN + Issue5 routing matrix (S7/GitHub); Android adb empty | `ISSUE-5-RELEASE-001-Evidence.md`, `issue5_matrix_test.go`, QA TASK-WIN-001-2026-09-10 | Lab/Windows contract PASS; live TUN needs Admin; Android OPEN |
 | 2026-09-10 | RELEASE-001 readiness: traffic_ready on reconnect, lifecycle events, DefaultMode SSOT docs | `tunbridge/bridge.go`, `mobile/tunnel.go`, `desktop/runtime.go`, `StreamPassVpnService.kt`, `docs/07.4`, ADR-020, `RELEASE-001-Production-Readiness.md` | Lab code gate improved; Device E2E still OPEN |
 | 2026-09-04 | RELEASE-001 RC `release/mvp-1` + lab execution | `RELEASE-001-*.md`, Windows protect harden, DiagUploader | RC frozen; Device OPEN |
 | 2026-08-25 | Android: клик по VPN-уведомлению + AAR `with_gvisor` | `StreamPassVpnService.kt`, `streampasscore.aar`, README, `reports/QA/android-notification-gvisor-2026-08-25.md` | Тап открывает app; Connect без ошибки gVisor |

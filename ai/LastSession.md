@@ -1,21 +1,21 @@
 # Last Session
 
-> Updated: 2026-09-10
+> Updated: 2026-09-10 (Issue #5 evidence)
 
 ## Completed
 
-- RELEASE-001 production readiness package on `release/mvp-1`:
-  - Reset `traffic_ready` on `SetHysteriaClient` / reconnect
-  - Android underlay recover: CONNECTING until new first_byte
-  - Canonical `[lifecycle]` CONNECT/RELAY/TRAFFIC_READY/RECONNECT events
-  - DefaultMode SSOT docs = DIRECT (ADR-020 supersedes ADR-018 runtime)
-  - Diagnostics IPv6 platform-accurate strings
-  - Reports: `RELEASE-001-Production-Readiness.md`
+- Mapped GitHub Issue #5 → existing RC components (no second architecture).
+- Windows host testing on tip `8dc97dc`:
+  - `VerifyWindowsTUN.ps1` stages 5–10 + IPC: PASS
+  - Rebuilt `streampasscore.exe` with `with_gvisor`
+  - Baseline routes clean; ISP IP stable after non-Admin start attempt (no blackhole)
+  - Decision matrix Issue #5 destinations (S7 DIRECT, GitHub/YouTube/OpenAI RELAY, unknown DIRECT): PASS
+- Flutter traffic / UX / e2e: PASS
+- Docs: `reports/Architecture/ISSUE-5-RELEASE-001-Evidence.md`
 
-## Residual (blocks 100/100)
+## Residual (blocks Issue #5 close)
 
-- Physical Android + Windows E2E evidence on this tip
-- Real Platega payment E2E
-- Rebuild AAR with JDK (`gomobile bind -tags with_gvisor`)
-- Live Backend OFF / Relay OFF blackhole tests on devices
-- Do **not** declare Public Beta until Device matrix PASS
+1. **Admin elevated** `VerifyWindowsTUN.ps1` for live Wintun CreateAdapter + real page load.
+2. **Android adb** — user to attach device (`adb devices` currently empty).
+3. Live Platega payment E2E.
+4. Do not close Issue #5 / declare 100/100 until Device rows PASS.

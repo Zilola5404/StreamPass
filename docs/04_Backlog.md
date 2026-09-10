@@ -8,7 +8,7 @@
 
 | ID | Название | Описание | Приоритет | Статус | Зависимости | Ответственный |
 |----|----------|----------|-----------|--------|-------------|---------------|
-| RELEASE-001 | MVP Production Readiness | RC `release/mvp-1`: DIRECT/RELAY/Split + recovery + billing; Lab code gate improved; Device E2E OPEN (blocks 100/100) | P0 | In Progress | BL-001, BL-023 | Developer + QA |
+| RELEASE-001 | MVP Production Readiness / [Issue #5](https://github.com/Zilola5404/StreamPass/issues/5) | RC `release/mvp-1`: Lab+Windows contract PASS; live TUN needs Admin; Android Device E2E OPEN | P0 | In Progress | BL-001, BL-023 | Developer + QA |
 | BL-001 | Hysteria2 tunnel в go_core | Техническая перепроверка и hardening существующего Hysteria2 transport в `client/go_core/mobile/tunnel.go`: реальный relay handshake/data path, TUN lifecycle, protected underlay, fallback и Android E2E evidence; использовать готовую Hysteria2 реализацию | P0 | In Progress | — | Developer + QA |
 | BL-002 | Подключить streampasscore.aar | Собрать и положить в Android libs, проверить TunnelBridge | P0 | Done | BL-001 | 2026-08-03 |
 | BL-003 | End-to-end VPN на Android | Connect → TUN → Hysteria2 → relay, проверка IP | P0 | Done* | BL-001, BL-002 | 2026-08-03 |
