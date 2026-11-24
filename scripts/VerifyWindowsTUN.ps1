@@ -109,7 +109,8 @@ $lines.Add('')
 if ($IsAdmin) {
   Write-Step 'LIVE' 'Wintun create/stop (Admin)'
   $portFile2 = Join-Path $env:TEMP ("sp-live-{0}.json" -f [guid]::NewGuid().ToString('N'))
-  $p2 = Start-Process -FilePath $exe -ArgumentList @('--port-file', $portFile2) -PassThru -WindowStyle Hidden -WorkingDirectory $Native
+  $coreStderr = "$portFile2.stderr"
+  $p2 = Start-Process -FilePath $exe -ArgumentList @('--port-file', $portFile2) -PassThru -WindowStyle Hidden -WorkingDirectory $Native -RedirectStandardError $coreStderr
   $meta2 = $null
   $deadline = (Get-Date).AddSeconds(12)
   while ((Get-Date) -lt $deadline) {
@@ -142,45 +143,85 @@ if ($IsAdmin) {
   $s2.Write($b, 0, $b.Length)
   $reader = New-Object System.IO.StreamReader($s2)
   $gotTun = $false
+  $startOK = $false
+  $trafficOK = $false
   $gotErr = $null
-  $until = (Get-Date).AddSeconds(25)
+  $until = (Get-Date).AddSeconds(35)
+  $pending = $reader.ReadLineAsync()
   while ((Get-Date) -lt $until) {
-    if ($s2.DataAvailable) {
-      $line = $reader.ReadLine()
+    try { $lineReady = $pending.Wait(100) } catch {
+      $gotErr = $_.Exception.GetBaseException().Message
+      break
+    }
+    if ($lineReady) {
+      $line = $pending.GetAwaiter().GetResult()
       if ($null -eq $line) { break }
       Write-Host ("  core: {0}" -f $line)
-      if ($line -match 'TUN_CREATED|ROUTES_APPLIED') { $gotTun = $true }
+      if ($line -match 'TUN_CREATED') { $gotTun = $true }
       if ($line -match '"event"\s*:\s*"error"' -or $line -match '"ok"\s*:\s*false') {
         try {
           $j = $line | ConvertFrom-Json
           if ($j.error) { $gotErr = [string]$j.error }
         } catch {}
       }
-      if ($line -match '"ok"\s*:\s*true' -and $line -match '"id"\s*:\s*2') { break }
+      if ($line -match '"ok"\s*:\s*true' -and $line -match '"id"\s*:\s*2') { $startOK = $true }
       if ($line -match '"ok"\s*:\s*false' -and $line -match '"id"\s*:\s*2') { break }
-    } else {
-      Start-Sleep -Milliseconds 100
+      if ($gotTun -and $startOK) { break }
+      $pending = $reader.ReadLineAsync()
     }
+  }
+  if ($gotTun -and $startOK) {
+    & curl.exe --silent --show-error --fail --noproxy '*' --ipv4 --max-time 12 --output NUL https://ya.ru/
+    $trafficOK = $LASTEXITCODE -eq 0
   }
   $stop = (@{ id = 3; cmd = 'stop'; token = $meta2.token } | ConvertTo-Json -Compress) + "`n"
   $sb = [Text.Encoding]::UTF8.GetBytes($stop)
   try { $s2.Write($sb, 0, $sb.Length) } catch {}
+  $stopOK = $false
+  if ($gotTun -and $startOK) {
+    $stopDeadline = (Get-Date).AddSeconds(12)
+    $pending = $reader.ReadLineAsync()
+    while ((Get-Date) -lt $stopDeadline) {
+      try {
+        if (-not $pending.Wait(100)) { continue }
+        $line = $pending.GetAwaiter().GetResult()
+      } catch { break }
+      if ($null -eq $line) { break }
+      if ($line -match '"ok"\s*:\s*true' -and $line -match '"id"\s*:\s*3') {
+        $stopOK = $true
+        break
+      }
+      $pending = $reader.ReadLineAsync()
+    }
+  }
   $c2.Close()
   Stop-Process -Id $p2.Id -Force -ErrorAction SilentlyContinue
   Remove-Item $portFile2 -Force -ErrorAction SilentlyContinue
+  if (Test-Path -LiteralPath $coreStderr) {
+    $coreError = Get-Content -LiteralPath $coreStderr -Raw
+    if ($coreError) { Write-Host $coreError }
+    Remove-Item -LiteralPath $coreStderr -Force -ErrorAction SilentlyContinue
+  }
   if ($gotErr) {
     $lines.Add('## Live Wintun')
     $lines.Add(("- RESULT: FAIL - {0}" -f $gotErr))
+    $lines | Set-Content -Path $Report -Encoding UTF8
     Fail ("live TUN: {0}" -f $gotErr)
   }
-  if (-not $gotTun) {
+  if (-not ($gotTun -and $startOK)) {
     $lines.Add('## Live Wintun')
     $lines.Add('- RESULT: inconclusive (no TUN_CREATED in window)')
     Write-Host 'WARN no TUN_CREATED seen - check logs manually' -ForegroundColor Yellow
   } else {
     Ok 'live TUN_CREATED'
     $lines.Add('## Live Wintun')
-    $lines.Add('- RESULT: PASS (direct_test TUN up)')
+    $lines.Add('- Adapter creation and start acknowledgement: PASS')
+    $lines.Add(('- Direct HTTPS request while connected: {0}' -f $(if ($trafficOK) { 'PASS' } else { 'FAIL' })))
+    $lines.Add(('- Stop acknowledgement: {0}' -f $(if ($stopOK) { 'PASS' } else { 'FAIL' })))
+    if (-not ($trafficOK -and $stopOK)) {
+      $lines | Set-Content -Path $Report -Encoding UTF8
+      Fail 'live DIRECT request or Stop did not pass'
+    }
   }
 } else {
   Write-Host 'SKIP live Wintun (not Administrator) - run elevated for CreateAdapter' -ForegroundColor Yellow

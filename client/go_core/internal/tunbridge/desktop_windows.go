@@ -57,8 +57,13 @@ func StartDesktop(ctx context.Context, hyClient client.Client, mtu uint32, engin
 		logLine("[vpn] UNDERLAY_REUSE session bind (skip second Get-NetRoute probe)")
 	}
 
-	// Do not attach sing-tun InterfaceMonitor on Windows desktop: Start() can
-	// block forever waiting for a network-update event (VerifyWindowsTUN live hang).
+	// AutoRoute registers the adapter even when StreamPass owns network
+	// recovery. Supply the monitor for registration without starting its watcher.
+	interfaceMonitor, err := tun.NewDefaultInterfaceMonitor(nil, wintunLogger{}, tun.DefaultInterfaceMonitorOptions{})
+	if err != nil {
+		protect.Clear()
+		return nil, fmt.Errorf("initialize Wintun interface registration: %w", err)
+	}
 	tunOptions := tun.Options{
 		Name:                 windowsAdapterName,
 		MTU:                  mtu,
@@ -67,6 +72,7 @@ func StartDesktop(ctx context.Context, hyClient client.Client, mtu uint32, engin
 		Inet4Address:         []netip.Prefix{TunIPv4Prefix()},
 		DNSServers:           []netip.Addr{TunDNS()},
 		Logger:               wintunLogger{},
+		InterfaceMonitor:     interfaceMonitor,
 		EXP_DisableDNSHijack: false,
 	}
 
