@@ -19,6 +19,24 @@ import (
 
 const defaultMTU = 1400
 
+// RequireVerifiedTLS rejects relay settings that disable certificate validation.
+func RequireVerifiedTLS(connectionConfig, relayHost string, relayPort int) error {
+	if strings.TrimSpace(connectionConfig) == "" {
+		return fmt.Errorf("relay connection settings are missing")
+	}
+	parsed, err := Parse(connectionConfig, relayHost, relayPort)
+	if err != nil || parsed.Insecure {
+		return fmt.Errorf("relay requires verified TLS")
+	}
+	if parsed.PinSHA256 != "" {
+		pin, err := hex.DecodeString(normalizeCertHash(parsed.PinSHA256))
+		if err != nil || len(pin) != sha256.Size {
+			return fmt.Errorf("relay certificate pin must be a SHA-256 fingerprint")
+		}
+	}
+	return nil
+}
+
 // DefaultMTU is the fallback TUN MTU for mobile tunnels.
 func DefaultMTU() uint32 { return defaultMTU }
 
@@ -205,8 +223,12 @@ func wrapObfs(conn net.PacketConn, obfsType, obfsPass string) (net.PacketConn, e
 
 func normalizeCertHash(value string) string {
 	value = strings.TrimSpace(value)
-	if decoded, err := base64.StdEncoding.DecodeString(value); err == nil {
+	hexPin := strings.ToLower(strings.ReplaceAll(value, ":", ""))
+	if decoded, err := hex.DecodeString(hexPin); err == nil && len(decoded) == sha256.Size {
+		return hexPin
+	}
+	if decoded, err := base64.StdEncoding.DecodeString(value); err == nil && len(decoded) == sha256.Size {
 		return hex.EncodeToString(decoded)
 	}
-	return strings.ToLower(strings.ReplaceAll(value, ":", ""))
+	return hexPin
 }

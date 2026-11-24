@@ -49,7 +49,13 @@ UpdateCheckResult evaluateClientUpdate({
 }) {
   final min = minSupportedVersion.trim();
   final latest = latestVersion.trim();
-  final url = downloadUrl.trim();
+  final candidate = Uri.tryParse(downloadUrl.trim());
+  final url = candidate != null &&
+          candidate.scheme == 'https' &&
+          candidate.host.isNotEmpty &&
+          candidate.userInfo.isEmpty
+      ? candidate.toString()
+      : '';
 
   if (min.isNotEmpty && compareClientVersions(currentVersion, min) < 0) {
     return UpdateCheckResult(

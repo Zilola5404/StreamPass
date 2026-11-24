@@ -27,7 +27,18 @@ class _ConnectOrbState extends State<ConnectOrb>
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(seconds: 3),
-  )..repeat();
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.stop();
+      _controller.value = 0;
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
+  }
 
   @override
   void dispose() {
@@ -39,14 +50,13 @@ class _ConnectOrbState extends State<ConnectOrb>
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: switch (widget.state) {
-        ConnState.connected => 'Disconnect',
-        ConnState.connecting => 'Connecting',
-        ConnState.disconnecting => 'Disconnecting',
-        ConnState.disconnected => 'Connect',
-        ConnState.error => 'Retry connection',
-      },
+      enabled: widget.state != ConnState.disconnecting,
+      label: widget.label,
+      value: widget.subtitle,
+      onTap: widget.state == ConnState.disconnecting ? null : widget.onTap,
+      excludeSemantics: true,
       child: GestureDetector(
+        excludeFromSemantics: true,
         onTap: widget.state == ConnState.disconnecting ? null : widget.onTap,
         child: AnimatedBuilder(
           animation: _controller,

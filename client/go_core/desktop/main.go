@@ -16,6 +16,8 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+
+	"streampass/go_core/internal/hyconfig"
 )
 
 func main() {
@@ -93,7 +95,13 @@ func serve(conn net.Conn, token string, rt *runtime) {
 		authed = true
 		switch req.Cmd {
 		case "start":
-			err := rt.start(req, emit)
+			var err error
+			if req.NetworkMode != "direct_test" {
+				err = hyconfig.RequireVerifiedTLS(req.ConnectionConfig, req.RelayHost, req.RelayPort)
+			}
+			if err == nil {
+				err = rt.start(req, emit)
+			}
 			if err != nil {
 				emit(Event{Type: "status", Event: "error", Error: err.Error()})
 				emitReply(conn, &writeMu, Reply{ID: req.ID, Type: "reply", Error: err.Error()})

@@ -54,44 +54,24 @@ function Parse-ConnectLog {
     $text = Get-Content -Raw $Path
     $results = @()
 
-    # Flutter log: event=connecting -> event=connected
-    $connecting = [regex]::Match($text, '(\d{4}-\d{2}-\d{2}T[\d:.]+Z).*event=connecting')
-    $connected = [regex]::Match($text, '(\d{4}-\d{2}-\d{2}T[\d:.]+Z).*event=connected')
-    if ($connecting.Success -and $connected.Success) {
-        $t0 = [datetimeoffset]::Parse($connecting.Groups[1].Value)
-        $t1 = [datetimeoffset]::Parse($connected.Groups[1].Value)
-        $sec = [math]::Round(($t1 - $t0).TotalSeconds, 3)
-        $pass = $sec -le 5
-        $mark = if ($pass) { "PASS" } else { "FAIL" }
-        $color = if ($pass) { "Green" } else { "Red" }
-        Write-Host ("[{0}] device connect (log): {1}s (budget 5s)" -f $mark, $sec) -ForegroundColor $color
-        $results += [pscustomobject]@{ Name = "device connect (log)"; Seconds = $sec; Budget = 5; Pass = $pass; Detail = "connecting->connected" }
+    $start = $null
+    foreach ($line in ($text -split '\r?\n')) {
+        if ($line -notmatch '(\d{4}-\d{2}-\d{2}T[\d:.]+Z)') { continue }
+        $timestamp = [datetimeoffset]::Parse($Matches[1])
+        if ($line -match '\[connect\] session started') {
+            $start = $timestamp
+        } elseif ($null -ne $start -and $line -match '\[connect\] release traffic ready') {
+            $elapsed = ($timestamp - $start).TotalSeconds
+            if ($elapsed -ge 0) {
+                $results += [pscustomobject]@{ Name = "device connect to traffic"; Seconds = [math]::Round($elapsed, 3); Budget = 5; Pass = ($elapsed -le 5); Detail = "session start to traffic ready" }
+            }
+            $start = $null
+        }
     }
-
-    # Native: connect session begin -> tunnel event=connected
-    $begin = [regex]::Match($text, '(\d{4}-\d{2}-\d{2}T[\d:.]+Z).*connect session begin')
-    $tunnel = [regex]::Match($text, '(\d{4}-\d{2}-\d{2}T[\d:.]+Z).*tunnel event=connected')
-    if ($begin.Success -and $tunnel.Success) {
-        $t0 = [datetimeoffset]::Parse($begin.Groups[1].Value)
-        $t1 = [datetimeoffset]::Parse($tunnel.Groups[1].Value)
-        $sec = [math]::Round(($t1 - $t0).TotalSeconds, 3)
-        $pass = $sec -le 5
-        $mark = if ($pass) { "PASS" } else { "FAIL" }
-        $color = if ($pass) { "Green" } else { "Red" }
-        Write-Host ("[{0}] device connect (native): {1}s (budget 5s)" -f $mark, $sec) -ForegroundColor $color
-        $results += [pscustomobject]@{ Name = "device connect (native)"; Seconds = $sec; Budget = 5; Pass = $pass; Detail = "session begin->tunnel connected" }
-    }
-
-    # Hysteria pingMs
-    $ping = [regex]::Match($text, 'pingMs=(\d+)')
-    if ($ping.Success) {
-        $ms = [int]$ping.Groups[1].Value
-        $sec = [math]::Round($ms / 1000.0, 3)
-        $pass = $sec -le 5
-        $mark = if ($pass) { "PASS" } else { "FAIL" }
-        $color = if ($pass) { "Green" } else { "Red" }
-        Write-Host ("[{0}] hysteria handshake: {1}s / {2}ms (budget 5s)" -f $mark, $sec, $ms) -ForegroundColor $color
-        $results += [pscustomobject]@{ Name = "hysteria handshake"; Seconds = $sec; Budget = 5; Pass = $pass; Detail = "${ms}ms" }
+    if ($results.Count -eq 0) {
+        Write-Host "[SKIP] no matching session start and traffic-ready markers" -ForegroundColor Yellow
+    } else {
+        $results | Format-Table Name, Seconds, Budget, Pass | Out-Host
     }
 
     return $results
@@ -140,7 +120,7 @@ if (-not $SkipAdb) {
                     if ($ms -gt 2000) { throw "TotalTime ${ms}ms > 2000ms" }
                     return "TotalTime ${ms}ms"
                 }
-                return ($out.Trim() -replace "`r|`n", " ").Substring(0, [Math]::Min(120, $out.Length))
+                throw "ADB did not report Android activity launch time"
             }
         }
     }

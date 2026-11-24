@@ -658,6 +658,9 @@ class HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMix
     final c = ConnectionController.instance;
     // Stage 6: traffic_ready may arrive after VpnEvent.connected — flip UI then.
     if (c.showConnected && _state == ConnState.connecting) {
+      if (c.trafficReady) {
+        _connectLog.info('connect', 'release traffic ready');
+      }
       _cancelAndroidTrafficWatchdog();
       setState(() {
         _state = ConnState.connected;

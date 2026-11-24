@@ -56,5 +56,18 @@ void main() {
       );
       expect(r.urgency, UpdateUrgency.none);
     });
+
+    test('never exposes insecure or malformed download addresses', () {
+      for (final url in ['http://example.com/a.apk', 'https:///a.apk',
+          'https://user@example.com/a.apk', 'intent://example.com/a.apk']) {
+        final result = evaluateClientUpdate(
+          currentVersion: '0.1.0',
+          minSupportedVersion: '0.1.1',
+          downloadUrl: url,
+        );
+        expect(result.urgency, UpdateUrgency.required);
+        expect(result.downloadUrl, isNull);
+      }
+    });
   });
 }

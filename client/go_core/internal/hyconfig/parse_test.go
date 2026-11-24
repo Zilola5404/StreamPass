@@ -1,6 +1,30 @@
 package hyconfig
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestRequireVerifiedTLS(t *testing.T) {
+	const endpoint = "hysteria2://test@relay.example:443/"
+	for _, tc := range []struct {
+		name, uri string
+		valid     bool
+	}{
+		{"missing", "", false},
+		{"implicit insecure", endpoint, false},
+		{"explicit insecure", endpoint + "?insecure=true", false},
+		{"public certificate", endpoint + "?insecure=false", true},
+		{"bad pin", endpoint + "?pinSHA256=invalid", false},
+		{"valid pin format", endpoint + "?pinSHA256=" + strings.Repeat("ab", 32), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := RequireVerifiedTLS(tc.uri, "", 0); (err == nil) != tc.valid {
+				t.Fatalf("valid=%v, err=%v", tc.valid, err)
+			}
+		})
+	}
+}
 
 func TestParseHysteria2URI(t *testing.T) {
 	parsed, err := Parse(
