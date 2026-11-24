@@ -217,6 +217,32 @@ func (s *Service) CreatePaymentForOrder(ctx context.Context, userID user.ID, pla
 		}
 	}
 
+	if orderID == "" {
+		return s.startCheckout(ctx, userID, plan, orderID)
+	}
+	url, claimed, err := s.orders.ClaimCheckout(ctx, orderID)
+	if err != nil {
+		return "", err
+	}
+	if url != "" {
+		return url, nil
+	}
+	if !claimed {
+		return "", apperrors.New(apperrors.CodeConflict, "checkout already started; check payment status")
+	}
+	url, err = s.startCheckout(ctx, userID, plan, orderID)
+	if err != nil {
+		s.log.Info(ctx, "checkout needs reconciliation", slog.String("order_id", orderID))
+		return "", err
+	}
+	if err := s.orders.SaveCheckoutURL(ctx, orderID, url); err != nil {
+		s.log.Error(ctx, err, slog.String("order_id", orderID))
+		return "", apperrors.Wrap(apperrors.CodeInternal, "failed to save checkout link", err)
+	}
+	return url, nil
+}
+
+func (s *Service) startCheckout(ctx context.Context, userID user.ID, plan Plan, orderID string) (string, error) {
 	paymentID := idgen.New()
 	provider := "yookassa"
 	currency := plan.Currency

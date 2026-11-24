@@ -77,10 +77,13 @@ func (m *memPayRepo) ListByUserID(context.Context, string) ([]*subscription.Paym
 }
 
 type memOrders struct {
-	byID map[string]*subscription.Order
+	byID     map[string]*subscription.Order
+	checkout map[string]string
 }
 
-func newMemOrders() *memOrders { return &memOrders{byID: map[string]*subscription.Order{}} }
+func newMemOrders() *memOrders {
+	return &memOrders{byID: map[string]*subscription.Order{}, checkout: map[string]string{}}
+}
 
 func (m *memOrders) Create(_ context.Context, o *subscription.Order) error {
 	cp := *o
@@ -95,6 +98,19 @@ func (m *memOrders) FindByID(_ context.Context, id string) (*subscription.Order,
 	cp := *o
 	return &cp, nil
 }
+func (m *memOrders) ClaimCheckout(_ context.Context, id string) (string, bool, error) {
+	url, started := m.checkout[id]
+	if started {
+		return url, false, nil
+	}
+	m.checkout[id] = ""
+	return "", true, nil
+}
+func (m *memOrders) SaveCheckoutURL(_ context.Context, id, url string) error {
+	m.checkout[id] = url
+	return nil
+}
+
 func (m *memOrders) MarkPaidIfPending(_ context.Context, id string) (bool, error) {
 	o, ok := m.byID[id]
 	if !ok {
@@ -151,10 +167,12 @@ func (m *memUsersBilling) UpdatePasswordHash(context.Context, user.ID, string, t
 func (m *memUsersBilling) Delete(context.Context, user.ID) error { return nil }
 
 type fakeProvider struct {
-	status billing.PaymentStatus
+	status  billing.PaymentStatus
+	creates int
 }
 
 func (f *fakeProvider) CreatePayment(context.Context, string, int64, string) (string, string, error) {
+	f.creates++
 	return "prov-1", "https://pay.example/1", nil
 }
 func (f *fakeProvider) FetchPaymentStatus(context.Context, string) (billing.PaymentStatus, error) {
@@ -267,5 +285,27 @@ func TestResolvePlanAliases(t *testing.T) {
 	}
 	if url == "" {
 		t.Fatal("empty url")
+	}
+}
+
+func TestCheckoutReusesOrderLink(t *testing.T) {
+	ctx := context.Background()
+	users := &memUsersBilling{u: &user.User{ID: "u1"}}
+	provider := &fakeProvider{}
+	svc := billing.NewService(users, newMemPay(), newMemOrders(), provider, []billing.Plan{
+		{Code: "personal_basic", Title: "Basic", AmountRUB: 299, PeriodDays: 30},
+	}, fixedClock{t: time.Now()}, logger.New("test", "error"))
+	order, err := svc.CreateOrder(ctx, "u1", "personal_basic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		url, err := svc.CreatePaymentForOrder(ctx, "u1", "", order.ID)
+		if err != nil || url != "https://pay.example/1" {
+			t.Fatalf("checkout = %q, %v", url, err)
+		}
+	}
+	if provider.creates != 1 {
+		t.Fatalf("created %d provider payments", provider.creates)
 	}
 }

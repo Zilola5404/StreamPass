@@ -21,5 +21,7 @@ type PaymentRepository interface {
 type OrderRepository interface {
 	Create(ctx context.Context, o *Order) error
 	FindByID(ctx context.Context, id string) (*Order, error)
+	ClaimCheckout(ctx context.Context, id string) (url string, claimed bool, err error)
+	SaveCheckoutURL(ctx context.Context, id, url string) error
 	MarkPaidIfPending(ctx context.Context, id string) (bool, error)
 }

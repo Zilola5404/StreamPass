@@ -277,6 +277,7 @@ func (h *BillingHandler) ListPlans(w http.ResponseWriter, r *http.Request) {
 }
 
 type paymentDTO struct {
+	OrderID    string `json:"order_id,omitempty"`
 	ID         string `json:"id"`
 	AmountRUB  int64  `json:"amount_rub"`
 	PeriodDays int    `json:"period_days"`
@@ -300,6 +301,7 @@ func (h *BillingHandler) ListPayments(w http.ResponseWriter, r *http.Request) {
 	for _, p := range list {
 		out = append(out, paymentDTO{
 			ID:         p.ID,
+			OrderID:    p.OrderID,
 			AmountRUB:  p.AmountRUB,
 			PeriodDays: p.PeriodDays,
 			Status:     string(p.Status),

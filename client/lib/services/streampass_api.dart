@@ -71,9 +71,17 @@ class StreamPassApi {
     return SubscriptionInfo.fromJson(body as Map<String, dynamic>);
   }
 
+  Future<String> createOrder(String planCode) async {
+    final body = await _post('/orders', {'plan_code': planCode});
+    return (body as Map<String, dynamic>)['order_id'] as String;
+  }
+
   /// Returns a payment confirmation URL (Telegram invoice link or card redirect).
-  Future<String> createPayment({String planCode = 'personal_basic'}) async {
-    final body = await _post('/payments', {'plan_code': planCode});
+  Future<String> createPayment({String planCode = 'personal_basic', String? orderId}) async {
+    final body = await _post('/payments', {
+      'plan_code': planCode,
+      if (orderId != null) 'order_id': orderId,
+    });
     final map = body as Map<String, dynamic>;
     return (map['confirmation_url'] ?? map['invoice_link']) as String;
   }
@@ -450,6 +458,7 @@ class PlanInfo {
 }
 
 class PaymentRecord {
+  final String orderId;
   final String id;
   final int amountRub;
   final int periodDays;
@@ -457,6 +466,7 @@ class PaymentRecord {
   final DateTime? createdAt;
 
   const PaymentRecord({
+    this.orderId = '',
     required this.id,
     required this.amountRub,
     required this.periodDays,
@@ -465,6 +475,7 @@ class PaymentRecord {
   });
 
   factory PaymentRecord.fromJson(Map<String, dynamic> json) => PaymentRecord(
+        orderId: json['order_id'] as String? ?? '',
         id: json['id'] as String? ?? '',
         amountRub: (json['amount_rub'] as num?)?.toInt() ?? 0,
         periodDays: (json['period_days'] as num?)?.toInt() ?? 0,

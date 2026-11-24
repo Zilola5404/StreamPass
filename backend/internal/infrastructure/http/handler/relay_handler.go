@@ -59,6 +59,7 @@ func (h *RelayHandler) ListAvailable(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, err)
 		return
 	}
+	w.Header().Set("Cache-Control", "no-store")
 	filter := r.URL.Query().Get("region")
 	servers, err := h.svc.ListAvailable(r.Context(), filter)
 	if err != nil {

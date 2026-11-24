@@ -21,6 +21,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
   String _selectedPlan = 'personal_basic';
   bool _loading = true;
   bool _payLoading = false;
+  final Map<String, String> _checkoutOrders = {};
   bool _awaitingPaymentReturn = false;
   String? _error;
 
@@ -67,6 +68,11 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
         _info = info;
         _plans = plans;
         _payments = payments;
+        final paidOrders = payments
+            .where((payment) => payment.status == 'SUCCEEDED')
+            .map((payment) => payment.orderId)
+            .toSet();
+        _checkoutOrders.removeWhere((_, orderId) => paidOrders.contains(orderId));
         if (_plans.isNotEmpty &&
             !_plans.any((p) => p.code == _selectedPlan)) {
           _selectedPlan = _plans.first.code;
@@ -83,6 +89,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
   }
 
   Future<void> _pay() async {
+    if (_payLoading) return;
     if (_plans.isEmpty) {
       setState(() => _error = 'Тарифы недоступны. Обновите экран и попробуйте снова.');
       return;
@@ -92,7 +99,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
       _error = null;
     });
     try {
-      final url = await widget.api.createPayment(planCode: _selectedPlan);
+      final plan = _selectedPlan;
+      final orderId = _checkoutOrders[plan] ?? await widget.api.createOrder(plan);
+      _checkoutOrders[plan] = orderId;
+      final url = await widget.api.createPayment(planCode: plan, orderId: orderId);
       final uri = Uri.parse(url);
       final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!opened) throw Exception('launch failed');
@@ -109,7 +119,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = 'Не удалось открыть страницу оплаты. Попробуйте позже');
+      setState(() => _error = e is ApiException && e.statusCode == 409
+          ? 'Заказ уже обрабатывается. Обновите историю платежей.'
+          : 'Не удалось открыть страницу оплаты. Проверьте историю и попробуйте снова.');
     } finally {
       if (mounted) setState(() => _payLoading = false);
     }
