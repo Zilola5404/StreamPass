@@ -49,8 +49,8 @@ billing:
   plan_pro_rub: 499
   yearly_amount_rub: 2990
   yearly_period_days: 365
-  # yookassa | platega — card/SBP provider for POST /payments (Telegram Stars still overrides when bot token set)
-  default_provider: yookassa
+  # yookassa | platega | telegram
+  default_provider: ${BILLING_DEFAULT_PROVIDER}
   webhook_secret: ${PAYMENTS_WEBHOOK_SECRET}
   yookassa_shop_id: ${YOOKASSA_SHOP_ID}
   yookassa_secret_key: ${YOOKASSA_SECRET_KEY}
@@ -64,16 +64,13 @@ billing:
   # POST /payments creates Stars invoices instead of YooKassa/Platega.
   telegram_bot_token: ${TELEGRAM_BOT_TOKEN}
   telegram_webhook_secret: ${TELEGRAM_WEBHOOK_SECRET}
-  usdt_trc20_address: ${USDT_TRC20_ADDRESS}
   # Optional Stars amounts override (defaults: 499 / 1299 / 3999)
   # stars_month: 499
   # stars_quarter: 1299
   # stars_year: 3999
   public_url: ${STREAMPASS_PUBLIC_URL}
 
-# When true, POST /password/forgot returns reset_token in JSON (no SMTP yet).
 # Keep false in production once email delivery is wired.
 auth:
-  expose_reset_token: true
   # Default device cap = Personal Basic / trial (raised automatically for personal_pro / business).
   max_devices: 2

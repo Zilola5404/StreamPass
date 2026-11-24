@@ -27,9 +27,9 @@ func NewPaymentsHandler(svc *paymentssvc.Service, webhookSecret string) *Payment
 // HandleTelegramWebhook handles POST /payments/telegram/webhook.
 func (h *PaymentsHandler) HandleTelegramWebhook(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	if h.webhookSecret != "" {
+	{
 		got := r.Header.Get("X-Telegram-Bot-Api-Secret-Token")
-		if subtle.ConstantTimeCompare([]byte(got), []byte(h.webhookSecret)) != 1 {
+		if h.webhookSecret == "" || subtle.ConstantTimeCompare([]byte(got), []byte(h.webhookSecret)) != 1 {
 			httpx.WriteError(w, apperrors.New(apperrors.CodeForbidden, "invalid webhook secret"))
 			return
 		}

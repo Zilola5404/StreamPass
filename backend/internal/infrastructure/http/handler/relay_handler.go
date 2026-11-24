@@ -4,18 +4,21 @@ import (
 	"net/http"
 	"time"
 
+	"streampass/backend/internal/application/billing"
 	relaysvc "streampass/backend/internal/application/relay"
 	relaydomain "streampass/backend/internal/domain/relay"
 	httpx "streampass/backend/internal/infrastructure/http"
+	"streampass/backend/internal/infrastructure/http/middleware"
 	"streampass/shared/region"
 )
 
 type RelayHandler struct {
-	svc *relaysvc.Service
+	svc     *relaysvc.Service
+	billing *billing.Service
 }
 
-func NewRelayHandler(svc *relaysvc.Service) *RelayHandler {
-	return &RelayHandler{svc: svc}
+func NewRelayHandler(svc *relaysvc.Service, billingService *billing.Service) *RelayHandler {
+	return &RelayHandler{svc: svc, billing: billingService}
 }
 
 type serverDTO struct {
@@ -46,6 +49,16 @@ func toServerDTO(s relaydomain.Server) serverDTO {
 }
 
 func (h *RelayHandler) ListAvailable(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, httpx.ErrUnauthenticated())
+		return
+	}
+	entitlement, err := h.billing.GetSubscription(r.Context(), userID)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
 	filter := r.URL.Query().Get("region")
 	servers, err := h.svc.ListAvailable(r.Context(), filter)
 	if err != nil {
@@ -56,6 +69,9 @@ func (h *RelayHandler) ListAvailable(w http.ResponseWriter, r *http.Request) {
 	dtos := make([]serverDTO, len(servers))
 	for i, s := range servers {
 		dtos[i] = toServerDTO(s)
+		if !entitlement.AccessAllowed {
+			dtos[i].ConnectionConfig = ""
+		}
 	}
 	httpx.WriteJSON(w, http.StatusOK, dtos)
 }

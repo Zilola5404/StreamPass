@@ -140,19 +140,19 @@ func (h *BillingHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 type plategaCallback struct {
-	ID     string  `json:"id"`
-	Amount float64 `json:"amount"`
-	Status string  `json:"status"`
-	Payload string `json:"payload"`
+	ID      string  `json:"id"`
+	Amount  float64 `json:"amount"`
+	Status  string  `json:"status"`
+	Payload string  `json:"payload"`
 }
 
 // HandlePlategaWebhook handles POST /payments/platega/webhook.
 // Activates subscription only on CONFIRMED after FetchPaymentStatus confirmation.
 func (h *BillingHandler) HandlePlategaWebhook(w http.ResponseWriter, r *http.Request) {
-	if h.plategaAuth != nil {
+	{
 		mid := r.Header.Get("X-MerchantId")
 		sec := r.Header.Get("X-Secret")
-		if !h.plategaAuth(mid, sec) {
+		if h.plategaAuth == nil || !h.plategaAuth(mid, sec) {
 			httpx.WriteError(w, apperrors.New(apperrors.CodeForbidden, "invalid platega credentials"))
 			return
 		}
@@ -172,7 +172,7 @@ func (h *BillingHandler) HandlePlategaWebhook(w http.ResponseWriter, r *http.Req
 		httpx.WriteError(w, apperrors.New(apperrors.CodeInvalidInput, "missing transaction id"))
 		return
 	}
-	if err := h.svc.HandleWebhook(r.Context(), cb.ID); err != nil {
+	if err := h.svc.HandleProviderConfirmed(r.Context(), cb.ID, cb.Amount); err != nil {
 		httpx.WriteError(w, err)
 		return
 	}

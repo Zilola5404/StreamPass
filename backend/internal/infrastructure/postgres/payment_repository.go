@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"streampass/backend/internal/domain/subscription"
 	apperrors "streampass/shared/errors"
@@ -132,46 +133,72 @@ func (r *PaymentRepository) FindByTxHash(ctx context.Context, txHash string) (*s
 	return p, nil
 }
 
-// MarkSucceededIfPending transitions PENDING→SUCCEEDED once (BILLING-001 idempotency).
-func (r *PaymentRepository) MarkSucceededIfPending(ctx context.Context, providerID string) (bool, error) {
-	const q = `
-		UPDATE payments
-		SET status = $2, paid_at = COALESCE(paid_at, NOW())
-		WHERE provider_id = $1 AND status = $3`
-	res, err := r.db.ExecContext(ctx, q, providerID, subscription.PaymentSucceeded, subscription.PaymentPending)
+// Credit serializes payment delivery and extends access using the latest expiry.
+func (r *PaymentRepository) Credit(ctx context.Context, id, chargeID string, tgUserID *int64, now time.Time) (time.Time, bool, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return false, apperrors.Wrap(apperrors.CodeInternal, "failed to mark payment succeeded", err)
+		return time.Time{}, false, apperrors.Wrap(apperrors.CodeInternal, "failed to start payment settlement", err)
 	}
-	n, err := res.RowsAffected()
+	defer tx.Rollback()
+
+	until, credited, err := creditPayment(ctx, tx, id, chargeID, tgUserID, now)
+	if err == nil {
+		err = tx.Commit()
+	}
 	if err != nil {
-		return false, apperrors.Wrap(apperrors.CodeInternal, "failed to confirm payment update", err)
+		return time.Time{}, false, apperrors.Wrap(apperrors.CodeInternal, "failed to settle payment", err)
 	}
-	return n > 0, nil
+	return until, credited, nil
 }
 
-// MarkSucceededByIDIfPending marks a payment succeeded by primary key once.
-func (r *PaymentRepository) MarkSucceededByIDIfPending(ctx context.Context, id, chargeID string, tgUserID *int64) (bool, error) {
-	const q = `
-		UPDATE payments
-		SET status = $2,
-		    paid_at = COALESCE(paid_at, NOW()),
-		    tx_hash = COALESCE(NULLIF($3, ''), tx_hash),
-		    telegram_user_id = COALESCE($4, telegram_user_id)
-		WHERE id = $1 AND status = $5`
-
-	var tg any
-	if tgUserID != nil {
-		tg = *tgUserID
-	}
-	res, err := r.db.ExecContext(ctx, q, id, subscription.PaymentSucceeded, chargeID, tg, subscription.PaymentPending)
+func creditPayment(ctx context.Context, tx *sql.Tx, id, chargeID string, tgUserID *int64, now time.Time) (time.Time, bool, error) {
+	payment, err := scanPayment(tx.QueryRowContext(ctx, `SELECT `+paymentSelectCols+` FROM payments WHERE id = $1 FOR UPDATE`, id))
 	if err != nil {
-		return false, apperrors.Wrap(apperrors.CodeInternal, "failed to mark payment succeeded", err)
+		return time.Time{}, false, err
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return false, apperrors.Wrap(apperrors.CodeInternal, "failed to confirm payment update", err)
+	var expiry sql.NullTime
+	if err := tx.QueryRowContext(ctx, `SELECT subscription_active_until FROM users WHERE id = $1 FOR UPDATE`, payment.UserID).Scan(&expiry); err != nil {
+		return time.Time{}, false, err
 	}
-	return n > 0, nil
+	if payment.Status != subscription.PaymentPending {
+		return expiry.Time, false, nil
+	}
+	base := now
+	if expiry.Valid && expiry.Time.After(base) {
+		base = expiry.Time
+	}
+	until := base.Add(time.Duration(payment.PeriodDays) * 24 * time.Hour)
+	plan := subscription.NormalizePlanCode(payment.Tariff)
+	if plan == "" {
+		plan = subscription.PlanPersonalBasic
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET subscription_active_until = $2,
+		entitlement_source = 'paid', plan_code = $3, subscription_canceled_at = NULL,
+		updated_at = $4 WHERE id = $1`, payment.UserID, until, plan, now); err != nil {
+		return time.Time{}, false, err
+	}
+	if payment.OrderID != "" {
+		result, err := tx.ExecContext(ctx, `UPDATE orders SET status = $2, paid_at = COALESCE(paid_at, $5)
+			WHERE id = $1 AND user_id = $3 AND status IN ($4, $2)`,
+			payment.OrderID, subscription.OrderPaid, payment.UserID, subscription.OrderPending, now)
+		if err != nil {
+			return time.Time{}, false, err
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return time.Time{}, false, err
+		}
+		if count != 1 {
+			return time.Time{}, false, errors.New("payment order unavailable")
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE payments SET status = $2, paid_at = COALESCE(paid_at, $3),
+		tx_hash = COALESCE(NULLIF($4, ''), tx_hash),
+		telegram_user_id = COALESCE($5, telegram_user_id) WHERE id = $1`,
+		id, subscription.PaymentSucceeded, now, chargeID, tgUserID); err != nil {
+		return time.Time{}, false, err
+	}
+	return until, true, nil
 }
 
 // ListByUserID returns payments for a user, newest first.

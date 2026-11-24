@@ -33,14 +33,16 @@ type TelegramInvoicer interface {
 
 // Service implements the Billing use cases.
 type Service struct {
-	users    user.Repository
-	payments subscription.PaymentRepository
-	orders   subscription.OrderRepository
-	provider PaymentProvider
-	telegram TelegramInvoicer
-	plans    []Plan
-	clock    Clock
-	log      *logger.Logger
+	webhookProviders     map[string]PaymentProvider
+	cardCheckoutDisabled bool
+	users                user.Repository
+	payments             subscription.PaymentRepository
+	orders               subscription.OrderRepository
+	provider             PaymentProvider
+	telegram             TelegramInvoicer
+	plans                []Plan
+	clock                Clock
+	log                  *logger.Logger
 }
 
 // NewService wires the Billing service via constructor injection.
@@ -72,6 +74,15 @@ func NewService(
 }
 
 // SetTelegramInvoicer enables Stars invoice creation for POST /payments.
+func (s *Service) SetWebhookProvider(name string, provider PaymentProvider) {
+	if s.webhookProviders == nil {
+		s.webhookProviders = make(map[string]PaymentProvider)
+	}
+	s.webhookProviders[name] = provider
+}
+
+func (s *Service) SetCardCheckoutEnabled(enabled bool) { s.cardCheckoutDisabled = !enabled }
+
 func (s *Service) SetTelegramInvoicer(inv TelegramInvoicer) { s.telegram = inv }
 
 // ListPlans returns available tariffs for GET /plans.
@@ -158,6 +169,9 @@ func (s *Service) CreatePayment(ctx context.Context, userID user.ID, planCode st
 
 // CreatePaymentForOrder creates a provider payment for planCode and/or existing orderID.
 func (s *Service) CreatePaymentForOrder(ctx context.Context, userID user.ID, planCode, orderID string) (confirmationURL string, err error) {
+	if s.cardCheckoutDisabled && s.telegram == nil {
+		return "", apperrors.New(apperrors.CodePaymentFailed, "checkout is not configured")
+	}
 	if _, err := s.users.FindByID(ctx, userID); err != nil {
 		return "", err
 	}
@@ -289,12 +303,16 @@ func (s *Service) providerName() string {
 
 // HandleProviderConfirmed credits a payment after a trusted provider webhook
 // (Platega CONFIRMED). Still re-fetches status when FetchPaymentStatus works.
-func (s *Service) HandleProviderConfirmed(ctx context.Context, providerPaymentID string) error {
-	return s.HandleWebhook(ctx, providerPaymentID)
+func (s *Service) HandleProviderConfirmed(ctx context.Context, providerPaymentID string, amount float64) error {
+	return s.handleWebhook(ctx, "platega", providerPaymentID, &amount)
 }
 
 // HandleWebhook processes a payment-provider notification.
 func (s *Service) HandleWebhook(ctx context.Context, providerPaymentID string) error {
+	return s.handleWebhook(ctx, "yookassa", providerPaymentID, nil)
+}
+
+func (s *Service) handleWebhook(ctx context.Context, name, providerPaymentID string, amount *float64) error {
 	payment, err := s.payments.FindByProviderID(ctx, providerPaymentID)
 	if err != nil {
 		return err
@@ -303,16 +321,34 @@ func (s *Service) HandleWebhook(ctx context.Context, providerPaymentID string) e
 		return nil
 	}
 
-	status, err := s.provider.FetchPaymentStatus(ctx, providerPaymentID)
+	storedProvider := payment.Provider
+	if storedProvider == "" {
+		storedProvider = "yookassa"
+	}
+	if storedProvider != name || (amount != nil && (*amount != float64(payment.AmountRUB) || payment.Currency != "RUB")) {
+		return apperrors.New(apperrors.CodeInvalidInput, "callback does not match payment")
+	}
+	provider := s.webhookProviders[name]
+	if provider == nil && s.providerName() == name {
+		provider = s.provider
+	}
+	if provider == nil {
+		return apperrors.New(apperrors.CodePaymentFailed, "payment provider is not configured")
+	}
+	status, err := provider.FetchPaymentStatus(ctx, providerPaymentID)
 	if err != nil {
 		s.log.Error(ctx, err)
 		return apperrors.Wrap(apperrors.CodePaymentFailed, "failed to confirm payment status with provider", err)
+	}
+	if status == PaymentStatusPending && name == "platega" {
+		return apperrors.New(apperrors.CodeUnavailable, "payment confirmation is pending")
 	}
 	if status != PaymentStatusSucceeded {
 		return nil
 	}
 
-	return s.creditPayment(ctx, payment)
+	_, _, err = s.payments.Credit(ctx, payment.ID, "", nil, s.clock.Now())
+	return err
 }
 
 // ActivateByPaymentID credits a pending payment found by our payment id
@@ -322,87 +358,14 @@ func (s *Service) ActivateByPaymentID(ctx context.Context, paymentID, chargeID s
 	if err != nil {
 		return time.Time{}, err
 	}
-	if payment.Status == subscription.PaymentSucceeded {
-		u, err := s.users.FindByID(ctx, user.ID(payment.UserID))
-		if err != nil {
-			return time.Time{}, err
-		}
-		if u.SubscriptionActiveUntil != nil {
-			return *u.SubscriptionActiveUntil, nil
-		}
-		return s.clock.Now(), nil
+	if payment.Provider != "telegram" && payment.Provider != "usdt" {
+		return time.Time{}, apperrors.New(apperrors.CodeInvalidInput, "unexpected payment provider")
 	}
-	ok, err := s.payments.MarkSucceededByIDIfPending(ctx, payment.ID, chargeID, tgUserID)
-	if err != nil {
-		return time.Time{}, err
-	}
-	if !ok {
-		u, err := s.users.FindByID(ctx, user.ID(payment.UserID))
-		if err != nil {
-			return time.Time{}, err
-		}
-		if u.SubscriptionActiveUntil != nil {
-			return *u.SubscriptionActiveUntil, nil
-		}
-		return s.clock.Now(), nil
-	}
-	if s.telegram != nil {
+	until, credited, err := s.payments.Credit(ctx, payment.ID, chargeID, tgUserID, s.clock.Now())
+	if err == nil && credited && payment.Provider == "telegram" && s.telegram != nil {
 		s.telegram.MarkSucceededCharge(payment.ProviderID)
 	}
-	until, err := s.extendFromPayment(ctx, payment)
-	if err != nil {
-		return time.Time{}, err
-	}
-	s.log.Info(ctx, "subscription activated",
-		slog.String("user_id", payment.UserID),
-		slog.String("payment_id", payment.ID),
-		slog.Time("until", until),
-	)
-	return until, nil
-}
-
-func (s *Service) creditPayment(ctx context.Context, payment *subscription.Payment) error {
-	ok, err := s.payments.MarkSucceededIfPending(ctx, payment.ProviderID)
-	if err != nil {
-		s.log.Error(ctx, err)
-		return apperrors.Wrap(apperrors.CodeInternal, "failed to mark payment succeeded", err)
-	}
-	if !ok {
-		// Already credited by a concurrent/replayed webhook.
-		return nil
-	}
-	_, err = s.extendFromPayment(ctx, payment)
-	return err
-}
-
-func (s *Service) extendFromPayment(ctx context.Context, payment *subscription.Payment) (time.Time, error) {
-	u, err := s.users.FindByID(ctx, user.ID(payment.UserID))
-	if err != nil {
-		s.log.Error(ctx, err)
-		return time.Time{}, apperrors.Wrap(apperrors.CodeInternal, "failed to load user for subscription", err)
-	}
-	base := s.clock.Now()
-	if u.SubscriptionActiveUntil != nil && u.SubscriptionActiveUntil.After(base) {
-		base = *u.SubscriptionActiveUntil
-	}
-	newExpiry := base.Add(time.Duration(payment.PeriodDays) * 24 * time.Hour)
-	planCode := payment.Tariff
-	if planCode == "" {
-		planCode = subscription.PlanPersonalBasic
-	} else {
-		planCode = subscription.NormalizePlanCode(planCode)
-	}
-	if err := s.users.ActivatePaidPlan(ctx, user.ID(payment.UserID), newExpiry, planCode); err != nil {
-		s.log.Error(ctx, err)
-		return time.Time{}, apperrors.Wrap(apperrors.CodeInternal, "failed to extend subscription", err)
-	}
-	if payment.OrderID != "" && s.orders != nil {
-		if _, err := s.orders.MarkPaidIfPending(ctx, payment.OrderID); err != nil {
-			s.log.Error(ctx, err)
-			// Payment already succeeded; don't fail the webhook on order mark.
-		}
-	}
-	return newExpiry, nil
+	return until, err
 }
 
 // GetSubscription implements "GET /subscription".
@@ -411,14 +374,18 @@ func (s *Service) GetSubscription(ctx context.Context, userID user.ID) (subscrip
 	if err != nil {
 		return subscription.Info{}, err
 	}
-	return subscription.DeriveInfo(subscription.EntitlementInput{
+	info := subscription.DeriveInfo(subscription.EntitlementInput{
 		ActiveUntil: u.SubscriptionActiveUntil,
 		TrialEndsAt: u.TrialEndsAt,
 		Source:      u.EntitlementSource,
 		PlanCode:    u.PlanCode,
 		CanceledAt:  u.SubscriptionCanceledAt,
 		Now:         s.clock.Now(),
-	}), nil
+	})
+	if u.IsBanned() {
+		info.AccessAllowed = false
+	}
+	return info, nil
 }
 
 // ListPayments implements "GET /payments" history (E06).

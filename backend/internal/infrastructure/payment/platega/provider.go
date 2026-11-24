@@ -6,6 +6,7 @@ package platega
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -69,7 +70,11 @@ func (p *Provider) Name() string { return "platega" }
 
 // Enabled reports whether credentials are configured.
 func (p *Provider) Enabled() bool {
-	return p != nil && p.merchantID != "" && p.secret != "" && p.returnURL != ""
+	return p != nil && configured(p.merchantID) && configured(p.secret) && configured(p.returnURL)
+}
+
+func configured(value string) bool {
+	return strings.TrimSpace(value) != "" && !strings.HasPrefix(value, "${")
 }
 
 type createBody struct {
@@ -179,7 +184,9 @@ func (p *Provider) VerifyCallbackHeaders(merchantID, secret string) bool {
 	if !p.Enabled() {
 		return false
 	}
-	return merchantID == p.merchantID && secret == p.secret
+	merchantMatches := subtle.ConstantTimeCompare([]byte(merchantID), []byte(p.merchantID))
+	secretMatches := subtle.ConstantTimeCompare([]byte(secret), []byte(p.secret))
+	return merchantMatches&secretMatches == 1
 }
 
 func truncate(s string, n int) string {

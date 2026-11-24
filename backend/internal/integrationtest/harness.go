@@ -30,9 +30,9 @@ import (
 	"streampass/backend/internal/infrastructure/http/router"
 	"streampass/backend/internal/infrastructure/postgres"
 	"streampass/backend/internal/infrastructure/security"
+	apperrors "streampass/shared/errors"
 	"streampass/shared/idgen"
 	"streampass/shared/logger"
-	apperrors "streampass/shared/errors"
 )
 
 const (
@@ -92,9 +92,9 @@ func StartPostgres(t *testing.T) *sql.DB {
 	)
 
 	db, err := postgres.Open(postgres.PoolConfig{
-		DSN:          dsn,
-		MaxOpenConns: 5,
-		MaxIdleConns: 2,
+		DSN:             dsn,
+		MaxOpenConns:    5,
+		MaxIdleConns:    2,
 		ConnMaxLifetime: time.Minute,
 	})
 	if err != nil {
@@ -277,7 +277,7 @@ func NewTestHandler(t *testing.T, db *sql.DB) (http.Handler, *fakePayments) {
 	h := router.New(router.Deps{
 		Auth:            handler.NewAuthHandler(authService),
 		Rule:            handler.NewRuleHandler(rulesvc.NewService(ruleRepo, rulesvc.SystemClock{}, log)),
-		Relay:           handler.NewRelayHandler(relaysvc.NewService(relayRepo, log)),
+		Relay:           handler.NewRelayHandler(relaysvc.NewService(relayRepo, log), billingService),
 		Telemetry:       handler.NewTelemetryHandler(telemetrysvc.NewService(telemetryRepo, telemetrysvc.SystemClock{}, log)),
 		Config:          handler.NewConfigHandler(configsvcpkg.NewService(appConfigRepo, configsvcpkg.SystemClock{}, log)),
 		Billing:         handler.NewBillingHandler(billingService, ""),

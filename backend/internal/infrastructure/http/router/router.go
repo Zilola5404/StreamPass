@@ -83,8 +83,6 @@ func New(d Deps) http.Handler {
 	mux.Handle(v1("POST /payments/platega/webhook"), strictLimiter.Middleware()(http.HandlerFunc(d.Billing.HandlePlategaWebhook)))
 	if d.Payments != nil {
 		mux.Handle(v1("POST /payments/telegram/webhook"), strictLimiter.Middleware()(http.HandlerFunc(d.Payments.HandleTelegramWebhook)))
-		mux.Handle(v1("GET /payments/usdt/address"), strictLimiter.Middleware()(http.HandlerFunc(d.Payments.USDTAddress)))
-		mux.Handle(v1("POST /payments/usdt/confirm"), strictLimiter.Middleware()(http.HandlerFunc(d.Payments.ConfirmUSDT)))
 	}
 
 	// --- Auth endpoints (stricter rate limit: brute-force resistance) ---

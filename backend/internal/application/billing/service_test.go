@@ -16,6 +16,8 @@ type fixedClock struct{ t time.Time }
 func (c fixedClock) Now() time.Time { return c.t }
 
 type memPayRepo struct {
+	users      *memUsersBilling
+	orders     *memOrders
 	byProvider map[string]*subscription.Payment
 	byID       map[string]*subscription.Payment
 }
@@ -49,29 +51,26 @@ func (m *memPayRepo) Create(_ context.Context, p *subscription.Payment) error {
 	m.byProvider[p.ProviderID] = &cp
 	return nil
 }
-func (m *memPayRepo) MarkSucceededIfPending(_ context.Context, providerID string) (bool, error) {
-	p, ok := m.byProvider[providerID]
-	if !ok {
-		return false, subscriptionErrNotFound("provider")
+func (m *memPayRepo) Credit(ctx context.Context, id, chargeID string, tgUserID *int64, now time.Time) (time.Time, bool, error) {
+	p := m.byID[id]
+	if p.Status != subscription.PaymentPending {
+		return *m.users.u.SubscriptionActiveUntil, false, nil
 	}
-	if p.Status == subscription.PaymentSucceeded {
-		return false, nil
+	base := now
+	if expiry := m.users.u.SubscriptionActiveUntil; expiry != nil && expiry.After(base) {
+		base = *expiry
+	}
+	until := base.Add(time.Duration(p.PeriodDays) * 24 * time.Hour)
+	if p.OrderID != "" {
+		if _, err := m.orders.MarkPaidIfPending(ctx, p.OrderID); err != nil {
+			return time.Time{}, false, err
+		}
+	}
+	if err := m.users.ActivatePaidPlan(ctx, user.ID(p.UserID), until, p.Tariff); err != nil {
+		return time.Time{}, false, err
 	}
 	p.Status = subscription.PaymentSucceeded
-	return true, nil
-}
-func (m *memPayRepo) MarkSucceededByIDIfPending(_ context.Context, id, chargeID string, tgUserID *int64) (bool, error) {
-	p, ok := m.byID[id]
-	if !ok {
-		return false, subscriptionErrNotFound("id")
-	}
-	if p.Status == subscription.PaymentSucceeded {
-		return false, nil
-	}
-	p.Status = subscription.PaymentSucceeded
-	p.TxHash = chargeID
-	_ = tgUserID
-	return true, nil
+	return until, true, nil
 }
 func (m *memPayRepo) ListByUserID(context.Context, string) ([]*subscription.Payment, error) {
 	return nil, nil
@@ -109,7 +108,7 @@ func (m *memOrders) MarkPaidIfPending(_ context.Context, id string) (bool, error
 }
 
 type memUsersBilling struct {
-	u            *user.User
+	u             *user.User
 	activateCalls int
 }
 
@@ -172,6 +171,7 @@ func TestWebhookIdempotency_NoDuplicateActivate(t *testing.T) {
 	users := &memUsersBilling{u: u}
 	pays := newMemPay()
 	orders := newMemOrders()
+	pays.users, pays.orders = users, orders
 	prov := &fakeProvider{status: billing.PaymentStatusSucceeded}
 
 	svc := billing.NewService(users, pays, orders, prov, []billing.Plan{

@@ -17,8 +17,8 @@ import (
 	"syscall"
 	"time"
 
-	authsvc "streampass/backend/internal/application/auth"
 	adminsvc "streampass/backend/internal/application/admin"
+	authsvc "streampass/backend/internal/application/auth"
 	billingsvc "streampass/backend/internal/application/billing"
 	configsvcpkg "streampass/backend/internal/application/configsvc"
 	diagsvc "streampass/backend/internal/application/diag"
@@ -27,8 +27,8 @@ import (
 	relaysvc "streampass/backend/internal/application/relay"
 	rulesvc "streampass/backend/internal/application/rule"
 	telemetrysvc "streampass/backend/internal/application/telemetry"
-	"streampass/backend/internal/domain/user"
 	"streampass/backend/internal/domain/subscription"
+	"streampass/backend/internal/domain/user"
 	"streampass/backend/internal/infrastructure/http/handler"
 	"streampass/backend/internal/infrastructure/http/router"
 	"streampass/backend/internal/infrastructure/payment/platega"
@@ -129,13 +129,17 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 	sessions := redisclient.NewSessionStore(redis)
 	resetTokens := redisclient.NewResetTokenStore(redis)
 
-	paymentProvider := billingsvc.PaymentProvider(yookassa.New(yookassa.Config{
+	yooProvider := yookassa.New(yookassa.Config{
 		ShopID:    cfg.StringOr("billing.yookassa_shop_id", ""),
 		SecretKey: cfg.StringOr("billing.yookassa_secret_key", ""),
 		ReturnURL: cfg.StringOr("billing.yookassa_return_url", ""),
-	}))
+	})
+	var paymentProvider billingsvc.PaymentProvider = yooProvider
 	var plategaProv *platega.Provider
 	defaultProvider := strings.ToLower(cfg.StringOr("billing.default_provider", "yookassa"))
+	if defaultProvider == "${billing_default_provider}" {
+		defaultProvider = "yookassa"
+	}
 	if defaultProvider == "platega" {
 		plategaProv = platega.New(platega.Config{
 			MerchantID:    cfg.StringOr("billing.platega_merchant_id", ""),
@@ -182,8 +186,7 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 	getProfileUC := authsvc.NewGetProfileUseCase(userRepo, log)
 	changePasswordUC := authsvc.NewChangePasswordUseCase(userRepo, hasher, sessions, authsvc.SystemClock{}, log)
 	deleteAccountUC := authsvc.NewDeleteAccountUseCase(userRepo, sessions, log)
-	exposeReset := cfg.BoolOr("auth.expose_reset_token", true)
-	forgotPasswordUC := authsvc.NewForgotPasswordUseCase(userRepo, resetTokens, exposeReset, log)
+	forgotPasswordUC := authsvc.NewForgotPasswordUseCase(userRepo, resetTokens, false, log)
 	resetPasswordUC := authsvc.NewResetPasswordUseCase(userRepo, hasher, resetTokens, sessions, authsvc.SystemClock{}, log)
 	listDevicesUC := authsvc.NewListDevicesUseCase(deviceRepo, maxDevices, log)
 	revokeDeviceUC := authsvc.NewRevokeDeviceUseCase(deviceRepo, sessions, log)
@@ -233,30 +236,46 @@ func buildDeps(cfg *config.Config, db *sql.DB, redis *redisclient.Client, log *l
 	}
 	orderRepo := postgres.NewOrderRepository(db)
 	billingService := billingsvc.NewService(userRepo, paymentRepo, orderRepo, paymentProvider, billingPlans, billingsvc.SystemClock{}, log)
-	if tgBot.Enabled() {
+	telegramSecret := cfg.StringOr("billing.telegram_webhook_secret", "")
+	var paymentsHandler *handler.PaymentsHandler
+	if defaultProvider == "telegram" && tgBot.Enabled() && telegramSecret != "" && !strings.HasPrefix(telegramSecret, "${") {
 		billingService.SetTelegramInvoicer(tgProvider)
+		paymentsService := paymentssvc.NewService(
+			billingService, tgBot, tgProvider, userRepo, paymentRepo, "", starsPlans, log,
+		)
+		paymentsHandler = handler.NewPaymentsHandler(paymentsService, telegramSecret)
 	}
-	paymentsService := paymentssvc.NewService(
-		billingService, tgBot, tgProvider, userRepo, paymentRepo,
-		cfg.StringOr("billing.usdt_trc20_address", ""),
-		starsPlans, log,
-	)
 	exclusionService := exclusionsvc.NewService(exclusionRepo, log)
 	diagService := diagsvc.NewService(diagRepo, diagsvc.SystemClock{}, log)
 
 	billingHandler := handler.NewBillingHandler(billingService, cfg.StringOr("billing.webhook_secret", ""))
+	switch defaultProvider {
+	case "telegram":
+		billingService.SetCardCheckoutEnabled(false)
+	case "platega":
+		if !plategaProv.Enabled() {
+			log.Info(context.Background(), "Platega checkout disabled: incomplete settings")
+			billingService.SetCardCheckoutEnabled(false)
+		}
+	case "yookassa":
+	default:
+		log.Info(context.Background(), "checkout disabled: unknown billing provider")
+		billingService.SetCardCheckoutEnabled(false)
+	}
 	if plategaProv != nil {
 		billingHandler.SetPlategaAuth(plategaProv.VerifyCallbackHeaders)
+		billingService.SetWebhookProvider("platega", plategaProv)
 	}
+	billingService.SetWebhookProvider("yookassa", yooProvider)
 
 	return router.Deps{
 		Auth:            handler.NewAuthHandler(authService),
 		Rule:            handler.NewRuleHandler(ruleService),
-		Relay:           handler.NewRelayHandler(relayService),
+		Relay:           handler.NewRelayHandler(relayService, billingService),
 		Telemetry:       handler.NewTelemetryHandler(telemetryService),
 		Config:          handler.NewConfigHandler(configService),
 		Billing:         billingHandler,
-		Payments:        handler.NewPaymentsHandler(paymentsService, cfg.StringOr("billing.telegram_webhook_secret", "")),
+		Payments:        paymentsHandler,
 		Exclusion:       handler.NewExclusionHandler(exclusionService),
 		Health:          handler.NewHealthHandler(),
 		Admin:           handler.NewAdminHandler(adminUserService),

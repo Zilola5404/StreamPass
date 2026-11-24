@@ -1,6 +1,9 @@
 package subscription
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // PaymentRepository is the port for persisting payment records, used for
 // webhook idempotency (a provider may redeliver the same webhook).
@@ -9,10 +12,8 @@ type PaymentRepository interface {
 	FindByID(ctx context.Context, id string) (*Payment, error)
 	FindByTxHash(ctx context.Context, txHash string) (*Payment, error)
 	Create(ctx context.Context, p *Payment) error
-	// MarkSucceededIfPending returns true only when this call transitioned PENDING→SUCCEEDED.
-	// Concurrent/replayed webhooks return false without error (no duplicate subscription extend).
-	MarkSucceededIfPending(ctx context.Context, providerID string) (bool, error)
-	MarkSucceededByIDIfPending(ctx context.Context, id, chargeID string, tgUserID *int64) (bool, error)
+	// Credit atomically settles a pending payment, extends access and updates its order.
+	Credit(ctx context.Context, id, chargeID string, tgUserID *int64, now time.Time) (time.Time, bool, error)
 	ListByUserID(ctx context.Context, userID string) ([]*Payment, error)
 }
 
