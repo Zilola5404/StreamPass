@@ -2,6 +2,10 @@
 # Usage: docker compose -f docker-compose.hysteria-test.yml up -d
 
 services:
+  hysteria-test-http:
+    image: nginx:alpine
+    container_name: streampass-hysteria-test-http
+
   hysteria-test:
     image: tobyxdd/hysteria:latest
     container_name: streampass-hysteria-test
@@ -12,3 +16,12 @@ services:
       - ./infrastructure/hysteria-test/config.yaml:/etc/hysteria.yaml:ro
       - ./infrastructure/hysteria-test/certs:/etc/hysteria:ro
     command: ["server", "-c", "/etc/hysteria.yaml"]
+
+networks:
+  default:
+    name: streampass-hysteria-local-check
+    ipam:
+      config:
+        # Documentation-only range inside Docker. Private LAN addresses
+        # intentionally bypass StreamPass and cannot exercise RELAY.
+        - subnet: 192.0.2.0/24

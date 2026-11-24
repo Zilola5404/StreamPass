@@ -1,7 +1,9 @@
 # VerifyWindowsTUN.ps1 - TASK-WIN-001 stages 5-12 (contract + optional live)
 # Usage: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\VerifyWindowsTUN.ps1
 # Live Wintun create requires Administrator.
-param([switch]$LocalRelay)
+param([switch]$LocalRelay, [switch]$LocalRelayRecovery)
+
+if ($LocalRelayRecovery -and -not $LocalRelay) { throw 'LocalRelayRecovery requires LocalRelay' }
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
@@ -114,10 +116,15 @@ if ($IsAdmin) {
   $relayHost = ''
   $relayPort = 0
   $relayConfig = ''
+  $probeAddress = $null
   if ($LocalRelay) {
     $mode = 'full_relay'
     $relayHost = '127.0.0.1'
     $relayPort = 8443
+    $probeIP = & docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' streampass-hysteria-test-http
+    if ($LASTEXITCODE -ne 0) { Fail 'local HTTP fixture is missing; start docker-compose.hysteria-test.yml' }
+    $probeAddress = [System.Net.IPAddress]::Parse($probeIP.Trim())
+    if ($probeAddress.AddressFamily -ne 'InterNetwork') { Fail 'local HTTP fixture has no IPv4 address' }
     $certPath = Join-Path $Root 'infrastructure\hysteria-test\certs\cert.pem'
     $cert = [Security.Cryptography.X509Certificates.X509Certificate2]::new($certPath)
     $digest = [Security.Cryptography.SHA256]::Create()
@@ -164,6 +171,9 @@ if ($IsAdmin) {
   $trafficOK = $false
   $relayReady = -not $LocalRelay
   $relayTraffic = -not $LocalRelay
+  $recoveryOK = -not $LocalRelayRecovery
+  $recoveryProbeOK = -not $LocalRelayRecovery
+  $recoveryTraffic = -not $LocalRelayRecovery
   $gotErr = $null
   $until = (Get-Date).AddSeconds(35)
   $pending = $reader.ReadLineAsync()
@@ -194,18 +204,69 @@ if ($IsAdmin) {
     $probeArgs = @('--silent', '--show-error', '--fail', '--noproxy', '*', '--ipv4', '--max-time', '12', '--output', 'NUL')
     $probeUrl = 'https://ya.ru/'
     if ($LocalRelay) {
-      $probeUrl = 'https://github.com/'
-      $probeArgs += @('--interface', '10.10.0.1')
+      $probeUrl = "http://${probeAddress}/"
+      Find-NetRoute -RemoteIPAddress $probeAddress.ToString() |
+        Select-Object InterfaceAlias, InterfaceIndex, DestinationPrefix, NextHop, RouteMetric |
+        Format-Table | Out-Host
     }
-    & curl.exe @probeArgs $probeUrl
-    $trafficOK = $LASTEXITCODE -eq 0
-    Write-Host ("  HTTPS probe exit={0}" -f $LASTEXITCODE)
+    $probeRoute = $null
+    try {
+      if ($LocalRelay) {
+        # Keep other adapters untouched and steer only the known QA endpoint.
+        $tunInterface = Get-NetIPInterface -InterfaceAlias 'StreamPass' -AddressFamily IPv4
+        $routeParams = @{
+          DestinationPrefix = "$probeAddress/32"
+          InterfaceIndex = $tunInterface.InterfaceIndex
+          NextHop = '10.10.0.2'
+          RouteMetric = 0
+          PolicyStore = 'ActiveStore'
+        }
+        $probeRoute = New-NetRoute @routeParams
+      }
+      & curl.exe @probeArgs $probeUrl
+      $trafficOK = $LASTEXITCODE -eq 0
+      Write-Host ("  HTTP probe exit={0}" -f $LASTEXITCODE)
+      if ($trafficOK -and $LocalRelayRecovery) {
+        & docker restart streampass-hysteria-test
+        if ($LASTEXITCODE -ne 0) { throw 'Could not restart the local test relay' }
+        $recover = (@{ id = 4; cmd = 'recover'; token = $meta2.token } | ConvertTo-Json -Compress) + "`n"
+        $recoverBytes = [Text.Encoding]::UTF8.GetBytes($recover)
+        $s2.Write($recoverBytes, 0, $recoverBytes.Length)
+        $recoverDeadline = (Get-Date).AddSeconds(15)
+        $pending = $reader.ReadLineAsync()
+        while ((Get-Date) -lt $recoverDeadline) {
+          if (-not $pending.Wait(100)) { continue }
+          $line = $pending.GetAwaiter().GetResult()
+          if ($null -eq $line) { break }
+          if ($line -match 'traffic_ready via=relay|route=RELAY\b.*result=first_byte') { $relayTraffic = $true }
+          $event = $line | ConvertFrom-Json
+          if ($event.type -eq 'reply' -and $event.id -eq 4) {
+            $recoveryOK = $event.ok
+            break
+          }
+          $pending = $reader.ReadLineAsync()
+        }
+        if ($recoveryOK) {
+          & curl.exe @probeArgs $probeUrl
+          $recoveryProbeOK = $LASTEXITCODE -eq 0
+        } else {
+          $gotErr = 'Local relay recovery was not acknowledged'
+        }
+      }
+    } catch {
+      $gotErr = $_.Exception.Message
+    } finally {
+      if ($probeRoute) {
+        try { $probeRoute | Remove-NetRoute -Confirm:$false }
+        catch { $gotErr = $_.Exception.Message }
+      }
+    }
   }
   $stop = (@{ id = 3; cmd = 'stop'; token = $meta2.token } | ConvertTo-Json -Compress) + "`n"
   $sb = [Text.Encoding]::UTF8.GetBytes($stop)
   try { $s2.Write($sb, 0, $sb.Length) } catch {}
   $stopOK = $false
-  if ($gotTun -and $startOK -and $relayReady) {
+  if ($gotTun -and $startOK -and $relayReady -and -not $gotErr) {
     $stopDeadline = (Get-Date).AddSeconds(12)
     $pending = $reader.ReadLineAsync()
     while ((Get-Date) -lt $stopDeadline) {
@@ -217,7 +278,10 @@ if ($IsAdmin) {
       if ($LocalRelay -and $line -match 'traffic_ready|route=RELAY|via=RELAY|TRAFFIC_FAILED') {
         Write-Host ("  core: {0}" -f $line)
       }
-      if ($line -match 'traffic_ready via=relay|route=RELAY\b.*result=first_byte') { $relayTraffic = $true }
+      if ($line -match 'traffic_ready via=relay|route=RELAY\b.*result=first_byte') {
+        if ($LocalRelayRecovery) { $recoveryTraffic = $true }
+        else { $relayTraffic = $true }
+      }
       if ($line -match '"ok"\s*:\s*true' -and $line -match '"id"\s*:\s*3') {
         $stopOK = $true
         break
@@ -250,12 +314,15 @@ if ($IsAdmin) {
     $lines.Add('- Adapter creation and start acknowledgement: PASS')
     if ($LocalRelay) {
       $lines.Add('- TLS handshake with pinned loopback relay: PASS')
-      $lines.Add(('- HTTPS probe completed: {0}' -f $(if ($trafficOK) { 'PASS' } else { 'FAIL' })))
+      $lines.Add(('- Docker HTTP probe completed: {0}' -f $(if ($trafficOK) { 'PASS' } else { 'FAIL' })))
       $lines.Add(('- Relay data-plane marker: {0}' -f $(if ($relayTraffic) { 'PASS' } else { 'FAIL' })))
     }
-    $lines.Add(('- HTTPS request while connected ({0}): {1}' -f $mode, $(if ($trafficOK -and $relayTraffic) { 'PASS' } else { 'FAIL' })))
+    $lines.Add(('- Request while connected ({0}): {1}' -f $mode, $(if ($trafficOK -and $relayTraffic) { 'PASS' } else { 'FAIL' })))
     $lines.Add(('- Stop acknowledgement: {0}' -f $(if ($stopOK) { 'PASS' } else { 'FAIL' })))
-    if (-not ($trafficOK -and $relayTraffic -and $stopOK)) {
+    if ($LocalRelayRecovery) {
+      $lines.Add(('- Relay restart and explicit recovery with new traffic: {0}' -f $(if ($recoveryOK -and $recoveryProbeOK -and $recoveryTraffic) { 'PASS' } else { 'FAIL' })))
+    }
+    if (-not ($trafficOK -and $relayTraffic -and $stopOK -and $recoveryOK -and $recoveryProbeOK -and $recoveryTraffic)) {
       $lines | Set-Content -Path $Report -Encoding UTF8
       Fail "live $mode request, traffic evidence or Stop did not pass"
     }
