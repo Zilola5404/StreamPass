@@ -51,7 +51,14 @@ if (-not (Test-Path $WintunOut)) {
     if (-not $downloaded) { throw "failed to download wintun.dll (tried $($WintunUrls -join ', '))" }
 }
 
-$hash = (Get-FileHash $WintunOut -Algorithm SHA256).Hash
+$digest = [System.Security.Cryptography.SHA256]::Create()
+$wintunStream = [System.IO.File]::OpenRead($WintunOut)
+try {
+    $hash = [BitConverter]::ToString($digest.ComputeHash($wintunStream)).Replace('-', '')
+} finally {
+    $wintunStream.Dispose()
+    $digest.Dispose()
+}
 if ($hash -ne $WintunDllSha256) {
     throw "wintun.dll SHA-256 mismatch: $hash (want $WintunDllSha256)"
 }

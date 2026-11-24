@@ -2,6 +2,9 @@
 
 #include <optional>
 
+#include <flutter/method_channel.h>
+#include <flutter/standard_method_codec.h>
+
 #include "flutter/generated_plugin_registrant.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -53,6 +56,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               LPARAM const lparam) noexcept {
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
+    if (message == WM_POWERBROADCAST && wparam == PBT_APMRESUMEAUTOMATIC) {
+      flutter::MethodChannel<flutter::EncodableValue> power_channel(
+          flutter_controller_->engine()->messenger(), "streampass/windows/power",
+          &flutter::StandardMethodCodec::GetInstance());
+      power_channel.InvokeMethod("resume", nullptr);
+    }
     std::optional<LRESULT> result =
         flutter_controller_->HandleTopLevelWindowProc(hwnd, message, wparam,
                                                       lparam);

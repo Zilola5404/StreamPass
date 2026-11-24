@@ -25,6 +25,8 @@ class WindowsTrafficEngine implements WindowsVpnAdapter {
   /// Generation bumped on each connect/disconnect so stale core events are ignored.
   int _session = 0;
   bool _connecting = false;
+  bool _recoveringAfterResume = false;
+  String _networkMode = 'split';
   Future<bool>? _inFlight;
   Timer? _trafficWatchdog;
 
@@ -81,6 +83,7 @@ class WindowsTrafficEngine implements WindowsVpnAdapter {
     required bool blockUdp443,
   }) async {
     final session = ++_session;
+    _networkMode = networkMode;
     _connecting = true;
     _cancelTrafficWatchdog();
     ConnectionController.instance.clearTrafficReady();
@@ -252,17 +255,23 @@ class WindowsTrafficEngine implements WindowsVpnAdapter {
   /// Issue #2: after Windows sleep/wake or NIC change — rehandshake relay in-place.
   Future<void> recoverAfterResume() async {
     final core = _core;
-    if (core == null || !core.isAttached) return;
-    if (_last.event != VpnEvent.connected &&
-        _last.event != VpnEvent.connecting) {
+    if (core == null ||
+        !core.isAttached ||
+        _connecting ||
+        _recoveringAfterResume ||
+        _networkMode == 'direct_test' ||
+        _last.event != VpnEvent.connected) {
       return;
     }
+    _recoveringAfterResume = true;
     _log.info('vpn', '[lifecycle] recover after resume');
     ConnectionController.instance.clearTrafficReady();
     try {
       await core.recoverTunnel();
     } catch (e) {
       _log.warn('vpn', 'recover failed', {'error': '$e'});
+    } finally {
+      _recoveringAfterResume = false;
     }
   }
 

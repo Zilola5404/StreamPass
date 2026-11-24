@@ -1,9 +1,7 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../services/streampass_api.dart';
-import '../services/windows_traffic_engine.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_bottom_nav.dart';
 import '../layout/adaptive.dart';
@@ -27,32 +25,10 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
+class _MainShellState extends State<MainShell> {
   int _index = 0;
   final _homeKey = GlobalKey<HomeScreenState>();
   final _statsKey = GlobalKey<StatisticsScreenState>();
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Issue #2: Windows sleep/wake — recover Hysteria without tearing TUN.
-    if (state == AppLifecycleState.resumed &&
-        !kIsWeb &&
-        defaultTargetPlatform == TargetPlatform.windows) {
-      WindowsTrafficEngine.instance.recoverAfterResume();
-    }
-  }
 
   void _goToTab(int index) {
     if (index == _index) return;

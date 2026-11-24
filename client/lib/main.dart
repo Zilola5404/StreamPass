@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'theme/app_theme.dart';
 import 'services/api_timeouts.dart';
@@ -24,7 +25,15 @@ void main() {
   // Avoid blocking/crashing on first frame when fonts cannot be downloaded.
   GoogleFonts.config.allowRuntimeFetching = false;
   if (!kIsWeb && Platform.isWindows) {
-    VpnChannel.windowsImpl = WindowsTrafficEngine.instance;
+    final windowsEngine = WindowsTrafficEngine.instance;
+    VpnChannel.windowsImpl = windowsEngine;
+    const MethodChannel('streampass/windows/power').setMethodCallHandler(
+      (call) async {
+        if (call.method == 'resume') {
+          await windowsEngine.recoverAfterResume();
+        }
+      },
+    );
   }
   // Subscribe EventChannel / Windows engine before any screen listens.
   VpnChannel.ensureListening();
