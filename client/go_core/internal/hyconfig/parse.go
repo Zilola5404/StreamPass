@@ -75,6 +75,10 @@ func BuildClientConfig(connectionConfig, relayHost string, relayPort int) (*clie
 
 	if parsed.PinSHA256 != "" {
 		pin := normalizeCertHash(parsed.PinSHA256)
+		host, _, _ := net.SplitHostPort(parsed.ServerHost)
+		// For a literal loopback endpoint the supplied certificate pin is
+		// the trust anchor. Remote relays still require system trust.
+		tlsConfig.InsecureSkipVerify = net.ParseIP(host).IsLoopback()
 		tlsConfig.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 			if len(rawCerts) == 0 {
 				return fmt.Errorf("no certificate presented")
@@ -175,9 +179,12 @@ func (f *protectedConnFactory) New(addr net.Addr) (net.PacketConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := protect.Conn(conn); err != nil {
-		_ = conn.Close()
-		return nil, fmt.Errorf("protect underlay udp: %w", err)
+	// Loopback already has a host route and must not be bound to a physical NIC.
+	if remote, ok := addr.(*net.UDPAddr); !ok || !remote.IP.IsLoopback() {
+		if err := protect.Conn(conn); err != nil {
+			_ = conn.Close()
+			return nil, fmt.Errorf("protect underlay udp: %w", err)
+		}
 	}
 	if f.obfsType == "" {
 		return conn, nil

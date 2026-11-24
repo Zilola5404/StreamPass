@@ -1,6 +1,8 @@
 # VerifyWindowsTUN.ps1 - TASK-WIN-001 stages 5-12 (contract + optional live)
 # Usage: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\VerifyWindowsTUN.ps1
 # Live Wintun create requires Administrator.
+param([switch]$LocalRelay)
+
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $GoCore = Join-Path $Root 'client\go_core'
@@ -108,6 +110,21 @@ $lines.Add('')
 
 if ($IsAdmin) {
   Write-Step 'LIVE' 'Wintun create/stop (Admin)'
+  $mode = 'direct_test'
+  $relayHost = ''
+  $relayPort = 0
+  $relayConfig = ''
+  if ($LocalRelay) {
+    $mode = 'full_relay'
+    $relayHost = '127.0.0.1'
+    $relayPort = 8443
+    $certPath = Join-Path $Root 'infrastructure\hysteria-test\certs\cert.pem'
+    $cert = [Security.Cryptography.X509Certificates.X509Certificate2]::new($certPath)
+    $digest = [Security.Cryptography.SHA256]::Create()
+    try { $pin = [BitConverter]::ToString($digest.ComputeHash($cert.RawData)).Replace('-', '') }
+    finally { $digest.Dispose(); $cert.Dispose() }
+    $relayConfig = "hysteria2://change-me-auth-local-test@127.0.0.1:8443/?obfs=salamander&obfs-password=change-me-obfs-local-test&pinSHA256=$pin"
+  }
   $portFile2 = Join-Path $env:TEMP ("sp-live-{0}.json" -f [guid]::NewGuid().ToString('N'))
   $coreStderr = "$portFile2.stderr"
   $p2 = Start-Process -FilePath $exe -ArgumentList @('--port-file', $portFile2) -PassThru -WindowStyle Hidden -WorkingDirectory $Native -RedirectStandardError $coreStderr
@@ -131,13 +148,13 @@ if ($IsAdmin) {
     id               = 2
     cmd              = 'start'
     token            = $meta2.token
-    networkMode      = 'direct_test'
+    networkMode      = $mode
     mtu              = 1400
     rulesJson        = '[]'
     exclusionsJson   = '[]'
-    connectionConfig = ''
-    relayHost        = ''
-    relayPort        = 0
+    connectionConfig = $relayConfig
+    relayHost        = $relayHost
+    relayPort        = $relayPort
   } | ConvertTo-Json -Compress
   $b = [Text.Encoding]::UTF8.GetBytes($start + "`n")
   $s2.Write($b, 0, $b.Length)
@@ -145,6 +162,8 @@ if ($IsAdmin) {
   $gotTun = $false
   $startOK = $false
   $trafficOK = $false
+  $relayReady = -not $LocalRelay
+  $relayTraffic = -not $LocalRelay
   $gotErr = $null
   $until = (Get-Date).AddSeconds(35)
   $pending = $reader.ReadLineAsync()
@@ -158,6 +177,7 @@ if ($IsAdmin) {
       if ($null -eq $line) { break }
       Write-Host ("  core: {0}" -f $line)
       if ($line -match 'TUN_CREATED') { $gotTun = $true }
+      if ($line -match 'RELAY_CONNECTED') { $relayReady = $true }
       if ($line -match '"event"\s*:\s*"error"' -or $line -match '"ok"\s*:\s*false') {
         try {
           $j = $line | ConvertFrom-Json
@@ -166,19 +186,26 @@ if ($IsAdmin) {
       }
       if ($line -match '"ok"\s*:\s*true' -and $line -match '"id"\s*:\s*2') { $startOK = $true }
       if ($line -match '"ok"\s*:\s*false' -and $line -match '"id"\s*:\s*2') { break }
-      if ($gotTun -and $startOK) { break }
+      if ($gotTun -and $startOK -and $relayReady) { break }
       $pending = $reader.ReadLineAsync()
     }
   }
-  if ($gotTun -and $startOK) {
-    & curl.exe --silent --show-error --fail --noproxy '*' --ipv4 --max-time 12 --output NUL https://ya.ru/
+  if ($gotTun -and $startOK -and $relayReady) {
+    $probeArgs = @('--silent', '--show-error', '--fail', '--noproxy', '*', '--ipv4', '--max-time', '12', '--output', 'NUL')
+    $probeUrl = 'https://ya.ru/'
+    if ($LocalRelay) {
+      $probeUrl = 'https://github.com/'
+      $probeArgs += @('--interface', '10.10.0.1')
+    }
+    & curl.exe @probeArgs $probeUrl
     $trafficOK = $LASTEXITCODE -eq 0
+    Write-Host ("  HTTPS probe exit={0}" -f $LASTEXITCODE)
   }
   $stop = (@{ id = 3; cmd = 'stop'; token = $meta2.token } | ConvertTo-Json -Compress) + "`n"
   $sb = [Text.Encoding]::UTF8.GetBytes($stop)
   try { $s2.Write($sb, 0, $sb.Length) } catch {}
   $stopOK = $false
-  if ($gotTun -and $startOK) {
+  if ($gotTun -and $startOK -and $relayReady) {
     $stopDeadline = (Get-Date).AddSeconds(12)
     $pending = $reader.ReadLineAsync()
     while ((Get-Date) -lt $stopDeadline) {
@@ -187,6 +214,10 @@ if ($IsAdmin) {
         $line = $pending.GetAwaiter().GetResult()
       } catch { break }
       if ($null -eq $line) { break }
+      if ($LocalRelay -and $line -match 'traffic_ready|route=RELAY|via=RELAY|TRAFFIC_FAILED') {
+        Write-Host ("  core: {0}" -f $line)
+      }
+      if ($line -match 'traffic_ready via=relay|route=RELAY\b.*result=first_byte') { $relayTraffic = $true }
       if ($line -match '"ok"\s*:\s*true' -and $line -match '"id"\s*:\s*3') {
         $stopOK = $true
         break
@@ -208,19 +239,25 @@ if ($IsAdmin) {
     $lines | Set-Content -Path $Report -Encoding UTF8
     Fail ("live TUN: {0}" -f $gotErr)
   }
-  if (-not ($gotTun -and $startOK)) {
+  if (-not ($gotTun -and $startOK -and $relayReady)) {
     $lines.Add('## Live Wintun')
-    $lines.Add('- RESULT: inconclusive (no TUN_CREATED in window)')
-    Write-Host 'WARN no TUN_CREATED seen - check logs manually' -ForegroundColor Yellow
+    $lines.Add('- RESULT: FAIL (adapter, start acknowledgement or relay handshake missing)')
+    $lines | Set-Content -Path $Report -Encoding UTF8
+    Fail 'live connection did not finish'
   } else {
     Ok 'live TUN_CREATED'
     $lines.Add('## Live Wintun')
     $lines.Add('- Adapter creation and start acknowledgement: PASS')
-    $lines.Add(('- Direct HTTPS request while connected: {0}' -f $(if ($trafficOK) { 'PASS' } else { 'FAIL' })))
+    if ($LocalRelay) {
+      $lines.Add('- TLS handshake with pinned loopback relay: PASS')
+      $lines.Add(('- HTTPS probe completed: {0}' -f $(if ($trafficOK) { 'PASS' } else { 'FAIL' })))
+      $lines.Add(('- Relay data-plane marker: {0}' -f $(if ($relayTraffic) { 'PASS' } else { 'FAIL' })))
+    }
+    $lines.Add(('- HTTPS request while connected ({0}): {1}' -f $mode, $(if ($trafficOK -and $relayTraffic) { 'PASS' } else { 'FAIL' })))
     $lines.Add(('- Stop acknowledgement: {0}' -f $(if ($stopOK) { 'PASS' } else { 'FAIL' })))
-    if (-not ($trafficOK -and $stopOK)) {
+    if (-not ($trafficOK -and $relayTraffic -and $stopOK)) {
       $lines | Set-Content -Path $Report -Encoding UTF8
-      Fail 'live DIRECT request or Stop did not pass'
+      Fail "live $mode request, traffic evidence or Stop did not pass"
     }
   }
 } else {

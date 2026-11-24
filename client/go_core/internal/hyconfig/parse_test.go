@@ -1,9 +1,38 @@
 package hyconfig
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 	"testing"
 )
+
+func TestLoopbackRelayUsesCertificatePin(t *testing.T) {
+	leaf := []byte("local relay certificate")
+	fingerprint := sha256.Sum256(leaf)
+	pin := hex.EncodeToString(fingerprint[:])
+	local, _, err := BuildClientConfig("hysteria2://test@127.0.0.1:8443/?pinSHA256="+pin, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verify := local.TLSConfig.VerifyPeerCertificate
+	if !local.TLSConfig.InsecureSkipVerify || verify == nil {
+		t.Fatal("loopback must use the supplied certificate pin")
+	}
+	if err := verify([][]byte{leaf}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := verify([][]byte{[]byte("different certificate")}, nil); err == nil {
+		t.Fatal("accepted a different certificate")
+	}
+	remote, _, err := BuildClientConfig("hysteria2://test@192.0.2.1:8443/?pinSHA256="+pin, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if remote.TLSConfig.InsecureSkipVerify {
+		t.Fatal("remote relay must keep system certificate verification")
+	}
+}
 
 func TestRequireVerifiedTLS(t *testing.T) {
 	const endpoint = "hysteria2://test@relay.example:443/"
